@@ -1,0 +1,4 @@
+[package]
+name = "cron"
+version = "0.1.0"
+authors = ["Zack Slayton <zack.slayton@gmail.com>"]
