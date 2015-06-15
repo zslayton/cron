@@ -12,3 +12,4 @@ license = "MIT"
 name = "cron"
 
 [dependencies]
+chrono = "*"
