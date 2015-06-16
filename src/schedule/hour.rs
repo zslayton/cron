@@ -13,4 +13,7 @@ impl HourSchedule {
     };
     Some(hour_schedule)
   }
+  pub fn matches(&self, hour: u32) -> bool {
+    return self.hour == hour;
+  }
 }

@@ -13,4 +13,8 @@ impl MonthSchedule {
     };
     Some(month_schedule)
   }
+  
+  pub fn matches(&self, month: u32) -> bool {
+    return self.month == month;
+  }
 }

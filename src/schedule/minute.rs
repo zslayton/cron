@@ -13,4 +13,13 @@ impl MinuteSchedule {
     };
     Some(minute_schedule)
   }
+
+  pub fn matches(&self, minute: u32) -> bool {
+    return self.minute == minute;
+  }
+
+  pub fn next_on_or_after(&self, minute: u32) -> (bool, u32) {
+    (true, self.minute)
+  }
+
 }

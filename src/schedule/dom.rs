@@ -13,4 +13,8 @@ impl DayOfMonthSchedule {
     };
     Some(day_of_month_schedule)
   }
+  
+  pub fn matches(&self, day_of_month: u32) -> bool {
+    return self.day_of_month == day_of_month;
+  }
 }

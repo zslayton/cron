@@ -62,6 +62,7 @@ impl Parser {
       Ok(second) => second,
       Err(_) => return Err(SecondsError)
     };
+    
     let second_schedule = match SecondSchedule::from_second(second) {
       Some(second_schedule) => second_schedule,
       None => return Err(SecondsError)

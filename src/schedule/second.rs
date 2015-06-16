@@ -13,4 +13,12 @@ impl SecondSchedule {
     };
     Some(second_schedule)
   }
+
+  pub fn next_after(&self, second: u32) -> (bool, u32) {
+    (true, self.second)
+  }
+  
+  pub fn matches(&self, second: u32) -> bool {
+    return self.second == second;
+  }
 }
