@@ -38,7 +38,7 @@ impl CronSchedule {
 
     let second = None;
     
-    println!("Looking for next schedule time after {}", after.to_rfc3339());
+//    println!("Looking for next schedule time after {}", after.to_rfc3339());
     for year in &mut year_range {
       //println!("Checking year {}", year);
       let mut month_range = self.months.range_iter(1, 12);

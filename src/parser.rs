@@ -70,20 +70,20 @@ impl Parser {
   fn parse_field(&self, expr: &str) -> CronFieldValue {
     use self::CronFieldValue::*;
     //TODO: Handle bad input gracefully
-    println!("FIELD: {}", expr);
+    //println!("FIELD: {}", expr);
     if let Some(comma_index) = expr.find(',') {
-      println!("It's a list.");
-      return List(expr.split(',').inspect(|num| println!("Num: {}", num)).map(|num|num.parse::<u32>().ok().expect("Couldn't parse list number!")).collect());
+      //println!("It's a list.");
+      return List(expr.split(',').inspect(|num| /*println!("Num: {}", num)*/{}).map(|num|num.parse::<u32>().ok().expect("Couldn't parse list number!")).collect());
     }
     if let Some(dash_index) = expr.find('-') {
-      println!("It's a range.");
+      //println!("It's a range.");
       //TODO: Look for step specifier '/'. Assuming step=1 for now.
       let range : Vec<u32> = expr.split('-').map(|num|num.parse::<u32>().ok().expect("Couldn't parse range number!")).collect();
       let min : u32 = range[0];
       let max : u32 = range[1];
       return SteppedRange(min, max, 1);
     }
-    println!("It's a number.");
+    //println!("It's a number.");
     return Number( expr.parse::<u32>().ok().expect("Couldn't parse number!"));
   }
 
@@ -93,17 +93,17 @@ impl Parser {
     let mut units : Vec<u32> = Vec::new();
     match *field_value {
       Number(number) => {
-        println!("Adding number");
+        //println!("Adding number");
         units.push(number);
       },
       List(ref numbers) => {
-        println!("Adding list");
+        //println!("Adding list");
         for number in numbers {
           units.push(*number);
         }
       },
       SteppedRange(min, max, step) => {
-        println!("Adding range");
+        //println!("Adding range");
         if min > max {
           panic!("Invalid range! Min must be <= max.");
         }
@@ -115,7 +115,7 @@ impl Parser {
       },
       _ => panic!("Unsupported field value!")
     };
-    println!("Returning {:?}", units);
+    //println!("Returning {:?}", units);
     units
   }
 

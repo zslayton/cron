@@ -20,11 +20,11 @@ mod tests {
   
   #[test]
   fn test_parse_with_lists() {
-    let expression = "1 2,17,51 3 4,29 2,3 6 2015-2017";
+    let expression = "1 2,17,51 3 4,29 2,3,7 6 2015-2017";
     let mut schedule = CronSchedule::parse(expression).unwrap();
     let mut date = UTC::now();
     println!("Fire times for {}:", expression);
-    for _ in 0..5 {
+    for _ in 0..10 {
       date = schedule.next_utc_after(&date).expect("No further dates!");
       println!("-> {}", date);
     }
