@@ -12,4 +12,5 @@ license = "MIT"
 name = "cron"
 
 [dependencies]
+regex = "*"
 chrono = "*"

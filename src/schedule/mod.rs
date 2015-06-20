@@ -1,18 +1,5 @@
-mod second;
-mod minute;
-mod hour;
-mod dom;
-mod month;
-mod dow;
-mod year;
-
-pub use self::second::SecondSchedule;
-pub use self::minute::MinuteSchedule;
-pub use self::hour::HourSchedule;
-pub use self::dom::DayOfMonthSchedule;
-pub use self::month::MonthSchedule;
-pub use self::dow::DayOfWeekSchedule;
-pub use self::year::YearSchedule;
+mod unit;
+pub use self::unit::UnitSchedule;
 
 use ::error::CronParseResult;
 use ::parser::Parser;
@@ -23,13 +10,13 @@ pub struct CronSchedule {
   // The original String that was parsed
   pub expression: String,
   // Schedule information
-  pub seconds: Option<SecondSchedule>,
-  pub minutes: MinuteSchedule, 
-  pub hours: HourSchedule, 
-  pub days_of_month: DayOfMonthSchedule, 
-  pub months: MonthSchedule, 
-  pub days_of_week: DayOfWeekSchedule, 
-  pub years: YearSchedule, 
+  pub seconds: Option<UnitSchedule>,
+  pub minutes: UnitSchedule, 
+  pub hours: UnitSchedule, 
+  pub days_of_month: UnitSchedule, 
+  pub months: UnitSchedule, 
+  pub days_of_week: UnitSchedule, 
+  pub years: UnitSchedule, 
 }
 
 impl CronSchedule {
@@ -38,43 +25,132 @@ impl CronSchedule {
     parser.parse(expression)
   }
 
-  pub fn next_utc(&self) -> Option<DateTime<UTC>> {
+  pub fn next_utc(&mut self) -> Option<DateTime<UTC>> {
     let now : DateTime<UTC> = UTC::now();
     self.next_utc_after(&now)
   }
 
-  pub fn next_utc_after(&self, after: &DateTime<UTC>) -> Option<DateTime<UTC>> {
+  pub fn next_utc_after(&mut self, after: &DateTime<UTC>) -> Option<DateTime<UTC>> {
     let mut datetime = after.clone() + Duration::seconds(1);
     loop {
-      if !self.months.matches(datetime.month()) {
-        datetime = UTC.ymd(datetime.year(), CronSchedule::next_month(&datetime), 1).and_hms(0,0,0);
-        continue;
-      }
-      if !self.days_of_month.matches(datetime.day()) {
-        datetime = UTC.ymd(datetime.year(), datetime.month(), CronSchedule::next_day(&datetime)).and_hms(0,0,0);
-        continue;
-      }
-/*      if !self.days_of_week.matches(datetime.day()) {
-        next_datetime = UTC.ymd(datetime.year(), datetime.month(), datetime.day()+1).and_hms(0,0,0);
-        continue;
-      } */
-      if !self.hours.matches(datetime.hour()) {
-        datetime = UTC.ymd(datetime.year(), datetime.month(), datetime.day()).and_hms(CronSchedule::next_hour(&datetime),0,0);
-        continue;
-      }
-      if !self.minutes.matches(datetime.minute()) {
-        datetime = UTC.ymd(datetime.year(), datetime.month(), datetime.day()).and_hms(datetime.hour(), CronSchedule::next_minute(&datetime),0);
-        continue;
-      }
-      if let Some(ref second_schedule) = self.seconds {
-        if !second_schedule.matches(datetime.second()) {
-          datetime = UTC.ymd(datetime.year(), datetime.month(), datetime.day()).and_hms(datetime.hour(), datetime.minute(), CronSchedule::next_second(&datetime));
-          continue;        
+      let year = match self.years.get_current() {
+        Some(year) => year,
+        None => return None // We've run out of matchable years
+      };
+
+      let month = match self.months.get_current() {
+        Some(month) => month,
+        None => {
+            self.bump_month();
+            continue;
         }
-      }
-      break;
+      };
+
+      let day = match self.days_of_month.get_current() {
+        Some(day) => day,
+        None => {
+          self.bump_day();
+          continue;
+        }
+      };
+
+      let hour = match self.hours.get_current() {
+        Some(hour) => hour,
+        None => {
+          self.bump_hour();
+          continue;
+        }
+      };
+
+      let minute = match self.minutes.get_current() {
+        Some(minute) => minute,
+        None => {
+          self.bump_minute();
+          continue;
+        }
+      };
+
+      let mut second: Option<u32> = None;
+      if let Some(ref seconds) = self.seconds {
+          second = match seconds.get_current() {
+          Some(second) => Some(second),
+          None => {
+            self.bump_second();
+            continue;
+          }
+        }
+      };
+
+      let datetime = UTC.ymd(year as i32, month, day).and_hms(hour, minute, second.unwrap_or(0));
+      return Some(datetime)
     }
-    Some(datetime)
+  }
+
+  fn bump_second(&mut self) {
+     if let Some(ref sec_sched) = self.seconds {
+        match sec_sched.get_next() {
+          None => {
+          // We've exhausted seconds, reset seconds and bump the minute.
+            sec_sched.reset();
+            self.bump_minute();
+          },
+          Some(second) => {
+            // Do nothing
+          }
+        }
+     }
+  }
+  
+  fn bump_minute(&mut self) {
+    match self.minutes.get_next() {
+      None => {
+      // We've exhausted minutes, reset minutes and bump the hour.
+        self.minutes.reset();
+        self.bump_hour();
+      },
+      Some(minute) => {
+      // Do nothing
+      }
+    }
+  }
+ 
+  fn bump_hour(&mut self) {
+    match self.hours.get_next() {
+      None => {
+      // We've exhausted hours, reset hours and bump the day.
+        self.hours.reset();
+        self.bump_day();
+      },
+      Some(hour) => {
+      // Do nothing
+      }
+    }
+  }
+
+  fn bump_day(&mut self) {
+    match self.days_of_month.get_next() {
+      None => {
+      // We've exhausted days, reset days and bump the month.
+        self.days_of_month.reset();
+        self.bump_month();
+      },
+      Some(day) => {
+      // Do nothing
+      }
+    }
+  }
+  
+  fn bump_month(&mut self) {
+    match self.months.get_next() {
+      None => {
+      // We've exhausted months, reset days and bump the year.
+        self.months.reset();
+        //self.bump_year();
+      },
+      Some(month) => {
+      // Do nothing
+      }
+    }
   }
 
   fn is_leap_year(year: u32) -> bool {

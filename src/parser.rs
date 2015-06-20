@@ -2,6 +2,16 @@ use ::error::CronParseResult;
 use ::error::CronParseError::*;
 use ::schedule::*;
 
+use std::collections::BTreeSet;
+
+//TODO: Make an Error that can be translated into a CronParseError
+enum CronFieldValue {
+  Number(u32),
+  List(Vec<u32>),
+  SteppedRange(u32, u32, u32),
+  InvalidInput
+}
+
 pub struct Parser;
 
 impl Parser {
@@ -21,7 +31,7 @@ impl Parser {
     fields.reverse(); // Allows us to pop from the end cheaply
 
     // Extract the optional seconds field
-    let mut second_schedule: Option<SecondSchedule> = None; 
+    let mut second_schedule: Option<UnitSchedule> = None; 
     if fields.len() == 7 {
       let seconds_expr = fields.pop().unwrap();
       let ss = try!(self.parse_second_expression(seconds_expr));
@@ -57,88 +67,106 @@ impl Parser {
     })
   }
 
-  fn parse_second_expression(&self, expr: &str) -> CronParseResult<SecondSchedule> {
-    let second : u32 = match expr.parse() {
-      Ok(second) => second,
-      Err(_) => return Err(SecondsError)
-    };
-    
-    let second_schedule = match SecondSchedule::from_second(second) {
-      Some(second_schedule) => second_schedule,
-      None => return Err(SecondsError)
-    };
-    Ok(second_schedule)
+  fn parse_field(&self, expr: &str) -> CronFieldValue {
+    use self::CronFieldValue::*;
+    //TODO: Handle bad input gracefully
+    println!("FIELD: {}", expr);
+    if let Some(comma_index) = expr.find(',') {
+      println!("It's a list.");
+      return List(expr.split(',').inspect(|num| println!("Num: {}", num)).map(|num|num.parse::<u32>().ok().expect("Couldn't parse list number!")).collect());
+    }
+    if let Some(dash_index) = expr.find('-') {
+      println!("It's a range.");
+      //TODO: Look for step specifier '/'. Assuming step=1 for now.
+      let range : Vec<u32> = expr.split('-').map(|num|num.parse::<u32>().ok().expect("Couldn't parse range number!")).collect();
+      let min : u32 = range[0];
+      let max : u32 = range[1];
+      return SteppedRange(min, max, 1);
+    }
+    println!("It's a number.");
+    return Number( expr.parse::<u32>().ok().expect("Couldn't parse number!"));
   }
 
-  fn parse_minute_expression(&self, expr: &str) -> CronParseResult<MinuteSchedule> {
-    let minute : u32 = match expr.parse() {
-      Ok(minute) => minute,
-      Err(_) => return Err(MinutesError)
+  // TODO: Make this a method on the CronField itself
+  fn cron_field_values(&self, field_value: &CronFieldValue) -> BTreeSet<u32> {
+    use self::CronFieldValue::*;
+    let mut units : BTreeSet<u32> = BTreeSet::new();
+    match *field_value {
+      Number(number) => {
+        println!("Adding number");
+        units.insert(number);
+      },
+      List(ref numbers) => {
+        println!("Adding list");
+        for number in numbers {
+          units.insert(*number);
+        }
+      },
+      SteppedRange(min, max, step) => {
+        println!("Adding range");
+        if min > max {
+          panic!("Invalid range! Min must be <= max.");
+        }
+        let mut number = min;
+        while number < max {
+          units.insert(number);
+          number += step;
+        }
+      },
+      _ => panic!("Unsupported field value!")
     };
-    let minute_schedule = match MinuteSchedule::from_minute(minute) {
-      Some(minute_schedule) => minute_schedule,
-      None => return Err(MinutesError)
-    };
-    Ok(minute_schedule)
+    println!("Returning {:?}", units);
+    units
   }
 
-  fn parse_hour_expression(&self, expr: &str) -> CronParseResult<HourSchedule> {
-    let hour: u32 = match expr.parse() {
-      Ok(hour) => hour,
-      Err(_) => return Err(HoursError)
-    };
-    let hour_schedule = match HourSchedule::from_hour(hour) {
-      Some(hour_schedule) => hour_schedule,
-      None => return Err(HoursError)
-    };
-    Ok(hour_schedule)
+  fn parse_second_expression(&self, expr: &str) -> CronParseResult<UnitSchedule> {
+    let seconds_value = self.parse_field(expr);
+    let seconds = self.cron_field_values(&seconds_value);
+
+    Ok(UnitSchedule::from_values(seconds))
+  }
+
+  fn parse_minute_expression(&self, expr: &str) -> CronParseResult<UnitSchedule> {
+    let minutes_value = self.parse_field(expr);
+    let minutes = self.cron_field_values(&minutes_value);
+    Ok(UnitSchedule::from_values(minutes))
+  }
+
+  fn parse_hour_expression(&self, expr: &str) -> CronParseResult<UnitSchedule> {
+    let hours_value = self.parse_field(expr);
+    let hours = self.cron_field_values(&hours_value);
+    Ok(UnitSchedule::from_values(hours))
   }  
 
-  fn parse_dom_expression(&self, expr: &str) -> CronParseResult<DayOfMonthSchedule> {
+  fn parse_dom_expression(&self, expr: &str) -> CronParseResult<UnitSchedule> {
     let dom: u32 = match expr.parse() {
       Ok(dom) => dom,
       Err(_) => return Err(DayOfMonthError)
     };
-    let dom_schedule = match DayOfMonthSchedule::from_day_of_month(dom) {
-      Some(dom_schedule) => dom_schedule,
-      None => return Err(DayOfMonthError)
-    };
-    Ok(dom_schedule)
+    Ok(UnitSchedule::from(dom))
   }  
 
-  fn parse_month_expression(&self, expr: &str) -> CronParseResult<MonthSchedule> {
+  fn parse_month_expression(&self, expr: &str) -> CronParseResult<UnitSchedule> {
     let month: u32 = match expr.parse() {
       Ok(month) => month,
       Err(_) => return Err(MonthError)
     };
-    let month_schedule = match MonthSchedule::from_month(month) {
-      Some(month_schedule) => month_schedule,
-      None => return Err(MonthError)
-    };
-    Ok(month_schedule)
+    Ok(UnitSchedule::from(month))
   }  
 
-  fn parse_dow_expression(&self, expr: &str) -> CronParseResult<DayOfWeekSchedule> {
+  fn parse_dow_expression(&self, expr: &str) -> CronParseResult<UnitSchedule> {
     let day_of_week: u32 = match expr.parse() {
       Ok(dow) => dow,
       Err(_) => return Err(DayOfWeekError)
     };
-    let day_of_week_schedule = match DayOfWeekSchedule::from_day_of_week(day_of_week) {
-      Some(day_of_week_schedule) => day_of_week_schedule,
-      None => return Err(DayOfWeekError)
-    };
-    Ok(day_of_week_schedule)
+    Ok(UnitSchedule::from(day_of_week))
   }  
 
-  fn parse_year_expression(&self, expr: &str) -> CronParseResult<YearSchedule> {
+  fn parse_year_expression(&self, expr: &str) -> CronParseResult<UnitSchedule> {
     let year: u32 = match expr.parse() {
       Ok(year) => year,
       Err(_) => return Err(YearError)
     };
-    let year_schedule = match YearSchedule::from_year(year) {
-      Some(year_schedule) => year_schedule,
-      None => return Err(YearError)
-    };
-    Ok(year_schedule)
+    Ok(UnitSchedule::from(year))
   }  
 }
