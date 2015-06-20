@@ -20,12 +20,12 @@ mod tests {
   
   #[test]
   fn test_parse_with_lists() {
-    let expression = "1,30,40 2,17,51 3,7,11 4 5 6 2015";
-    let schedule = CronSchedule::parse(expression).unwrap();
+    let expression = "1 2,17,51 3 4,29 2,3 6 2015-2017";
+    let mut schedule = CronSchedule::parse(expression).unwrap();
     let mut date = UTC::now();
     println!("Fire times for {}:", expression);
     for _ in 0..5 {
-      date = schedule.next_utc_after(&date).unwrap();
+      date = schedule.next_utc_after(&date).expect("No further dates!");
       println!("-> {}", date);
     }
     assert!(true);
@@ -51,9 +51,9 @@ mod tests {
 
   #[test]
   fn test_next_utc() {
-    let expression = "1 2 3 4 5 6 2015";
-    let schedule = CronSchedule::parse(expression).unwrap();
-    let next = schedule.next_utc().unwrap();
+    let expression = "1 2 3 4 10 6 2015,2016,2017,2018";
+    let mut schedule = CronSchedule::parse(expression).unwrap();
+    let next = schedule.next_utc().expect("There was no upcoming fire time.");
     println!("Next fire time: {}", next.to_rfc3339());
   }
 }
