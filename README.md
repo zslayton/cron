@@ -4,6 +4,11 @@
 Currently pre-alpha.
 
 ```rust
+extern crate cron;
+extern crate chrono;
+use cron::CronSchedule;
+use chrono::*;
+
 fn main() {
   //                  min     hour     day  month    year
   let expression = "2,17,51 1-3,6,9-11 4,29 2,3,7 * 2015-2017";
