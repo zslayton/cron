@@ -6,9 +6,10 @@ use ::schedule::*;
 
 //TODO: Make an Error that can be translated into a CronParseError
 enum CronFieldValue {
+  Any(u32),
   Number(u32),
-  List(Vec<u32>),
-  SteppedRange(u32, u32, u32),
+  List(Vec<CronFieldValue>),
+  Range(u32, u32, u32),
   InvalidInput
 }
 
@@ -73,7 +74,13 @@ impl Parser {
     //println!("FIELD: {}", expr);
     if let Some(comma_index) = expr.find(',') {
       //println!("It's a list.");
-      return List(expr.split(',').inspect(|num| /*println!("Num: {}", num)*/{}).map(|num|num.parse::<u32>().ok().expect("Couldn't parse list number!")).collect());
+      let subfields: Vec<CronFieldValue> = expr.split(',')
+        .inspect(|subexpr| /*println!("Num: {}", num)*/{})
+        .map(|subexpr| {
+            self.parse_field(subexpr)
+        })
+        .collect();
+      return List(subfields)
     }
     if let Some(dash_index) = expr.find('-') {
       //println!("It's a range.");
@@ -81,7 +88,7 @@ impl Parser {
       let range : Vec<u32> = expr.split('-').map(|num|num.parse::<u32>().ok().expect("Couldn't parse range number!")).collect();
       let min : u32 = range[0];
       let max : u32 = range[1];
-      return SteppedRange(min, max, 1);
+      return Range(min, max, 1);
     }
     //println!("It's a number.");
     return Number( expr.parse::<u32>().ok().expect("Couldn't parse number!"));
@@ -96,19 +103,22 @@ impl Parser {
         //println!("Adding number");
         units.push(number);
       },
-      List(ref numbers) => {
+      List(ref subfields) => {
         //println!("Adding list");
-        for number in numbers {
-          units.push(*number);
+        for subfield in subfields {
+          let numbers = self.cron_field_values(subfield);
+          for number in numbers {
+             units.push(number);
+          }
         }
       },
-      SteppedRange(min, max, step) => {
+      Range(min, max, step) => {
         //println!("Adding range");
         if min > max {
           panic!("Invalid range! Min must be <= max.");
         }
         let mut number = min;
-        while number < max {
+        while number <= max {
           units.push(number);
           number += step;
         }

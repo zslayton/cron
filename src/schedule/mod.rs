@@ -20,18 +20,44 @@ pub struct CronSchedule {
   pub years: UnitSchedule, 
 }
 
+pub struct CronScheduleIterator<'a> {
+  schedule: &'a CronSchedule,
+  previous_datetime: Option<DateTime<UTC>>
+}
+
+impl <'a> Iterator for CronScheduleIterator<'a> {
+  type Item = DateTime<UTC>;
+  
+  fn next(&mut self) -> Option<DateTime<UTC>> {
+    let previous_datetime = match self.previous_datetime {
+      Some(datetime) => datetime,
+      None => UTC::now()
+    };
+    let next_datetime = self.schedule.next_utc_after(&previous_datetime);
+    self.previous_datetime = next_datetime;
+    next_datetime
+  }
+}
+
 impl CronSchedule {
   pub fn parse<A>(expression: A) -> CronParseResult<CronSchedule> where A : AsRef<str> {
     let parser = Parser::new();
     parser.parse(expression)
   }
 
-  pub fn next_utc(&mut self) -> Option<DateTime<UTC>> {
+  pub fn upcoming<'a>(&'a self) -> CronScheduleIterator<'a> {
+    CronScheduleIterator{
+      schedule: self,
+      previous_datetime: None
+    }
+  }
+
+  pub fn next_utc(&self) -> Option<DateTime<UTC>> {
     let now : DateTime<UTC> = UTC::now();
     self.next_utc_after(&now)
   }
 
-  pub fn next_utc_after(&mut self, after: &DateTime<UTC>) -> Option<DateTime<UTC>> {
+  pub fn next_utc_after(&self, after: &DateTime<UTC>) -> Option<DateTime<UTC>> {
     let mut datetime = after.clone() + Duration::minutes(1);
     
     let mut year_range = self.years.range_iter(datetime.year() as u32, u32::MAX);

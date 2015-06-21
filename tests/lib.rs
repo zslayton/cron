@@ -20,13 +20,24 @@ mod tests {
   
   #[test]
   fn test_parse_with_lists() {
-    let expression = "1 2,17,51 3 4,29 2,3,7 6 2015-2017";
+    let expression = "1 2,17,51 1-3,6,9-11 4,29 2,3,7 6 2015-2017";
     let mut schedule = CronSchedule::parse(expression).unwrap();
     let mut date = UTC::now();
     println!("Fire times for {}:", expression);
-    for _ in 0..10 {
+    for _ in 0..20 {
       date = schedule.next_utc_after(&date).expect("No further dates!");
       println!("-> {}", date);
+    }
+    assert!(true);
+  }
+
+  #[test]
+  fn test_upcoming_iterator() {
+    let expression = "2,17,51 1-3,6,9-11 4,29 2,3,7 6 2015-2017";
+    let mut schedule = CronSchedule::parse(expression).unwrap();
+    println!("Upcoming fire times for '{}':", expression);
+    for datetime in schedule.upcoming().take(12) {
+      println!("-> {}", datetime);
     }
     assert!(true);
   }
