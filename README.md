@@ -5,9 +5,7 @@ Currently pre-alpha.
 
 ```rust
 extern crate cron;
-extern crate chrono;
 use cron::CronSchedule;
-use chrono::*;
 
 fn main() {
   //                  min     hour     day  month    year
