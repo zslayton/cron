@@ -9,7 +9,7 @@ use cron::CronSchedule;
 
 fn main() {
   //                  min     hour     day  month    year
-  let expression = "2,17,51 1-3,6,9-11 4,29 2,3,7 * 2015-2017";
+  let expression = "2,17,51 1-3,6,9-11 4,29 2,3,7 6 2015-2017";
   let schedule = CronSchedule::parse(expression).unwrap();
   println!("Upcoming fire times for '{}':", expression);
   for datetime in schedule.upcoming().take(12) {
