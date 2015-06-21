@@ -58,7 +58,7 @@ impl CronSchedule {
   }
 
   pub fn next_utc_after(&self, after: &DateTime<UTC>) -> Option<DateTime<UTC>> {
-    let mut datetime = after.clone() + Duration::minutes(1);
+    let datetime = after.clone() + Duration::minutes(1);
     
     let mut year_range = self.years.range_iter(datetime.year() as u32, u32::MAX);
 

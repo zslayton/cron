@@ -72,17 +72,17 @@ impl Parser {
     use self::CronFieldValue::*;
     //TODO: Handle bad input gracefully
     //println!("FIELD: {}", expr);
-    if let Some(comma_index) = expr.find(',') {
+    if let Some(_comma_index) = expr.find(',') {
       //println!("It's a list.");
       let subfields: Vec<CronFieldValue> = expr.split(',')
-        .inspect(|subexpr| /*println!("Num: {}", num)*/{})
+        .inspect(|_subexpr| /*println!("Num: {}", num)*/{})
         .map(|subexpr| {
             self.parse_field(subexpr)
         })
         .collect();
       return List(subfields)
     }
-    if let Some(dash_index) = expr.find('-') {
+    if let Some(_dash_index) = expr.find('-') {
       //println!("It's a range.");
       //TODO: Look for step specifier '/'. Assuming step=1 for now.
       let range : Vec<u32> = expr.split('-').map(|num|num.parse::<u32>().ok().expect("Couldn't parse range number!")).collect();

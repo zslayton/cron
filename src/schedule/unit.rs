@@ -1,5 +1,4 @@
 //use std::collections::BTreeSet;
-use std::collections::Bound::{Included, Unbounded};
 use std::u32;
 
 pub struct UnitSchedule {
@@ -35,7 +34,7 @@ impl <'a> UnitScheduleIterator <'a> {
   pub fn current(&self) -> Option<u32> {
     match self.next_index {
       0 => None,
-      index => self.schedule.values.get((self.next_index-1) as usize).cloned()
+      _index => self.schedule.values.get((self.next_index-1) as usize).cloned()
     }
   }
   pub fn reset(&'a mut self) -> &'a mut UnitScheduleIterator {
