@@ -12,5 +12,6 @@ license = "MIT"
 name = "cron"
 
 [dependencies]
-regex = "*"
-chrono = "*"
+regex = "~0.2"
+chrono = "~0.2"
+nom = "~2.1"
