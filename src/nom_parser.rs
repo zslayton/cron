@@ -2,7 +2,7 @@ use std::str::{self, FromStr};
 use std::collections::BTreeSet;
 use std::collections::Bound::{Included, Unbounded};
 use std::borrow::Cow;
-use chrono::{UTC, Local, DateTime, Duration, Datelike};
+use chrono::{UTC, DateTime, Duration, Datelike};
 use chrono::offset::TimeZone;
 use nom::*;
 
@@ -102,7 +102,10 @@ trait TimeUnitField where Self: Sized {
       All => Ok(Self::supported_ordinals()),
       Point(ordinal) => Ok((&[ordinal]).iter().cloned().collect()),
       NamedPoint(ref name) => Ok((&[Self::ordinal_from_name(name)?]).iter().cloned().collect()),
-      Period(_start, _step) => unimplemented!(), //TODO
+      Period(start, step) => {
+        let start = Self::validate_ordinal(start)?;
+        Ok((start..Self::inclusive_max()+1).step_by(step).collect())
+      },
       Range(start, end) => {
         match (Self::validate_ordinal(start), Self::validate_ordinal(end)) {
           (Ok(start), Ok(end)) if start <= end => Ok((start..end+1).collect()),
@@ -332,6 +335,15 @@ named!(named_point <Specifier>,
   )
 );
 
+named!(period <Specifier>,
+  do_parse!(
+    start: ordinal >>
+    tag!("/") >>
+    step: ordinal >>
+    (Specifier::Period(start, step))
+  )
+);
+
 named!(range <Specifier>,
   complete!(
     do_parse!(
@@ -474,9 +486,8 @@ impl Schedule {
     }
   }
 
-  pub fn next_after<Z>(&self, after: &DateTime<Z>) -> Option<DateTime<Z>> where Z: TimeZone + ZonedTimeProvider<Z> {
+  fn next_after<Z>(&self, after: &DateTime<Z>) -> Option<DateTime<Z>> where Z: TimeZone {
     let datetime = after.clone() + Duration::seconds(1);
-    let timezone = Z::new();
 
     //    println!("Looking for next schedule time after {}", after.to_rfc3339());
     for year in self.years.ordinals().range((Included(datetime.year() as u32), Unbounded)).cloned() {
@@ -493,8 +504,9 @@ impl Schedule {
               for second in self.seconds.ordinals().iter().cloned() {
                 //println!("Checking second {}", second);
 
+                let timezone = datetime.timezone();
                 let candidate = timezone.ymd(year as i32, month, day).and_hms(hour, minute, second);
-                if candidate <= datetime {
+                if candidate < datetime {
                   //TODO: We can avoid this by only traversing months after the starting datetime during the first year's search
                   //println!("Candidate {} rejected. Too early.", candidate.to_rfc3339());
                   continue;
@@ -518,23 +530,45 @@ impl Schedule {
     None
   }
 
-  pub fn upcoming<'a, Z>(&'a self) -> ScheduleIterator<'a, Z> where Z: ZonedTimeProvider<Z> {
-    ScheduleIterator{
-      is_done: false,
-      schedule: self,
-      previous_datetime: Z::now()
+  pub fn upcoming<'a, Z>(&'a self, timezone: Z) -> ScheduleIterator<'a, Z> where Z: TimeZone {
+    self.after(timezone.from_utc_datetime(&UTC::now().naive_utc()))
+  }
+
+  pub fn after<'a, Z>(&'a self, after: DateTime<Z>) -> ScheduleIterator<'a, Z> where Z: TimeZone {
+    ScheduleIterator::new(self, after)
+  }
+}
+
+impl FromStr for Schedule {
+  type Err = ExpressionError;
+  fn from_str(expression: &str) -> Result<Self, Self::Err> {
+    use nom::IResult::*;
+    match schedule(expression.as_bytes()) {
+      Done(_, schedule) => Ok(schedule), // Extract from nom tuple
+      Error(_) => Err(ExpressionError("Invalid cron expression.".to_owned())), //TODO: Details
+      Incomplete(_) => Err(ExpressionError("Incomplete cron expression.".to_owned()))
     }
   }
 }
 
-pub struct ScheduleIterator<'a, Z> where Z: ZonedTimeProvider<Z> {
+pub struct ScheduleIterator<'a, Z> where Z: TimeZone {
   is_done: bool,
   schedule: &'a Schedule,
   previous_datetime: DateTime<Z>,
   //TODO: Cutoff datetime
 }
 
-impl <'a, Z> Iterator for ScheduleIterator<'a, Z> where Z: ZonedTimeProvider<Z> {
+impl <'a, Z> ScheduleIterator<'a, Z> where Z: TimeZone {
+  fn new(schedule: &'a Schedule, starting_datetime: DateTime<Z>) -> ScheduleIterator<'a, Z> {
+    ScheduleIterator{
+      is_done: false,
+      schedule: schedule,
+      previous_datetime: starting_datetime
+    }
+  }
+}
+
+impl <'a, Z> Iterator for ScheduleIterator<'a, Z> where Z: TimeZone {
   type Item = DateTime<Z>;
 
   fn next(&mut self) -> Option<DateTime<Z>> {
@@ -550,31 +584,6 @@ impl <'a, Z> Iterator for ScheduleIterator<'a, Z> where Z: ZonedTimeProvider<Z> 
     }
   }
 }
-
-pub trait ZonedTimeProvider<Z>: TimeZone + Copy where Z: TimeZone + Copy
-{
-  fn new() -> Z;
-  fn now() -> DateTime<Z>;
-}
-
-impl ZonedTimeProvider<UTC> for UTC {
-  fn new() -> UTC {
-    UTC
-  }
-  fn now() -> DateTime<UTC> {
-    UTC::now()
-  }
-}
-
-impl ZonedTimeProvider<Local> for Local {
-  fn new() -> Local {
-    Local
-  }
-  fn now() -> DateTime<Local> {
-    Local::now()
-  }
-}
-
 
 #[test]
 fn test_next_after() {
@@ -593,7 +602,7 @@ fn test_upcoming_utc() {
   let schedule = schedule(expression.as_bytes());
   assert!(schedule.is_done());
   let schedule = schedule.unwrap().1;
-  let mut upcoming: ScheduleIterator<UTC> = schedule.upcoming();
+  let mut upcoming = schedule.upcoming(UTC);
   let next1 = upcoming.next();
   assert!(next1.is_some());
   let next2 = upcoming.next();
@@ -607,11 +616,12 @@ fn test_upcoming_utc() {
 
 #[test]
 fn test_upcoming_local() {
+  use chrono::Local;
   let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
   let schedule = schedule(expression.as_bytes());
   assert!(schedule.is_done());
   let schedule = schedule.unwrap().1;
-  let mut upcoming: ScheduleIterator<Local> = schedule.upcoming();
+  let mut upcoming = schedule.upcoming(Local);
   let next1 = upcoming.next();
   assert!(next1.is_some());
   let next2 = upcoming.next();
@@ -623,6 +633,18 @@ fn test_upcoming_local() {
   println!("Upcoming 3 for {} {:?}", expression, next3);
 }
 
+
+#[test]
+fn test_valid_from_str() {
+  let schedule = Schedule::from_str("0 0,30 0,6,12,18 1,15 Jan-March Thurs");
+  assert!(schedule.is_ok());
+}
+
+#[test]
+fn test_invalid_from_str() {
+  let schedule = Schedule::from_str("cheesecake 0,30 0,6,12,18 1,15 Jan-March Thurs");
+  assert!(schedule.is_err());
+}
 
 #[test]
 fn test_nom_valid_number() {
@@ -646,6 +668,18 @@ fn test_nom_valid_named_point() {
 fn test_nom_invalid_named_point() {
   let expression = "8";
   assert!(named_point(expression.as_bytes()).is_err());
+}
+
+#[test]
+fn test_nom_valid_period() {
+  let expression = "1/2";
+  assert!(period(expression.as_bytes()).is_done());
+}
+
+#[test]
+fn test_nom_invalid_period() {
+  let expression = "Wed/4";
+  assert!(period(expression.as_bytes()).is_err());
 }
 
 #[test]
