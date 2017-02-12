@@ -233,11 +233,13 @@ named!(named_point <Specifier>,
 );
 
 named!(period <Specifier>,
-  do_parse!(
-    start: ordinal >>
-    tag!("/") >>
-    step: ordinal >>
-    (Specifier::Period(start, step))
+  complete!(
+    do_parse!(
+      start: ordinal >>
+      tag!("/") >>
+      step: ordinal >>
+      (Specifier::Period(start, step))
+    )
   )
 );
 
@@ -273,6 +275,7 @@ named!(all <Specifier>,
 named!(specifier <Specifier>,
   alt!(
     all |
+    period |
     range |
     point |
     named_range |

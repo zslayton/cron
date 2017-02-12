@@ -8,6 +8,16 @@ mod tests {
   use chrono::*;
 
   #[test]
+  fn test_readme() {
+    let expression =   "0   30   9,12,15     1,15       May-Aug  Mon,Wed,Fri  2018/2";
+    let schedule = Schedule::from_str(expression).unwrap();
+    println!("README: Upcoming fire times for '{}':", expression);
+    for datetime in schedule.upcoming(UTC).take(10) {
+      println!("README: -> {}", datetime);
+    }
+  }
+
+  #[test]
   fn test_parse_with_year() {
     let expression = "1 2 3 4 5 6 2015";
     assert!(Schedule::from_str(expression).is_ok());
