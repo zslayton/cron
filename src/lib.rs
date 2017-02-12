@@ -6,9 +6,7 @@
 extern crate chrono;
 extern crate nom;
 
-pub mod parser;
-pub mod nom_parser;
-pub mod error;
-pub mod schedule;
+mod time_unit;
+mod schedule;
 
-pub use schedule::CronSchedule;
+pub use schedule::Schedule;
