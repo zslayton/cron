@@ -2,9 +2,9 @@ use nom::*;
 use std::str::{self, FromStr};
 use std::collections::BTreeSet;
 use std::collections::Bound::{Included, Unbounded};
-use chrono::{UTC, DateTime, Duration, Datelike};
+use chrono::{UTC, DateTime, Duration, Datelike, Timelike};
 use chrono::offset::TimeZone;
-use std::u32;
+use std::iter::{self, Iterator};
 
 use time_unit::*;
 
@@ -60,23 +60,49 @@ impl Schedule {
   fn next_after<Z>(&self, after: &DateTime<Z>) -> Option<DateTime<Z>> where Z: TimeZone {
     let datetime = after.clone() + Duration::seconds(1);
 
+    // The first time we iterate through the options for each time unit, we should start with
+    // the current value of each unit from the provided datetime. (e.g. if the datetime is Dec 3,
+    // we should start at month=12, day=3. When we exhaust that month, we should start over the next
+    // year with month=1, day=1.
+
+    let mut month_starts = once_and_then(datetime.month(), Months::inclusive_min());
+    let mut day_of_month_starts = once_and_then(datetime.day(), DaysOfMonth::inclusive_min());
+    let mut hour_starts = once_and_then(datetime.hour(), Hours::inclusive_min());
+    let mut minute_starts = once_and_then(datetime.minute(), Minutes::inclusive_min());
+    let mut second_starts = once_and_then(datetime.second(), Seconds::inclusive_min());
+
     //    println!("Looking for next schedule time after {}", after.to_rfc3339());
     for year in self.years.ordinals().range((Included(datetime.year() as u32), Unbounded)).cloned() {
 
       //println!("Checking year {}", year);
-      for month in self.months.ordinals().iter().cloned() {
+      let month_start = month_starts.next().unwrap();
+      let month_end = Months::inclusive_max();
+      let month_range = (Included(month_start), Included(month_end));
+      for month in self.months.ordinals().range(month_range).cloned() {
         //println!("Checking month {}", month);
-        'day_loop: for day in self.days_of_month.ordinals().range((Included(1), Included(days_in_month(month, year)))).cloned() {
+        let day_of_month_start = day_of_month_starts.next().unwrap();
+        let day_of_month_end = days_in_month(month, year);
+        let day_of_month_range = (Included(day_of_month_start), Included(day_of_month_end));
+        'day_loop: for day_of_month in self.days_of_month.ordinals().range(day_of_month_range).cloned() {
           //println!("Checking day {}", day);
-          for hour in self.hours.ordinals().iter().cloned() {
+          let hour_start = hour_starts.next().unwrap();
+          let hour_end = Hours::inclusive_max();
+          let hour_range = (Included(hour_start), Included(hour_end));
+          for hour in self.hours.ordinals().range(hour_range).cloned() {
             //println!("Checking hour {}", hour);
-            for minute in self.minutes.ordinals().iter().cloned() {
+            let minute_start = minute_starts.next().unwrap();
+            let minute_end = Minutes::inclusive_max();
+            let minute_range = (Included(minute_start), Included(minute_end));
+            for minute in self.minutes.ordinals().range(minute_range).cloned() {
               //println!("Checking minute {}", minute);
-              for second in self.seconds.ordinals().iter().cloned() {
+              let second_start = second_starts.next().unwrap();
+              let second_end = Seconds::inclusive_max();
+              let second_range = (Included(second_start), Included(second_end));
+              for second in self.seconds.ordinals().range(second_range).cloned() {
                 //println!("Checking second {}", second);
 
                 let timezone = datetime.timezone();
-                let candidate = timezone.ymd(year as i32, month, day).and_hms(hour, minute, second);
+                let candidate = timezone.ymd(year as i32, month, day_of_month).and_hms(hour, minute, second);
                 if candidate < datetime {
                   //TODO: We can avoid this by only traversing months after the starting datetime during the first year's search
                   //println!("Candidate {} rejected. Too early.", candidate.to_rfc3339());
@@ -154,6 +180,10 @@ impl <'a, Z> Iterator for ScheduleIterator<'a, Z> where Z: TimeZone {
       None
     }
   }
+}
+
+fn once_and_then<T>(head: T, long_tail: T) -> impl Iterator<Item=T> where T: Copy {
+  iter::once(head).chain(iter::once(long_tail).cycle())
 }
 
 #[derive(Debug)]

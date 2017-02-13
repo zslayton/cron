@@ -18,6 +18,16 @@ mod tests {
   }
 
   #[test]
+  fn test_anything_goes() {
+    let expression = "* * * * * * *";
+    let schedule = Schedule::from_str(expression).unwrap();
+    println!("All stars: Upcoming fire times for '{}':", expression);
+    for datetime in schedule.upcoming(UTC).take(10) {
+      println!("All stars: -> {}", datetime);
+    }
+  }
+
+  #[test]
   fn test_parse_with_year() {
     let expression = "1 2 3 4 5 6 2015";
     assert!(Schedule::from_str(expression).is_ok());
