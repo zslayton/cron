@@ -1,35 +1,35 @@
 # cron [![](https://api.travis-ci.org/zslayton/cron.png?branch=master)](https://travis-ci.org/zslayton/cron) [![](http://meritbadge.herokuapp.com/cron)](https://crates.io/crates/cron)
 ## A Cron Expression Parser in Rust
 
-Currently pre-alpha.
-
 ```rust
 extern crate cron;
-use cron::CronSchedule;
+extern crate chrono;
+
+use cron::Schedule;
+use chrono::UTC;
+use std::str::FromStr;
 
 fn main() {
-  //                  min     hour     day  month    year
-  let expression = "2,17,51 1-3,6,9-11 4,29 2,3,7 6 2015-2017";
-  let schedule = CronSchedule::parse(expression).unwrap();
-  println!("Upcoming fire times for '{}':", expression);
-  for datetime in schedule.upcoming().take(12) {
+  //               sec  min   hour   day of month   month   day of week   year
+  let expression = "0   30   9,12,15     1,15       May-Aug  Mon,Wed,Fri  2018/2";
+  let schedule = Schedule::from_str(expression).unwrap();
+  println!("Upcoming fire times:");
+  for datetime in schedule.upcoming(UTC).take(10) {
     println!("-> {}", datetime);
   }
 }
 
 /*
-Upcoming fire times for '2,17,51 1-3,6,9-11 4,29 2,3,7 6 2015-2017':
--> 2015-07-04 01:02:00 UTC
--> 2015-07-04 01:17:00 UTC
--> 2015-07-04 01:51:00 UTC
--> 2015-07-04 02:02:00 UTC
--> 2015-07-04 02:17:00 UTC
--> 2015-07-04 02:51:00 UTC
--> 2015-07-04 03:02:00 UTC
--> 2015-07-04 03:17:00 UTC
--> 2015-07-04 03:51:00 UTC
--> 2015-07-04 06:02:00 UTC
--> 2015-07-04 06:17:00 UTC
--> 2015-07-04 06:51:00 UTC
+Upcoming fire times:
+-> 2018-06-01 09:30:00 UTC
+-> 2018-06-01 12:30:00 UTC
+-> 2018-06-01 15:30:00 UTC
+-> 2018-06-15 09:30:00 UTC
+-> 2018-06-15 12:30:00 UTC
+-> 2018-06-15 15:30:00 UTC
+-> 2018-08-01 09:30:00 UTC
+-> 2018-08-01 12:30:00 UTC
+-> 2018-08-01 15:30:00 UTC
+-> 2018-08-15 09:30:00 UTC
 */
 ```

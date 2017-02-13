@@ -1,11 +1,9 @@
 language: rust
-rust: stable
+rust: nightly
 script:
 - |
   cargo build &&
-  cargo test &&
-  echo "Testing README" &&
-  rustdoc --test README.md --crate-name cron -L dependency=./target/debug/deps --extern cron=./target/debug/libcron.rlib
+  cargo test
 env:
   global:
     secure: Me4AZTu6v0jVvTqc7ztn8SoT4aaulqj4MH6af4wpnv+rpTc4ZEPGdbDm4RNb4iQwtAaepDSF5ZH2MA7erI725m1644yCeW2iPmkYqtRRRmk0LZPKlYwvd8B8/5qSxfqRsjl4vAGFZYIlK32og4qn4195iIHXDEsK0dxE1Z46wG9I7JXOxVtiVVMO2yZ3tTQUk6Ytgogwcir6ipICWqhzkg20YO5sWQSkHmzc4uZRrTVD4Ny32RdLSCVMECJWOclByW7827kwlorVRGggfUoyr9tpbzaTGIjT7A28uFexnWPU1KLA3i6kxoSt2uDc5qG4f6aUd7geVJrEFk0kmBVoH74MUmnBpVbaeMqNsYFEoUFkl91WLlxYoNrshpsmub9As8Ea+hL2Z29Eg07e+Lh9IoXhGY89sfwaY1kdzxCr2c0dGSGnfYHwe6o6+9kseexN24nkKf46mk1IWGQ4363SnRN4JG2pzxSTdbxqkShA25Amkp7ugJM1eP5i4AJL7sN+Y5JB0d65wp082uYOc5iHsUi32KjVjHnTcu7eADpinex6zi1z8GyvZeOCOLnCvZzJTZFbIvYX2Hda6gfrInI9+g5bswDeCq0FCeGKq7Io2+FB/184bq6pcPEtSUeibOILahgGj2KACbKM0W28sJzaACXXfUGh2PV/xQLTMiH2TsE=

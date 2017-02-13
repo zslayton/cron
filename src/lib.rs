@@ -1,8 +1,13 @@
+#![feature(conservative_impl_trait)]
+#![feature(collections_bound)]
+#![feature(btree_range)]
+#![feature(step_by)]
+
 #![allow(dead_code)]
 extern crate chrono;
+extern crate nom;
 
-pub mod parser;
-pub mod error;
-pub mod schedule;
+mod time_unit;
+mod schedule;
 
-pub use schedule::CronSchedule;
+pub use schedule::Schedule;
