@@ -16,6 +16,7 @@ pub use self::years::Years;
 
 use ::schedule::{Specifier, Ordinal, OrdinalSet, ExpressionError};
 use std::borrow::Cow;
+use std::iter;
 
 
 pub trait TimeUnitField where Self: Sized {
@@ -24,6 +25,9 @@ pub trait TimeUnitField where Self: Sized {
   fn inclusive_min() -> Ordinal;
   fn inclusive_max() -> Ordinal;
   fn ordinals(&self) -> &OrdinalSet;
+  fn from_ordinal(ordinal: Ordinal) -> Self {
+    Self::from_ordinal_set(iter::once(ordinal).collect())
+  }
   fn supported_ordinals() -> OrdinalSet {
     (Self::inclusive_min()..Self::inclusive_max()+1).collect()
   }
