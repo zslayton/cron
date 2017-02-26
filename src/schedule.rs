@@ -74,53 +74,56 @@ impl Schedule {
     //    println!("Looking for next schedule time after {}", after.to_rfc3339());
     for year in self.years.ordinals().range((Included(datetime.year() as u32), Unbounded)).cloned() {
 
-      //println!("Checking year {}", year);
       let month_start = month_starts.next().unwrap();
       let month_end = Months::inclusive_max();
       let month_range = (Included(month_start), Included(month_end));
+
       for month in self.months.ordinals().range(month_range).cloned() {
-        //println!("Checking month {}", month);
+
         let day_of_month_start = day_of_month_starts.next().unwrap();
         let day_of_month_end = days_in_month(month, year);
         let day_of_month_range = (Included(day_of_month_start), Included(day_of_month_end));
+
         'day_loop: for day_of_month in self.days_of_month.ordinals().range(day_of_month_range).cloned() {
-          //println!("Checking day {}", day);
+
           let hour_start = hour_starts.next().unwrap();
           let hour_end = Hours::inclusive_max();
           let hour_range = (Included(hour_start), Included(hour_end));
+
           for hour in self.hours.ordinals().range(hour_range).cloned() {
-            //println!("Checking hour {}", hour);
+
             let minute_start = minute_starts.next().unwrap();
             let minute_end = Minutes::inclusive_max();
             let minute_range = (Included(minute_start), Included(minute_end));
+
             for minute in self.minutes.ordinals().range(minute_range).cloned() {
-              //println!("Checking minute {}", minute);
+
               let second_start = second_starts.next().unwrap();
               let second_end = Seconds::inclusive_max();
               let second_range = (Included(second_start), Included(second_end));
-              for second in self.seconds.ordinals().range(second_range).cloned() {
-                //println!("Checking second {}", second);
 
+              for second in self.seconds.ordinals().range(second_range).cloned() {
                 let timezone = datetime.timezone();
                 let candidate = timezone.ymd(year as i32, month, day_of_month).and_hms(hour, minute, second);
-                if candidate < datetime {
-                  //TODO: We can avoid this by only traversing months after the starting datetime during the first year's search
-                  //println!("Candidate {} rejected. Too early.", candidate.to_rfc3339());
-                  continue;
-                }
                 if !self.days_of_week.ordinals().contains(&candidate.weekday().number_from_sunday()) {
-                  //TODO: If this happens, we should move to the next day, not just continue.
-                  //println!("Candidate {} rejected. Incorrect day of the week.", candidate.to_rfc3339());
                   continue 'day_loop;
                 }
-
-                //println!("Returning datetime {}", candidate.to_rfc3339());
                 return Some(candidate);
               }
-            }
-          }
-        }
-      }
+            } // End of minutes range
+            let _ = second_starts.next().unwrap();
+          } // End of hours range
+          let _ = minute_starts.next().unwrap();
+          let _ = second_starts.next().unwrap();
+        } // End of Day of Month range
+        let _ = hour_starts.next().unwrap();
+        let _ = minute_starts.next().unwrap();
+        let _ = second_starts.next().unwrap();
+      } // End of Month range
+      let _ = day_of_month_starts.next().unwrap();
+      let _ = hour_starts.next().unwrap();
+      let _ = minute_starts.next().unwrap();
+      let _ = second_starts.next().unwrap();
     }
 
     // We ran out of dates to try.
@@ -337,7 +340,93 @@ named!(field <Field>,
   )
 );
 
-named!(schedule <Schedule>,
+named!(shorthand_yearly <Schedule>,
+  do_parse!(
+    tag!("@yearly") >>
+    (Schedule::from(
+      Seconds::from_ordinal(0),
+      Minutes::from_ordinal(0),
+      Hours::from_ordinal(0),
+      DaysOfMonth::from_ordinal(1),
+      Months::from_ordinal(1),
+      DaysOfWeek::all(),
+      Years::all()
+    ))
+  )
+);
+
+named!(shorthand_monthly <Schedule>,
+  do_parse!(
+    tag!("@monthly") >>
+    (Schedule::from(
+      Seconds::from_ordinal_set(iter::once(0).collect()),
+      Minutes::from_ordinal_set(iter::once(0).collect()),
+      Hours::from_ordinal_set(iter::once(0).collect()),
+      DaysOfMonth::from_ordinal_set(iter::once(1).collect()),
+      Months::all(),
+      DaysOfWeek::all(),
+      Years::all()
+    ))
+  )
+);
+
+named!(shorthand_weekly <Schedule>,
+  do_parse!(
+    tag!("@weekly") >>
+    (Schedule::from(
+      Seconds::from_ordinal_set(iter::once(0).collect()),
+      Minutes::from_ordinal_set(iter::once(0).collect()),
+      Hours::from_ordinal_set(iter::once(0).collect()),
+      DaysOfMonth::all(),
+      Months::all(),
+      DaysOfWeek::from_ordinal_set(iter::once(1).collect()),
+      Years::all()
+    ))
+  )
+);
+
+named!(shorthand_daily <Schedule>,
+  do_parse!(
+    tag!("@daily") >>
+    (Schedule::from(
+      Seconds::from_ordinal_set(iter::once(0).collect()),
+      Minutes::from_ordinal_set(iter::once(0).collect()),
+      Hours::from_ordinal_set(iter::once(0).collect()),
+      DaysOfMonth::all(),
+      Months::all(),
+      DaysOfWeek::all(),
+      Years::all()
+    ))
+  )
+);
+
+named!(shorthand_hourly <Schedule>,
+  do_parse!(
+    tag!("@hourly") >>
+    (Schedule::from(
+      Seconds::from_ordinal_set(iter::once(0).collect()),
+      Minutes::from_ordinal_set(iter::once(0).collect()),
+      Hours::all(),
+      DaysOfMonth::all(),
+      Months::all(),
+      DaysOfWeek::all(),
+      Years::all()
+    ))
+  )
+);
+
+//TODO: fn from(seconds: Seconds, minutes: Minutes, hours: Hours, days_of_month: DaysOfMonth, months: Months, days_of_week: DaysOfWeek, years: Years) -> Schedule {
+named!(shorthand <Schedule>,
+  alt!(
+    shorthand_yearly  |
+    shorthand_monthly |
+    shorthand_weekly  |
+    shorthand_daily   |
+    shorthand_hourly
+  )
+);
+
+named!(longhand <Schedule>,
   map_res!(
     complete!(
       do_parse!(
@@ -347,6 +436,13 @@ named!(schedule <Schedule>,
       )
     ),
     Schedule::from_field_list
+  )
+);
+
+named!(schedule <Schedule>,
+  alt!(
+    shorthand |
+    longhand
   )
 );
 

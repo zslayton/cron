@@ -1,6 +1,6 @@
 [package]
 name = "cron"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Zack Slayton <zack.slayton@gmail.com>"]
 repository = "https://github.com/zslayton/cron"
 readme = "README.md"
@@ -12,6 +12,5 @@ license = "MIT"
 name = "cron"
 
 [dependencies]
-regex = "~0.2"
 chrono = "~0.3"
 nom = "~2.1"
