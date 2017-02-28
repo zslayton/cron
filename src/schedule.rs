@@ -34,7 +34,7 @@ impl Schedule {
         let days_of_month = DaysOfMonth::from_field(iter.next().unwrap())?;
         let months = Months::from_field(iter.next().unwrap())?;
         let days_of_week = DaysOfWeek::from_field(iter.next().unwrap())?;
-        let years: Years = iter.next().map(Years::from_field).unwrap_or(Ok(Years::all()))?;
+        let years: Years = iter.next().map(Years::from_field).unwrap_or_else(|| Ok(Years::all()))?;
 
         Ok(Schedule::from(seconds,
                           minutes,
@@ -148,7 +148,7 @@ impl Schedule {
         None
     }
 
-    pub fn upcoming<'a, Z>(&'a self, timezone: Z) -> ScheduleIterator<'a, Z>
+    pub fn upcoming<Z>(& self, timezone: Z) -> ScheduleIterator<Z>
         where Z: TimeZone
     {
         self.after(&timezone.from_utc_datetime(&UTC::now().naive_utc()))
@@ -484,7 +484,7 @@ fn is_leap_year(year: Ordinal) -> bool {
     let by_four = year % 4 == 0;
     let by_hundred = year % 100 == 0;
     let by_four_hundred = year % 400 == 0;
-    return by_four && ((!by_hundred) || by_four_hundred);
+    by_four && ((!by_hundred) || by_four_hundred)
 }
 
 fn days_in_month(month: Ordinal, year: Ordinal) -> u32 {
