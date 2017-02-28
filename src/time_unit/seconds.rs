@@ -8,7 +8,7 @@ impl TimeUnitField for Seconds {
     fn from_ordinal_set(ordinal_set: OrdinalSet) -> Self {
         Seconds(ordinal_set)
     }
-    fn name<'a>() -> Cow<'static, str> {
+    fn name() -> Cow<'static, str> {
         Cow::from("Seconds")
     }
     fn inclusive_min() -> Ordinal {
