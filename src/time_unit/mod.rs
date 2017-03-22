@@ -14,7 +14,8 @@ pub use self::months::Months;
 pub use self::days_of_week::DaysOfWeek;
 pub use self::years::Years;
 
-use schedule::{Specifier, Ordinal, OrdinalSet, ExpressionError};
+use schedule::{Specifier, Ordinal, OrdinalSet};
+use error::*;
 use std::borrow::Cow;
 use std::iter;
 
@@ -36,24 +37,24 @@ pub trait TimeUnitField
     fn all() -> Self {
         Self::from_ordinal_set(Self::supported_ordinals())
     }
-    fn ordinal_from_name(name: &str) -> Result<Ordinal, ExpressionError> {
-        Err(ExpressionError(format!("The '{}' field does not support using names. '{}' \
+    fn ordinal_from_name(name: &str) -> Result<Ordinal> {
+        bail!(ErrorKind::Expression(format!("The '{}' field does not support using names. '{}' \
                                      specified.",
                                     Self::name(),
                                     name)))
     }
-    fn validate_ordinal(ordinal: Ordinal) -> Result<Ordinal, ExpressionError> {
+    fn validate_ordinal(ordinal: Ordinal) -> Result<Ordinal> {
         //println!("validate_ordinal for {} => {}", Self::name(), ordinal);
         match ordinal {
             i if i < Self::inclusive_min() => {
-                Err(ExpressionError(format!("{} must be greater than or equal to {}. ('{}' \
+                bail!(ErrorKind::Expression(format!("{} must be greater than or equal to {}. ('{}' \
                                              specified.)",
                                             Self::name(),
                                             Self::inclusive_min(),
                                             i)))
             }
             i if i > Self::inclusive_max() => {
-                Err(ExpressionError(format!("{} must be less than {}. ('{}' specified.)",
+                bail!(ErrorKind::Expression(format!("{} must be less than {}. ('{}' specified.)",
                                             Self::name(),
                                             Self::inclusive_max(),
                                             i)))
@@ -62,7 +63,7 @@ pub trait TimeUnitField
         }
     }
 
-    fn ordinals_from_specifier(specifier: &Specifier) -> Result<OrdinalSet, ExpressionError> {
+    fn ordinals_from_specifier(specifier: &Specifier) -> Result<OrdinalSet> {
         use self::Specifier::*;
         //println!("ordinals_from_specifier for {} => {:?}", Self::name(), specifier);
         match *specifier {
@@ -79,7 +80,7 @@ pub trait TimeUnitField
                 match (Self::validate_ordinal(start), Self::validate_ordinal(end)) {
                     (Ok(start), Ok(end)) if start <= end => Ok((start..end + 1).collect()),
                     _ => {
-                        Err(ExpressionError(format!("Invalid range for {}: {}-{}",
+                        bail!(ErrorKind::Expression(format!("Invalid range for {}: {}-{}",
                                                     Self::name(),
                                                     start,
                                                     end)))
@@ -92,7 +93,7 @@ pub trait TimeUnitField
                 match (Self::validate_ordinal(start), Self::validate_ordinal(end)) {
                     (Ok(start), Ok(end)) if start <= end => Ok((start..end + 1).collect()),
                     _ => {
-                        Err(ExpressionError(format!("Invalid named range for {}: {}-{}",
+                        bail!(ErrorKind::Expression(format!("Invalid named range for {}: {}-{}",
                                                     Self::name(),
                                                     start_name,
                                                     end_name)))
