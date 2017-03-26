@@ -6,7 +6,11 @@
 extern crate chrono;
 extern crate nom;
 
+#[macro_use]
+extern crate error_chain;
+
 mod time_unit;
 mod schedule;
+pub mod error;
 
 pub use schedule::Schedule;

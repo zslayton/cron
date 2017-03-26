@@ -5,6 +5,7 @@ use std::collections::Bound::{Included, Unbounded};
 use chrono::{UTC, DateTime, Duration, Datelike, Timelike};
 use chrono::offset::TimeZone;
 use std::iter::{self, Iterator};
+use error::{Error, ErrorKind};
 
 use time_unit::*;
 
@@ -19,13 +20,14 @@ pub struct Schedule {
 }
 
 impl Schedule {
-    fn from_field_list(fields: Vec<Field>) -> Result<Schedule, ExpressionError> {
+    fn from_field_list(fields: Vec<Field>) -> Result<Schedule, Error> {
         let number_of_fields = fields.len();
         if number_of_fields != 6 && number_of_fields != 7 {
-            return Err(ExpressionError(format!("Expression has {} fields. Valid cron \
+            bail!(ErrorKind::Expression(format!("Expression has {} fields. Valid cron \
                                                 expressions have 6 or 7.",
                                                number_of_fields)));
         }
+
         let mut iter = fields.into_iter();
 
         let seconds = Seconds::from_field(iter.next().unwrap())?;
@@ -162,13 +164,13 @@ impl Schedule {
 }
 
 impl FromStr for Schedule {
-    type Err = ExpressionError;
+    type Err = Error;
     fn from_str(expression: &str) -> Result<Self, Self::Err> {
         use nom::IResult::*;
         match schedule(expression.as_bytes()) {
             Done(_, schedule) => Ok(schedule), // Extract from nom tuple
-            Error(_) => Err(ExpressionError("Invalid cron expression.".to_owned())), //TODO: Details
-            Incomplete(_) => Err(ExpressionError("Incomplete cron expression.".to_owned())),
+            Error(_) => bail!(ErrorKind::Expression("Invalid cron expression.".to_owned())), //TODO: Details
+            Incomplete(_) => bail!(ErrorKind::Expression("Incomplete cron expression.".to_owned())),
         }
     }
 }
@@ -219,9 +221,6 @@ fn once_and_then<T>(head: T, long_tail: T) -> impl Iterator<Item = T>
     iter::once(head).chain(iter::once(long_tail).cycle())
 }
 
-#[derive(Debug)]
-pub struct ExpressionError(pub String);
-
 pub type Ordinal = u32;
 // TODO: Make OrdinalSet an enum.
 // It should either be a BTreeSet of ordinals or an `All` option to save space.
@@ -247,13 +246,13 @@ trait FromField
     where Self: Sized
 {
     //TODO: Replace with std::convert::TryFrom when stable
-    fn from_field(field: Field) -> Result<Self, ExpressionError>;
+    fn from_field(field: Field) -> Result<Self, Error>;
 }
 
 impl<T> FromField for T
     where T: TimeUnitField
 {
-    fn from_field(field: Field) -> Result<T, ExpressionError> {
+    fn from_field(field: Field) -> Result<T, Error> {
         let mut ordinals = OrdinalSet::new(); //TODO: Combinator
         for specifier in field.specifiers {
             let specifier_ordinals: OrdinalSet = T::ordinals_from_specifier(&specifier)?;

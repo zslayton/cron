@@ -14,3 +14,4 @@ name = "cron"
 [dependencies]
 chrono = "~0.3"
 nom = "~2.1"
+error-chain="~0.10.0"

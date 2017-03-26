@@ -1,6 +1,7 @@
-use schedule::{Ordinal, OrdinalSet, ExpressionError};
+use schedule::{Ordinal, OrdinalSet};
 use time_unit::TimeUnitField;
 use std::borrow::Cow;
+use error::*;
 
 pub struct DaysOfWeek(OrdinalSet);
 
@@ -17,7 +18,7 @@ impl TimeUnitField for DaysOfWeek {
     fn inclusive_max() -> Ordinal {
         7
     }
-    fn ordinal_from_name(name: &str) -> Result<Ordinal, ExpressionError> {
+    fn ordinal_from_name(name: &str) -> Result<Ordinal> {
         //TODO: Use phf crate
         let ordinal = match name.to_lowercase().as_ref() {
             "sun" | "sunday" => 1,
@@ -27,7 +28,7 @@ impl TimeUnitField for DaysOfWeek {
             "thu" | "thurs" | "thursday" => 5,
             "fri" | "friday" => 6,
             "sat" | "saturday" => 7,
-            _ => return Err(ExpressionError(format!("'{}' is not a valid day of the week.", name))),
+            _ => bail!(ErrorKind::Expression(format!("'{}' is not a valid day of the week.", name))),
         };
         Ok(ordinal)
     }
