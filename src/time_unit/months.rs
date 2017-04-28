@@ -3,6 +3,7 @@ use error::*;
 use time_unit::TimeUnitField;
 use std::borrow::Cow;
 
+#[derive(PartialEq, Eq)]
 pub struct Months(OrdinalSet);
 
 impl TimeUnitField for Months {
