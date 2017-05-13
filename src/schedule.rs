@@ -10,13 +10,13 @@ use error::{Error, ErrorKind};
 use time_unit::*;
 
 pub struct Schedule {
-    years: Years,
-    days_of_week: DaysOfWeek,
-    months: Months,
-    days_of_month: DaysOfMonth,
-    hours: Hours,
-    minutes: Minutes,
-    seconds: Seconds,
+    pub years: Years,
+    pub days_of_week: DaysOfWeek,
+    pub months: Months,
+    pub days_of_month: DaysOfMonth,
+    pub hours: Hours,
+    pub minutes: Minutes,
+    pub seconds: Seconds,
 }
 
 impl Schedule {

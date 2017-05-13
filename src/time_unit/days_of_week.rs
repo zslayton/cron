@@ -3,6 +3,7 @@ use time_unit::TimeUnitField;
 use std::borrow::Cow;
 use error::*;
 
+#[derive(PartialEq, Eq)]
 pub struct DaysOfWeek(OrdinalSet);
 
 impl TimeUnitField for DaysOfWeek {

@@ -9,8 +9,8 @@ extern crate nom;
 #[macro_use]
 extern crate error_chain;
 
-mod time_unit;
+pub mod time_unit;
 mod schedule;
 pub mod error;
 
-pub use schedule::Schedule;
+pub use schedule::{Schedule, OrdinalSet};
