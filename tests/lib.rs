@@ -181,15 +181,18 @@ mod tests {
 
     #[test]
     fn test_time_unit_spec_years() {
-      let expression = "* * * * * * 2015-2045";
+      let expression = "* * * * * * 2015-2044";
       let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
 
+      // Membership
       let years = schedule.years();
-      assert_eq!(true, years.includes(2022));
       assert_eq!(true, years.includes(2031));
       assert_eq!(false, years.includes(1969));
-      assert_eq!(false, years.includes(2525));
 
+      // Number of years specified
+      assert_eq!(30, schedule.years().count());
+
+      // Range Iterator
       let mut five_year_plan = years.range((Included(2017), Excluded(2017 + 5)));
       assert_eq!(Some(2017), five_year_plan.next());
       assert_eq!(Some(2018), five_year_plan.next());
@@ -204,13 +207,23 @@ mod tests {
     let expression = "* * * * 5-8 * *";
     let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
 
-    let summer = schedule.months();
-    assert_eq!(false, summer.includes(4));
-    assert_eq!(true, summer.includes(6));
-    assert_eq!(true, summer.includes(8));
-    assert_eq!(false, summer.includes(10));
+    // Membership
+    assert_eq!(false, schedule.months().includes(4));
+    assert_eq!(true, schedule.months().includes(6));
 
-    let mut first_half_of_summer = summer.range((Included(5), Included(6)));
+    // Iterator
+    let mut summer = schedule.months().iter();
+    assert_eq!(Some(5), summer.next());
+    assert_eq!(Some(6), summer.next());
+    assert_eq!(Some(7), summer.next());
+    assert_eq!(Some(8), summer.next());
+    assert_eq!(None, summer.next());
+
+    // Number of months specified
+    assert_eq!(4, schedule.months().count());
+
+    // Range Iterator
+    let mut first_half_of_summer = schedule.months().range((Included(1), Included(6)));
     assert_eq!(Some(5), first_half_of_summer.next());
     assert_eq!(Some(6), first_half_of_summer.next());
     assert_eq!(None, first_half_of_summer.next());
@@ -220,14 +233,21 @@ mod tests {
   fn test_time_unit_spec_days_of_month() {
     let expression = "* * * 1,15 * * *";
     let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
+    // Membership
+    assert_eq!(true,  schedule.days_of_month().includes(1));
+    assert_eq!(false, schedule.days_of_month().includes(7));
 
-    let paydays = schedule.days_of_month();
-    assert_eq!(false, paydays.includes(7));
-    assert_eq!(false, paydays.includes(12));
-    assert_eq!(true, paydays.includes(1));
-    assert_eq!(true, paydays.includes(15));
+    // Iterator
+    let mut paydays = schedule.days_of_month().iter();
+    assert_eq!(Some(1), paydays.next());
+    assert_eq!(Some(15), paydays.next());
+    assert_eq!(None, paydays.next());
 
-    let mut mid_month_paydays = paydays.range((Included(5), Included(25)));
+    // Number of years specified
+    assert_eq!(2, schedule.days_of_month().count());
+
+    // Range Iterator
+    let mut mid_month_paydays = schedule.days_of_month().range((Included(5), Included(25)));
     assert_eq!(Some(15), mid_month_paydays.next());
     assert_eq!(None, mid_month_paydays.next());
   }

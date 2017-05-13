@@ -44,25 +44,29 @@ impl <'a> Iterator for OrdinalRangeIter<'a> {
 }
 
 pub trait TimeUnitSpec {
-    fn includes(&self, ordinal: Ordinal) -> bool;
-    fn ordinals<'a>(&'a mut self) -> OrdinalIter<'a>;
-    fn range<'a, R>(&'a self, range: R) -> OrdinalRangeIter<'a> where R: RangeArgument<Ordinal>;
+  fn includes(&self, ordinal: Ordinal) -> bool;
+  fn iter<'a>(&'a self) -> OrdinalIter<'a>;
+  fn range<'a, R>(&'a self, range: R) -> OrdinalRangeIter<'a> where R: RangeArgument<Ordinal>;
+  fn count(&self) -> u32;
 }
 
 impl <T> TimeUnitSpec for T where T: TimeUnitField {
-    fn includes(&self, ordinal: Ordinal) -> bool {
-      self.ordinals().contains(&ordinal)
+  fn includes(&self, ordinal: Ordinal) -> bool {
+    self.ordinals().contains(&ordinal)
+  }
+  fn iter<'a>(&'a self) -> OrdinalIter<'a> {
+    OrdinalIter {
+      set_iter: TimeUnitField::ordinals(self).iter()
     }
-    fn ordinals<'a>(&'a mut self) -> OrdinalIter<'a> {
-      OrdinalIter {
-        set_iter: TimeUnitField::ordinals(self).iter()
-      }
+  }
+  fn range<'a, R>(&'a self, range: R) -> OrdinalRangeIter<'a> where R: RangeArgument<Ordinal> {
+    OrdinalRangeIter {
+      range_iter: TimeUnitField::ordinals(self).range(range)
     }
-    fn range<'a, R>(&'a self, range: R) -> OrdinalRangeIter<'a> where R: RangeArgument<Ordinal> {
-      OrdinalRangeIter {
-        range_iter: TimeUnitField::ordinals(self).range(range)
-      }
-    }
+  }
+  fn count(&self) -> u32 {
+    self.ordinals().len() as u32
+  }
 }
 
 pub trait TimeUnitField
