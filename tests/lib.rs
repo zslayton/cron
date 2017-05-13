@@ -151,4 +151,24 @@ mod tests {
         assert_eq!(UTC.ymd(2017, 2, 26).and_hms(1, 0, 0),
                    events.next().unwrap());
     }
+
+    #[test]
+    fn test_step_schedule() {
+        let expression = "0/20 0/5 0 1 1 * *";
+        let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
+        let starting_date = UTC.ymd(2017, 6, 15).and_hms(14, 29, 36);
+        let mut events = schedule.after(&starting_date);
+
+        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 0, 0), events.next().unwrap());
+        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 0, 20), events.next().unwrap());
+        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 0, 40), events.next().unwrap());
+
+        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 5, 0), events.next().unwrap());
+        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 5, 20), events.next().unwrap());
+        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 5, 40), events.next().unwrap());
+
+        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 10, 0), events.next().unwrap());
+        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 10, 20), events.next().unwrap());
+        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 10, 40), events.next().unwrap());
+    }
 }
