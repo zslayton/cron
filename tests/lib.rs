@@ -3,7 +3,14 @@ extern crate chrono;
 
 #[cfg(test)]
 mod tests {
-    use cron::Schedule;
+    use cron::{
+      Schedule,
+      TimeUnitSpec
+    };
+    use std::collections::Bound::{
+      Included,
+      Excluded
+    };
     use std::str::FromStr;
     use chrono::*;
 
@@ -171,4 +178,57 @@ mod tests {
         assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 10, 20), events.next().unwrap());
         assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 10, 40), events.next().unwrap());
     }
+
+    #[test]
+    fn test_time_unit_spec_years() {
+      let expression = "* * * * * * 2015-2045";
+      let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
+
+      let years = schedule.years();
+      assert_eq!(true, years.includes(2022));
+      assert_eq!(true, years.includes(2031));
+      assert_eq!(false, years.includes(1969));
+      assert_eq!(false, years.includes(2525));
+
+      let mut five_year_plan = years.range((Included(2017), Excluded(2017 + 5)));
+      assert_eq!(Some(2017), five_year_plan.next());
+      assert_eq!(Some(2018), five_year_plan.next());
+      assert_eq!(Some(2019), five_year_plan.next());
+      assert_eq!(Some(2020), five_year_plan.next());
+      assert_eq!(Some(2021), five_year_plan.next());
+      assert_eq!(None, five_year_plan.next());
+    }
+
+  #[test]
+  fn test_time_unit_spec_months() {
+    let expression = "* * * * 5-8 * *";
+    let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
+
+    let summer = schedule.months();
+    assert_eq!(false, summer.includes(4));
+    assert_eq!(true, summer.includes(6));
+    assert_eq!(true, summer.includes(8));
+    assert_eq!(false, summer.includes(10));
+
+    let mut first_half_of_summer = summer.range((Included(5), Included(6)));
+    assert_eq!(Some(5), first_half_of_summer.next());
+    assert_eq!(Some(6), first_half_of_summer.next());
+    assert_eq!(None, first_half_of_summer.next());
+  }
+
+  #[test]
+  fn test_time_unit_spec_days_of_month() {
+    let expression = "* * * 1,15 * * *";
+    let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
+
+    let paydays = schedule.days_of_month();
+    assert_eq!(false, paydays.includes(7));
+    assert_eq!(false, paydays.includes(12));
+    assert_eq!(true, paydays.includes(1));
+    assert_eq!(true, paydays.includes(15));
+
+    let mut mid_month_paydays = paydays.range((Included(5), Included(25)));
+    assert_eq!(Some(15), mid_month_paydays.next());
+    assert_eq!(None, mid_month_paydays.next());
+  }
 }

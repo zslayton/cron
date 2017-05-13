@@ -14,11 +14,56 @@ pub use self::months::Months;
 pub use self::days_of_week::DaysOfWeek;
 pub use self::years::Years;
 
+use std::collections::btree_set;
+use std::collections::range::{RangeArgument};
 use schedule::{Specifier, Ordinal, OrdinalSet};
 use error::*;
 use std::borrow::Cow;
 use std::iter;
 
+pub struct OrdinalIter<'a> {
+    set_iter: btree_set::Iter<'a, Ordinal>
+}
+
+impl <'a> Iterator for OrdinalIter<'a> {
+    type Item = Ordinal;
+    fn next(&mut self) -> Option<Ordinal> {
+      self.set_iter.next().map(|ordinal| ordinal.clone()) // No real expense; Ordinal is u32: Copy
+    }
+}
+
+pub struct OrdinalRangeIter<'a> {
+  range_iter: btree_set::Range<'a, Ordinal>
+}
+
+impl <'a> Iterator for OrdinalRangeIter<'a> {
+  type Item = Ordinal;
+  fn next(&mut self) -> Option<Ordinal> {
+    self.range_iter.next().map(|ordinal| ordinal.clone()) // No real expense; Ordinal is u32: Copy
+  }
+}
+
+pub trait TimeUnitSpec {
+    fn includes(&self, ordinal: Ordinal) -> bool;
+    fn ordinals<'a>(&'a mut self) -> OrdinalIter<'a>;
+    fn range<'a, R>(&'a self, range: R) -> OrdinalRangeIter<'a> where R: RangeArgument<Ordinal>;
+}
+
+impl <T> TimeUnitSpec for T where T: TimeUnitField {
+    fn includes(&self, ordinal: Ordinal) -> bool {
+      self.ordinals().contains(&ordinal)
+    }
+    fn ordinals<'a>(&'a mut self) -> OrdinalIter<'a> {
+      OrdinalIter {
+        set_iter: TimeUnitField::ordinals(self).iter()
+      }
+    }
+    fn range<'a, R>(&'a self, range: R) -> OrdinalRangeIter<'a> where R: RangeArgument<Ordinal> {
+      OrdinalRangeIter {
+        range_iter: TimeUnitField::ordinals(self).range(range)
+      }
+    }
+}
 
 pub trait TimeUnitField
     where Self: Sized

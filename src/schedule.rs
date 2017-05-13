@@ -161,6 +161,34 @@ impl Schedule {
     {
         ScheduleIterator::new(self, after)
     }
+
+  pub fn years<'a>(&'a self) -> &impl TimeUnitSpec {
+    &self.years
+  }
+
+  pub fn months<'a>(&'a self) -> &impl TimeUnitSpec {
+    &self.months
+  }
+
+  pub fn days_of_month<'a>(&'a self) -> &impl TimeUnitSpec {
+    &self.days_of_month
+  }
+
+  pub fn days_of_week<'a>(&'a self) -> &impl TimeUnitSpec {
+    &self.days_of_week
+  }
+
+  pub fn hours<'a>(&'a self) -> &impl TimeUnitSpec {
+    &self.hours
+  }
+
+  pub fn minutes<'a>(&'a self) -> &impl TimeUnitSpec {
+    &self.minutes
+  }
+
+  pub fn seconds<'a>(&'a self) -> &impl TimeUnitSpec {
+    &self.seconds
+  }
 }
 
 impl FromStr for Schedule {
