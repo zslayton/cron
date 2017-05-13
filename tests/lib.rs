@@ -185,15 +185,14 @@ mod tests {
       let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
 
       // Membership
-      let years = schedule.years();
-      assert_eq!(true, years.includes(2031));
-      assert_eq!(false, years.includes(1969));
+      assert_eq!(true, schedule.years().includes(2031));
+      assert_eq!(false, schedule.years().includes(1969));
 
       // Number of years specified
       assert_eq!(30, schedule.years().count());
 
       // Range Iterator
-      let mut five_year_plan = years.range((Included(2017), Excluded(2017 + 5)));
+      let mut five_year_plan = schedule.years().range((Included(2017), Excluded(2017 + 5)));
       assert_eq!(Some(2017), five_year_plan.next());
       assert_eq!(Some(2018), five_year_plan.next());
       assert_eq!(Some(2019), five_year_plan.next());
