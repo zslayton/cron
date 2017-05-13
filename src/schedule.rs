@@ -165,43 +165,43 @@ impl Schedule {
         ScheduleIterator::new(self, after)
     }
 
-  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec) describing the years included
+  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the years included
   /// in this [Schedule](struct.Schedule.html).
   pub fn years(&self) -> &impl TimeUnitSpec {
     &self.years
   }
 
-  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec) describing the months of the year included
+  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the months of the year included
   /// in this [Schedule](struct.Schedule.html).
   pub fn months(&self) -> &impl TimeUnitSpec {
     &self.months
   }
 
-  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec) describing the days of the month included
+  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the days of the month included
   /// in this [Schedule](struct.Schedule.html).
   pub fn days_of_month(&self) -> &impl TimeUnitSpec {
     &self.days_of_month
   }
 
-  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec) describing the days of the week included
+  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the days of the week included
   /// in this [Schedule](struct.Schedule.html).
   pub fn days_of_week(&self) -> &impl TimeUnitSpec {
     &self.days_of_week
   }
 
-  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec) describing the hours of the day included
+  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the hours of the day included
   /// in this [Schedule](struct.Schedule.html).
   pub fn hours(&self) -> &impl TimeUnitSpec {
     &self.hours
   }
 
-  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec) describing the minutes of the hour included
+  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the minutes of the hour included
   /// in this [Schedule](struct.Schedule.html).
   pub fn minutes(&self) -> &impl TimeUnitSpec {
     &self.minutes
   }
 
-  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec) describing the seconds of the minute included
+  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the seconds of the minute included
   /// in this [Schedule](struct.Schedule.html).
   pub fn seconds(&self) -> &impl TimeUnitSpec {
     &self.seconds
