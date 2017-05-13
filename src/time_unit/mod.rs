@@ -43,10 +43,103 @@ impl <'a> Iterator for OrdinalRangeIter<'a> {
   }
 }
 
+/// Methods exposing a schedule's configured ordinals for each individual unit of time.
+/// # Example
+/// ```
+/// use cron::{Schedule,TimeUnitSpec};
+/// use std::collections::Bound::{Included,Excluded};
+/// use std::str::FromStr;
+///
+/// let expression = "* * * * * * 2015-2044";
+/// let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
+///
+/// // Membership
+/// assert_eq!(true, schedule.years().includes(2031));
+/// assert_eq!(false, schedule.years().includes(1969));
+///
+/// // Number of years specified
+/// assert_eq!(30, schedule.years().count());
+///
+/// // Iterator
+/// let mut years_iter = schedule.years().iter();
+/// assert_eq!(Some(2015), years_iter.next());
+/// assert_eq!(Some(2016), years_iter.next());
+/// // ...
+///
+/// // Range Iterator
+/// let mut five_year_plan = schedule.years().range((Included(2017), Excluded(2017 + 5)));
+/// assert_eq!(Some(2017), five_year_plan.next());
+/// assert_eq!(Some(2018), five_year_plan.next());
+/// assert_eq!(Some(2019), five_year_plan.next());
+/// assert_eq!(Some(2020), five_year_plan.next());
+/// assert_eq!(Some(2021), five_year_plan.next());
+/// assert_eq!(None, five_year_plan.next());
+/// ```
 pub trait TimeUnitSpec {
+  /// Returns true if the provided ordinal was included in the schedule spec for the unit of time
+  /// being described.
+  /// # Example
+  /// ```
+  /// use cron::{Schedule,TimeUnitSpec};
+  /// use std::str::FromStr;
+  ///
+  /// let expression = "* * * * * * 2015-2044";
+  /// let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
+  ///
+  /// // Membership
+  /// assert_eq!(true, schedule.years().includes(2031));
+  /// assert_eq!(false, schedule.years().includes(2004));
+  /// ```
   fn includes(&self, ordinal: Ordinal) -> bool;
+
+  /// Provides an iterator which will return each included ordinal for this schedule in order from
+  /// lowest to highest.
+  /// # Example
+  /// ```
+  /// use cron::{Schedule,TimeUnitSpec};
+  /// use std::str::FromStr;
+  ///
+  /// let expression = "* * * * 5-8 * *";
+  /// let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
+  ///
+  /// // Iterator
+  /// let mut summer = schedule.months().iter();
+  /// assert_eq!(Some(5), summer.next());
+  /// assert_eq!(Some(6), summer.next());
+  /// assert_eq!(Some(7), summer.next());
+  /// assert_eq!(Some(8), summer.next());
+  /// assert_eq!(None, summer.next());
+  /// ```
   fn iter<'a>(&'a self) -> OrdinalIter<'a>;
+
+  /// Provides an iterator which will return each included ordinal within the specified range.
+  /// # Example
+  /// ```
+  /// use cron::{Schedule,TimeUnitSpec};
+  /// use std::collections::Bound::{Included,Excluded};
+  /// use std::str::FromStr;
+  ///
+  /// let expression = "* * * 1,15 * * *";
+  /// let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
+  ///
+  /// // Range Iterator
+  /// let mut mid_month_paydays = schedule.days_of_month().range((Included(10), Included(20)));
+  /// assert_eq!(Some(15), mid_month_paydays.next());
+  /// assert_eq!(None, mid_month_paydays.next());
+  /// ```
   fn range<'a, R>(&'a self, range: R) -> OrdinalRangeIter<'a> where R: RangeArgument<Ordinal>;
+
+  /// Returns the number of ordinals included in the associated schedule
+  /// # Example
+  /// ```
+  /// use cron::{Schedule,TimeUnitSpec};
+  /// use std::str::FromStr;
+  ///
+  /// let expression = "* * * 1,15 * * *";
+  /// let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
+  ///
+  /// assert_eq!(2, schedule.days_of_month().count());
+  /// ```
   fn count(&self) -> u32;
 }
 

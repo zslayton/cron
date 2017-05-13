@@ -191,6 +191,12 @@ mod tests {
       // Number of years specified
       assert_eq!(30, schedule.years().count());
 
+      // Iterator
+      let mut years_iter = schedule.years().iter();
+      assert_eq!(Some(2015), years_iter.next());
+      assert_eq!(Some(2016), years_iter.next());
+      // ...
+
       // Range Iterator
       let mut five_year_plan = schedule.years().range((Included(2017), Excluded(2017 + 5)));
       assert_eq!(Some(2017), five_year_plan.next());
