@@ -12,6 +12,6 @@ license = "MIT"
 name = "cron"
 
 [dependencies]
-chrono = "~0.3"
+chrono = "~0.4"
 nom = "~2.1"
 error-chain="~0.10.0"
