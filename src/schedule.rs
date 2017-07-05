@@ -2,7 +2,7 @@ use nom::*;
 use std::str::{self, FromStr};
 use std::collections::BTreeSet;
 use std::collections::Bound::{Included, Unbounded};
-use chrono::{UTC, DateTime, Duration, Datelike, Timelike};
+use chrono::{Utc, DateTime, Duration, Datelike, Timelike};
 use chrono::offset::TimeZone;
 use std::iter::{self, Iterator};
 use error::{Error, ErrorKind};
@@ -25,7 +25,7 @@ impl Schedule {
         if number_of_fields != 6 && number_of_fields != 7 {
             bail!(ErrorKind::Expression(format!("Expression has {} fields. Valid cron \
                                                 expressions have 6 or 7.",
-                                               number_of_fields)));
+                                                number_of_fields)));
         }
 
         let mut iter = fields.into_iter();
@@ -36,7 +36,9 @@ impl Schedule {
         let days_of_month = DaysOfMonth::from_field(iter.next().unwrap())?;
         let months = Months::from_field(iter.next().unwrap())?;
         let days_of_week = DaysOfWeek::from_field(iter.next().unwrap())?;
-        let years: Years = iter.next().map(Years::from_field).unwrap_or_else(|| Ok(Years::all()))?;
+        let years: Years = iter.next()
+            .map(Years::from_field)
+            .unwrap_or_else(|| Ok(Years::all()))?;
 
         Ok(Schedule::from(seconds,
                           minutes,
@@ -84,9 +86,9 @@ impl Schedule {
 
         //    println!("Looking for next schedule time after {}", after.to_rfc3339());
         for year in self.years
-            .ordinals()
-            .range((Included(datetime.year() as u32), Unbounded))
-            .cloned() {
+                .ordinals()
+                .range((Included(datetime.year() as u32), Unbounded))
+                .cloned() {
 
             let month_start = month_starts.next().unwrap();
             let month_end = Months::inclusive_max();
@@ -99,9 +101,9 @@ impl Schedule {
                 let day_of_month_range = (Included(day_of_month_start), Included(day_of_month_end));
 
                 'day_loop: for day_of_month in self.days_of_month
-                    .ordinals()
-                    .range(day_of_month_range)
-                    .cloned() {
+                                   .ordinals()
+                                   .range(day_of_month_range)
+                                   .cloned() {
 
                     let hour_start = hour_starts.next().unwrap();
                     let hour_end = Hours::inclusive_max();
@@ -121,11 +123,12 @@ impl Schedule {
 
                             for second in self.seconds.ordinals().range(second_range).cloned() {
                                 let timezone = datetime.timezone();
-                                let candidate = timezone.ymd(year as i32, month, day_of_month)
+                                let candidate = timezone
+                                    .ymd(year as i32, month, day_of_month)
                                     .and_hms(hour, minute, second);
                                 if !self.days_of_week
-                                    .ordinals()
-                                    .contains(&candidate.weekday().number_from_sunday()) {
+                                        .ordinals()
+                                        .contains(&candidate.weekday().number_from_sunday()) {
                                     continue 'day_loop;
                                 }
                                 return Some(candidate);
@@ -150,10 +153,10 @@ impl Schedule {
         None
     }
 
-    pub fn upcoming<Z>(& self, timezone: Z) -> ScheduleIterator<Z>
+    pub fn upcoming<Z>(&self, timezone: Z) -> ScheduleIterator<Z>
         where Z: TimeZone
     {
-        self.after(&timezone.from_utc_datetime(&UTC::now().naive_utc()))
+        self.after(&timezone.from_utc_datetime(&Utc::now().naive_utc()))
     }
 
     pub fn after<'a, Z>(&'a self, after: &DateTime<Z>) -> ScheduleIterator<'a, Z>
@@ -502,7 +505,7 @@ fn test_next_after() {
     let schedule = schedule(expression.as_bytes());
     assert!(schedule.is_done());
     let schedule = schedule.unwrap().1;
-    let next = schedule.next_after(&UTC::now());
+    let next = schedule.next_after(&Utc::now());
     println!("NEXT AFTER for {} {:?}", expression, next);
     assert!(next.is_some());
 }
@@ -513,7 +516,7 @@ fn test_upcoming_utc() {
     let schedule = schedule(expression.as_bytes());
     assert!(schedule.is_done());
     let schedule = schedule.unwrap().1;
-    let mut upcoming = schedule.upcoming(UTC);
+    let mut upcoming = schedule.upcoming(Utc);
     let next1 = upcoming.next();
     assert!(next1.is_some());
     let next2 = upcoming.next();
