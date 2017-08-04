@@ -153,17 +153,62 @@ impl Schedule {
         None
     }
 
+  /// Provides an iterator which will return each DateTime that matches the schedule starting with
+  /// the current time if applicable.
     pub fn upcoming<Z>(&self, timezone: Z) -> ScheduleIterator<Z>
         where Z: TimeZone
     {
         self.after(&timezone.from_utc_datetime(&Utc::now().naive_utc()))
     }
 
+  /// Like the `upcoming` method, but allows you to specify a start time other than the present.
     pub fn after<'a, Z>(&'a self, after: &DateTime<Z>) -> ScheduleIterator<'a, Z>
         where Z: TimeZone
     {
         ScheduleIterator::new(self, after)
     }
+
+  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the years included
+  /// in this [Schedule](struct.Schedule.html).
+  pub fn years(&self) -> &impl TimeUnitSpec {
+    &self.years
+  }
+
+  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the months of the year included
+  /// in this [Schedule](struct.Schedule.html).
+  pub fn months(&self) -> &impl TimeUnitSpec {
+    &self.months
+  }
+
+  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the days of the month included
+  /// in this [Schedule](struct.Schedule.html).
+  pub fn days_of_month(&self) -> &impl TimeUnitSpec {
+    &self.days_of_month
+  }
+
+  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the days of the week included
+  /// in this [Schedule](struct.Schedule.html).
+  pub fn days_of_week(&self) -> &impl TimeUnitSpec {
+    &self.days_of_week
+  }
+
+  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the hours of the day included
+  /// in this [Schedule](struct.Schedule.html).
+  pub fn hours(&self) -> &impl TimeUnitSpec {
+    &self.hours
+  }
+
+  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the minutes of the hour included
+  /// in this [Schedule](struct.Schedule.html).
+  pub fn minutes(&self) -> &impl TimeUnitSpec {
+    &self.minutes
+  }
+
+  /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the seconds of the minute included
+  /// in this [Schedule](struct.Schedule.html).
+  pub fn seconds(&self) -> &impl TimeUnitSpec {
+    &self.seconds
+  }
 }
 
 impl FromStr for Schedule {
