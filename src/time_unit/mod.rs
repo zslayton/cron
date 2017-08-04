@@ -182,8 +182,8 @@ pub trait TimeUnitField
     fn ordinal_from_name(name: &str) -> Result<Ordinal> {
         bail!(ErrorKind::Expression(format!("The '{}' field does not support using names. '{}' \
                                      specified.",
-                                    Self::name(),
-                                    name)))
+                                            Self::name(),
+                                            name)))
     }
     fn validate_ordinal(ordinal: Ordinal) -> Result<Ordinal> {
         //println!("validate_ordinal for {} => {}", Self::name(), ordinal);
@@ -191,15 +191,15 @@ pub trait TimeUnitField
             i if i < Self::inclusive_min() => {
                 bail!(ErrorKind::Expression(format!("{} must be greater than or equal to {}. ('{}' \
                                              specified.)",
-                                            Self::name(),
-                                            Self::inclusive_min(),
-                                            i)))
+                                                    Self::name(),
+                                                    Self::inclusive_min(),
+                                                    i)))
             }
             i if i > Self::inclusive_max() => {
                 bail!(ErrorKind::Expression(format!("{} must be less than {}. ('{}' specified.)",
-                                            Self::name(),
-                                            Self::inclusive_max(),
-                                            i)))
+                                                    Self::name(),
+                                                    Self::inclusive_max(),
+                                                    i)))
             }
             i => Ok(i),
         }
@@ -212,20 +212,25 @@ pub trait TimeUnitField
             All => Ok(Self::supported_ordinals()),
             Point(ordinal) => Ok((&[ordinal]).iter().cloned().collect()),
             NamedPoint(ref name) => {
-                Ok((&[Self::ordinal_from_name(name)?]).iter().cloned().collect())
+                Ok((&[Self::ordinal_from_name(name)?])
+                       .iter()
+                       .cloned()
+                       .collect())
             }
             Period(start, step) => {
                 let start = Self::validate_ordinal(start)?;
-                Ok((start..Self::inclusive_max() + 1).step_by(step).collect())
+                Ok((start..Self::inclusive_max() + 1)
+                       .step_by(step as usize)
+                       .collect())
             }
             Range(start, end) => {
                 match (Self::validate_ordinal(start), Self::validate_ordinal(end)) {
                     (Ok(start), Ok(end)) if start <= end => Ok((start..end + 1).collect()),
                     _ => {
                         bail!(ErrorKind::Expression(format!("Invalid range for {}: {}-{}",
-                                                    Self::name(),
-                                                    start,
-                                                    end)))
+                                                            Self::name(),
+                                                            start,
+                                                            end)))
                     }
                 }
             }
@@ -236,9 +241,9 @@ pub trait TimeUnitField
                     (Ok(start), Ok(end)) if start <= end => Ok((start..end + 1).collect()),
                     _ => {
                         bail!(ErrorKind::Expression(format!("Invalid named range for {}: {}-{}",
-                                                    Self::name(),
-                                                    start_name,
-                                                    end_name)))
+                                                            Self::name(),
+                                                            start_name,
+                                                            end_name)))
                     }
                 }
             }

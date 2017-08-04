@@ -19,7 +19,7 @@ mod tests {
         let expression = "0   30   9,12,15     1,15       May-Aug  Mon,Wed,Fri  2018/2";
         let schedule = Schedule::from_str(expression).unwrap();
         println!("README: Upcoming fire times for '{}':", expression);
-        for datetime in schedule.upcoming(UTC).take(10) {
+        for datetime in schedule.upcoming(Utc).take(10) {
             println!("README: -> {}", datetime);
         }
     }
@@ -29,7 +29,7 @@ mod tests {
         let expression = "* * * * * * *";
         let schedule = Schedule::from_str(expression).unwrap();
         println!("All stars: Upcoming fire times for '{}':", expression);
-        for datetime in schedule.upcoming(UTC).take(10) {
+        for datetime in schedule.upcoming(Utc).take(10) {
             println!("All stars: -> {}", datetime);
         }
     }
@@ -50,7 +50,7 @@ mod tests {
     fn test_parse_with_lists() {
         let expression = "1 2,17,51 1-3,6,9-11 4,29 2,3,7 Tues";
         let schedule = Schedule::from_str(expression).unwrap();
-        let mut date = UTC::now();
+        let mut date = Utc::now();
         println!("Fire times for {}:", expression);
         for _ in 0..20 {
             date = schedule.after(&date).next().expect("No further dates!");
@@ -64,7 +64,7 @@ mod tests {
         let expression = "0 2,17,51 1-3,6,9-11 4,29 2,3,7 Wed";
         let schedule = Schedule::from_str(expression).unwrap();
         println!("Upcoming fire times for '{}':", expression);
-        for datetime in schedule.upcoming(UTC).take(12) {
+        for datetime in schedule.upcoming(Utc).take(12) {
             println!("-> {}", datetime);
         }
         assert!(true);
@@ -92,7 +92,10 @@ mod tests {
     fn test_next_utc() {
         let expression = "1 2 3 4 10 Fri";
         let schedule = Schedule::from_str(expression).unwrap();
-        let next = schedule.upcoming(UTC).next().expect("There was no upcoming fire time.");
+        let next = schedule
+            .upcoming(Utc)
+            .next()
+            .expect("There was no upcoming fire time.");
         println!("Next fire time: {}", next.to_rfc3339());
     }
 
@@ -100,62 +103,62 @@ mod tests {
     fn test_yearly() {
         let expression = "@yearly";
         let schedule = Schedule::from_str(expression).expect("Failed to parse @yearly.");
-        let starting_date = UTC.ymd(2017, 6, 15).and_hms(14, 29, 36);
+        let starting_date = Utc.ymd(2017, 6, 15).and_hms(14, 29, 36);
         let mut events = schedule.after(&starting_date);
-        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 0, 0), events.next().unwrap());
-        assert_eq!(UTC.ymd(2019, 1, 1).and_hms(0, 0, 0), events.next().unwrap());
-        assert_eq!(UTC.ymd(2020, 1, 1).and_hms(0, 0, 0), events.next().unwrap());
+        assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 0, 0), events.next().unwrap());
+        assert_eq!(Utc.ymd(2019, 1, 1).and_hms(0, 0, 0), events.next().unwrap());
+        assert_eq!(Utc.ymd(2020, 1, 1).and_hms(0, 0, 0), events.next().unwrap());
     }
 
     #[test]
     fn test_monthly() {
         let expression = "@monthly";
         let schedule = Schedule::from_str(expression).expect("Failed to parse @monthly.");
-        let starting_date = UTC.ymd(2017, 10, 15).and_hms(14, 29, 36);
+        let starting_date = Utc.ymd(2017, 10, 15).and_hms(14, 29, 36);
         let mut events = schedule.after(&starting_date);
-        assert_eq!(UTC.ymd(2017, 11, 1).and_hms(0, 0, 0),
+        assert_eq!(Utc.ymd(2017, 11, 1).and_hms(0, 0, 0),
                    events.next().unwrap());
-        assert_eq!(UTC.ymd(2017, 12, 1).and_hms(0, 0, 0),
+        assert_eq!(Utc.ymd(2017, 12, 1).and_hms(0, 0, 0),
                    events.next().unwrap());
-        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 0, 0), events.next().unwrap());
+        assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 0, 0), events.next().unwrap());
     }
 
     #[test]
     fn test_weekly() {
         let expression = "@weekly";
         let schedule = Schedule::from_str(expression).expect("Failed to parse @weekly.");
-        let starting_date = UTC.ymd(2016, 12, 23).and_hms(14, 29, 36);
+        let starting_date = Utc.ymd(2016, 12, 23).and_hms(14, 29, 36);
         let mut events = schedule.after(&starting_date);
-        assert_eq!(UTC.ymd(2016, 12, 25).and_hms(0, 0, 0),
+        assert_eq!(Utc.ymd(2016, 12, 25).and_hms(0, 0, 0),
                    events.next().unwrap());
-        assert_eq!(UTC.ymd(2017, 1, 1).and_hms(0, 0, 0), events.next().unwrap());
-        assert_eq!(UTC.ymd(2017, 1, 8).and_hms(0, 0, 0), events.next().unwrap());
+        assert_eq!(Utc.ymd(2017, 1, 1).and_hms(0, 0, 0), events.next().unwrap());
+        assert_eq!(Utc.ymd(2017, 1, 8).and_hms(0, 0, 0), events.next().unwrap());
     }
 
     #[test]
     fn test_daily() {
         let expression = "@daily";
         let schedule = Schedule::from_str(expression).expect("Failed to parse @daily.");
-        let starting_date = UTC.ymd(2016, 12, 29).and_hms(14, 29, 36);
+        let starting_date = Utc.ymd(2016, 12, 29).and_hms(14, 29, 36);
         let mut events = schedule.after(&starting_date);
-        assert_eq!(UTC.ymd(2016, 12, 30).and_hms(0, 0, 0),
+        assert_eq!(Utc.ymd(2016, 12, 30).and_hms(0, 0, 0),
                    events.next().unwrap());
-        assert_eq!(UTC.ymd(2016, 12, 31).and_hms(0, 0, 0),
+        assert_eq!(Utc.ymd(2016, 12, 31).and_hms(0, 0, 0),
                    events.next().unwrap());
-        assert_eq!(UTC.ymd(2017, 1, 1).and_hms(0, 0, 0), events.next().unwrap());
+        assert_eq!(Utc.ymd(2017, 1, 1).and_hms(0, 0, 0), events.next().unwrap());
     }
 
     #[test]
     fn test_hourly() {
         let expression = "@hourly";
         let schedule = Schedule::from_str(expression).expect("Failed to parse @hourly.");
-        let starting_date = UTC.ymd(2017, 2, 25).and_hms(22, 29, 36);
+        let starting_date = Utc.ymd(2017, 2, 25).and_hms(22, 29, 36);
         let mut events = schedule.after(&starting_date);
-        assert_eq!(UTC.ymd(2017, 2, 25).and_hms(23, 0, 0),
+        assert_eq!(Utc.ymd(2017, 2, 25).and_hms(23, 0, 0),
                    events.next().unwrap());
-        assert_eq!(UTC.ymd(2017, 2, 26).and_hms(0, 0, 0),
+        assert_eq!(Utc.ymd(2017, 2, 26).and_hms(0, 0, 0),
                    events.next().unwrap());
-        assert_eq!(UTC.ymd(2017, 2, 26).and_hms(1, 0, 0),
+        assert_eq!(Utc.ymd(2017, 2, 26).and_hms(1, 0, 0),
                    events.next().unwrap());
     }
 
@@ -163,20 +166,27 @@ mod tests {
     fn test_step_schedule() {
         let expression = "0/20 0/5 0 1 1 * *";
         let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
-        let starting_date = UTC.ymd(2017, 6, 15).and_hms(14, 29, 36);
+        let starting_date = Utc.ymd(2017, 6, 15).and_hms(14, 29, 36);
         let mut events = schedule.after(&starting_date);
 
-        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 0, 0), events.next().unwrap());
-        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 0, 20), events.next().unwrap());
-        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 0, 40), events.next().unwrap());
+        assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 0, 0), events.next().unwrap());
+        assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 0, 20),
+                   events.next().unwrap());
+        assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 0, 40),
+                   events.next().unwrap());
 
-        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 5, 0), events.next().unwrap());
-        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 5, 20), events.next().unwrap());
-        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 5, 40), events.next().unwrap());
+        assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 5, 0), events.next().unwrap());
+        assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 5, 20),
+                   events.next().unwrap());
+        assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 5, 40),
+                   events.next().unwrap());
 
-        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 10, 0), events.next().unwrap());
-        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 10, 20), events.next().unwrap());
-        assert_eq!(UTC.ymd(2018, 1, 1).and_hms(0, 10, 40), events.next().unwrap());
+        assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 10, 0),
+                   events.next().unwrap());
+        assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 10, 20),
+                   events.next().unwrap());
+        assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 10, 40),
+                   events.next().unwrap());
     }
 
     #[test]

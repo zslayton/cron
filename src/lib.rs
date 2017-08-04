@@ -2,7 +2,7 @@
 #![cfg_attr(feature="clippy", plugin(clippy))]
 #![feature(collections_range)]
 #![feature(conservative_impl_trait)]
-#![feature(step_by)]
+#![feature(iterator_step_by)]
 
 //! A cron expression parser and schedule explorer
 //! # Example
