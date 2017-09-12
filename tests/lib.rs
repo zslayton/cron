@@ -77,6 +77,12 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_without_seconds() {
+        let expression = "0/30 * * * *";
+        assert!(Schedule::from_str(expression).is_ok());
+    }
+
+    #[test]
     fn test_parse_too_many_fields() {
         let expression = "1 2 3 4 5 6 7 8 9 2019";
         assert!(Schedule::from_str(expression).is_err());

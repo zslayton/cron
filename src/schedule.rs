@@ -22,15 +22,19 @@ pub struct Schedule {
 impl Schedule {
     fn from_field_list(fields: Vec<Field>) -> Result<Schedule, Error> {
         let number_of_fields = fields.len();
-        if number_of_fields != 6 && number_of_fields != 7 {
+        if number_of_fields < 5 || number_of_fields > 7 {
             bail!(ErrorKind::Expression(format!("Expression has {} fields. Valid cron \
-                                                expressions have 6 or 7.",
+                                                expressions have 5 to 7.",
                                                 number_of_fields)));
         }
 
         let mut iter = fields.into_iter();
 
-        let seconds = Seconds::from_field(iter.next().unwrap())?;
+        let mut seconds = Seconds::from_ordinal(0);
+        if number_of_fields > 5 {
+            seconds = Seconds::from_field(iter.next().unwrap())?;
+        }
+
         let minutes = Minutes::from_field(iter.next().unwrap())?;
         let hours = Hours::from_field(iter.next().unwrap())?;
         let days_of_month = DaysOfMonth::from_field(iter.next().unwrap())?;
@@ -511,7 +515,7 @@ named!(longhand <Schedule>,
   map_res!(
     complete!(
       do_parse!(
-        fields: many_m_n!(6, 7, field) >>
+        fields: many_m_n!(5, 7, field) >>
         eof!() >>
         (fields)
       )
