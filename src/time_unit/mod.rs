@@ -15,7 +15,7 @@ pub use self::days_of_week::DaysOfWeek;
 pub use self::years::Years;
 
 use std::collections::btree_set;
-use std::collections::range::{RangeArgument};
+use std::ops::RangeBounds;
 use schedule::{Specifier, Ordinal, OrdinalSet};
 use error::*;
 use std::borrow::Cow;
@@ -127,7 +127,7 @@ pub trait TimeUnitSpec {
   /// assert_eq!(Some(15), mid_month_paydays.next());
   /// assert_eq!(None, mid_month_paydays.next());
   /// ```
-  fn range<'a, R>(&'a self, range: R) -> OrdinalRangeIter<'a> where R: RangeArgument<Ordinal>;
+  fn range<'a, R>(&'a self, range: R) -> OrdinalRangeIter<'a> where R: RangeBounds<Ordinal>;
 
   /// Returns the number of ordinals included in the associated schedule
   /// # Example
@@ -152,7 +152,7 @@ impl <T> TimeUnitSpec for T where T: TimeUnitField {
       set_iter: TimeUnitField::ordinals(self).iter()
     }
   }
-  fn range<'a, R>(&'a self, range: R) -> OrdinalRangeIter<'a> where R: RangeArgument<Ordinal> {
+  fn range<'a, R>(&'a self, range: R) -> OrdinalRangeIter<'a> where R: RangeBounds<Ordinal> {
     OrdinalRangeIter {
       range_iter: TimeUnitField::ordinals(self).range(range)
     }
