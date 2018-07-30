@@ -13,6 +13,7 @@ mod tests {
     };
     use std::str::FromStr;
     use chrono::*;
+    use std::ops::Range;
 
     #[test]
     fn test_readme() {
@@ -208,7 +209,7 @@ mod tests {
       // ...
 
       // Range Iterator
-      let mut five_year_plan = schedule.years().range((Included(2017), Excluded(2017 + 5)));
+      let mut five_year_plan = schedule.years().range(Range { start: 2017, end: (2017 + 5) });
       assert_eq!(Some(2017), five_year_plan.next());
       assert_eq!(Some(2018), five_year_plan.next());
       assert_eq!(Some(2019), five_year_plan.next());
@@ -238,7 +239,7 @@ mod tests {
     assert_eq!(4, schedule.months().count());
 
     // Range Iterator
-    let mut first_half_of_summer = schedule.months().range((Included(1), Included(6)));
+    let mut first_half_of_summer = schedule.months().range(Range { start: 1, end: 7 });
     assert_eq!(Some(5), first_half_of_summer.next());
     assert_eq!(Some(6), first_half_of_summer.next());
     assert_eq!(None, first_half_of_summer.next());
@@ -262,7 +263,7 @@ mod tests {
     assert_eq!(2, schedule.days_of_month().count());
 
     // Range Iterator
-    let mut mid_month_paydays = schedule.days_of_month().range((Included(5), Included(25)));
+    let mut mid_month_paydays = schedule.days_of_month().range(Range { start: 5, end: 26 });
     assert_eq!(Some(15), mid_month_paydays.next());
     assert_eq!(None, mid_month_paydays.next());
   }
