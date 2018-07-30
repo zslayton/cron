@@ -15,11 +15,13 @@ pub use self::days_of_week::DaysOfWeek;
 pub use self::years::Years;
 
 use std::collections::btree_set;
-use std::ops::RangeBounds;
+use std::ops::Bound::*;
+use std::ops::Range;
 use schedule::{Specifier, Ordinal, OrdinalSet};
 use error::*;
 use std::borrow::Cow;
 use std::iter;
+use itertools::*;
 
 pub struct OrdinalIter<'a> {
     set_iter: btree_set::Iter<'a, Ordinal>
@@ -47,7 +49,7 @@ impl <'a> Iterator for OrdinalRangeIter<'a> {
 /// # Example
 /// ```
 /// use cron::{Schedule,TimeUnitSpec};
-/// use std::collections::Bound::{Included,Excluded};
+/// use std::ops::Range;
 /// use std::str::FromStr;
 ///
 /// let expression = "* * * * * * 2015-2044";
@@ -67,7 +69,7 @@ impl <'a> Iterator for OrdinalRangeIter<'a> {
 /// // ...
 ///
 /// // Range Iterator
-/// let mut five_year_plan = schedule.years().range((Included(2017), Excluded(2017 + 5)));
+/// let mut five_year_plan = schedule.years().range(Range { start: 2017, end: (2017 + 5) });
 /// assert_eq!(Some(2017), five_year_plan.next());
 /// assert_eq!(Some(2018), five_year_plan.next());
 /// assert_eq!(Some(2019), five_year_plan.next());
@@ -116,18 +118,18 @@ pub trait TimeUnitSpec {
   /// # Example
   /// ```
   /// use cron::{Schedule,TimeUnitSpec};
-  /// use std::collections::Bound::{Included,Excluded};
+  /// use std::ops::Range;
   /// use std::str::FromStr;
   ///
   /// let expression = "* * * 1,15 * * *";
   /// let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
   ///
   /// // Range Iterator
-  /// let mut mid_month_paydays = schedule.days_of_month().range((Included(10), Included(20)));
+  /// let mut mid_month_paydays = schedule.days_of_month().range(Range { start: 10, end: 21 });
   /// assert_eq!(Some(15), mid_month_paydays.next());
   /// assert_eq!(None, mid_month_paydays.next());
   /// ```
-  fn range<'a, R>(&'a self, range: R) -> OrdinalRangeIter<'a> where R: RangeBounds<Ordinal>;
+  fn range<'a>(&'a self, range: Range<Ordinal>) -> OrdinalRangeIter<'a>;
 
   /// Returns the number of ordinals included in the associated schedule
   /// # Example
@@ -152,7 +154,7 @@ impl <T> TimeUnitSpec for T where T: TimeUnitField {
       set_iter: TimeUnitField::ordinals(self).iter()
     }
   }
-  fn range<'a, R>(&'a self, range: R) -> OrdinalRangeIter<'a> where R: RangeBounds<Ordinal> {
+  fn range<'a>(&'a self, range: Range<Ordinal>) -> OrdinalRangeIter<'a> {
     OrdinalRangeIter {
       range_iter: TimeUnitField::ordinals(self).range(range)
     }
@@ -219,9 +221,10 @@ pub trait TimeUnitField
             }
             Period(start, step) => {
                 let start = Self::validate_ordinal(start)?;
+                let set = OrdinalSet::new();
                 Ok((start..Self::inclusive_max() + 1)
-                       .step_by(step as usize)
-                       .collect())
+                    .step(step as usize)
+                    .collect())
             }
             Range(start, end) => {
                 match (Self::validate_ordinal(start), Self::validate_ordinal(end)) {

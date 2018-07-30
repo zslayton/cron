@@ -1,7 +1,7 @@
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
-#![feature(collections_range)]
-#![feature(iterator_step_by)]
+//#![feature(collections_range)]
+//#![feature(iterator_step_by)]
 
 //! A cron expression parser and schedule explorer
 //! # Example
@@ -39,6 +39,7 @@
 //! ```
 
 extern crate chrono;
+extern crate itertools;
 extern crate nom;
 
 #[macro_use]
