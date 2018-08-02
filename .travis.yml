@@ -1,5 +1,11 @@
 language: rust
-rust: nightly
+rust:
+  - nightly
+  - 1.28.0
+matrix:
+  allow_failures:
+    - rust: nightly
+  fast_finish: true
 script:
 - |
   cargo build &&

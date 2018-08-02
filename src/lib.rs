@@ -1,7 +1,5 @@
-#![cfg_attr(feature="clippy", feature(plugin))]
-#![cfg_attr(feature="clippy", plugin(clippy))]
-#![feature(collections_range)]
-#![feature(iterator_step_by)]
+#![cfg_attr(feature = "clippy", feature(plugin))]
+#![cfg_attr(feature = "clippy", plugin(clippy))]
 
 //! A cron expression parser and schedule explorer
 //! # Example
