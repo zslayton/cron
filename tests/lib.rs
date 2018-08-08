@@ -266,4 +266,31 @@ mod tests {
     assert_eq!(Some(15), mid_month_paydays.next());
     assert_eq!(None, mid_month_paydays.next());
   }
+
+  #[test]
+  fn test_first_ordinals_not_in_set_1() {
+    let schedule = "0 0/10 * * * * *".parse::<Schedule>().unwrap();
+    let start_time_1 = NaiveDate::from_ymd(2017, 10, 24).and_hms(0, 0, 59);
+    let start_time_1 = Utc.from_utc_datetime(&start_time_1);
+    let next_time_1 = schedule.after(&start_time_1).next().unwrap();
+
+    let start_time_2 = NaiveDate::from_ymd(2017, 10, 24).and_hms(0, 1, 0);
+    let start_time_2 = Utc.from_utc_datetime(&start_time_2);
+    let next_time_2 = schedule.after(&start_time_2).next().unwrap();
+    assert_eq!(next_time_1, next_time_2);
+  }
+  
+
+
+#[test]
+  fn test_first_ordinals_not_in_set_2() {
+    let schedule_1 = "00 00 23 * * * *".parse::<Schedule>().unwrap();
+    let start_time = NaiveDate::from_ymd(2018, 11, 15).and_hms(22, 30, 00);
+    let start_time = Utc.from_utc_datetime(&start_time);
+    let next_time_1 = schedule_1.after(&start_time).next().unwrap();
+
+    let schedule_2 = "00 00 * * * * *".parse::<Schedule>().unwrap();
+    let next_time_2 = schedule_2.after(&start_time).next().unwrap();
+    assert_eq!(next_time_1, next_time_2);
+  }
 }
