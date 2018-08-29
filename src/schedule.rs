@@ -160,7 +160,8 @@ impl Schedule {
     }
 
 
-  fn next_after<Z>(&self, after: &DateTime<Z>) -> Option<DateTime<Z>> where Z: TimeZone {
+  /// The next matching `DateTime` after the specified one, if one exists.
+  pub fn next_after<Z>(&self, after: &DateTime<Z>) -> Option<DateTime<Z>> where Z: TimeZone {
     let mut query = NextAfterQuery::from(after);
     for year in self.years
       .ordinals()
