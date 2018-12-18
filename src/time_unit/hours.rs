@@ -1,6 +1,6 @@
 use schedule::{Ordinal, OrdinalSet};
-use time_unit::TimeUnitField;
 use std::borrow::Cow;
+use time_unit::TimeUnitField;
 
 pub struct Hours(OrdinalSet);
 

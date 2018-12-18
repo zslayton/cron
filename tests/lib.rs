@@ -1,18 +1,12 @@
-extern crate cron;
 extern crate chrono;
+extern crate cron;
 
 #[cfg(test)]
 mod tests {
-    use cron::{
-      Schedule,
-      TimeUnitSpec
-    };
-    use std::collections::Bound::{
-      Included,
-      Excluded
-    };
-    use std::str::FromStr;
     use chrono::*;
+    use cron::{Schedule, TimeUnitSpec};
+    use std::collections::Bound::{Excluded, Included};
+    use std::str::FromStr;
 
     #[test]
     fn test_readme() {
@@ -116,10 +110,14 @@ mod tests {
         let schedule = Schedule::from_str(expression).expect("Failed to parse @monthly.");
         let starting_date = Utc.ymd(2017, 10, 15).and_hms(14, 29, 36);
         let mut events = schedule.after(&starting_date);
-        assert_eq!(Utc.ymd(2017, 11, 1).and_hms(0, 0, 0),
-                   events.next().unwrap());
-        assert_eq!(Utc.ymd(2017, 12, 1).and_hms(0, 0, 0),
-                   events.next().unwrap());
+        assert_eq!(
+            Utc.ymd(2017, 11, 1).and_hms(0, 0, 0),
+            events.next().unwrap()
+        );
+        assert_eq!(
+            Utc.ymd(2017, 12, 1).and_hms(0, 0, 0),
+            events.next().unwrap()
+        );
         assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 0, 0), events.next().unwrap());
     }
 
@@ -129,8 +127,10 @@ mod tests {
         let schedule = Schedule::from_str(expression).expect("Failed to parse @weekly.");
         let starting_date = Utc.ymd(2016, 12, 23).and_hms(14, 29, 36);
         let mut events = schedule.after(&starting_date);
-        assert_eq!(Utc.ymd(2016, 12, 25).and_hms(0, 0, 0),
-                   events.next().unwrap());
+        assert_eq!(
+            Utc.ymd(2016, 12, 25).and_hms(0, 0, 0),
+            events.next().unwrap()
+        );
         assert_eq!(Utc.ymd(2017, 1, 1).and_hms(0, 0, 0), events.next().unwrap());
         assert_eq!(Utc.ymd(2017, 1, 8).and_hms(0, 0, 0), events.next().unwrap());
     }
@@ -141,10 +141,14 @@ mod tests {
         let schedule = Schedule::from_str(expression).expect("Failed to parse @daily.");
         let starting_date = Utc.ymd(2016, 12, 29).and_hms(14, 29, 36);
         let mut events = schedule.after(&starting_date);
-        assert_eq!(Utc.ymd(2016, 12, 30).and_hms(0, 0, 0),
-                   events.next().unwrap());
-        assert_eq!(Utc.ymd(2016, 12, 31).and_hms(0, 0, 0),
-                   events.next().unwrap());
+        assert_eq!(
+            Utc.ymd(2016, 12, 30).and_hms(0, 0, 0),
+            events.next().unwrap()
+        );
+        assert_eq!(
+            Utc.ymd(2016, 12, 31).and_hms(0, 0, 0),
+            events.next().unwrap()
+        );
         assert_eq!(Utc.ymd(2017, 1, 1).and_hms(0, 0, 0), events.next().unwrap());
     }
 
@@ -154,12 +158,18 @@ mod tests {
         let schedule = Schedule::from_str(expression).expect("Failed to parse @hourly.");
         let starting_date = Utc.ymd(2017, 2, 25).and_hms(22, 29, 36);
         let mut events = schedule.after(&starting_date);
-        assert_eq!(Utc.ymd(2017, 2, 25).and_hms(23, 0, 0),
-                   events.next().unwrap());
-        assert_eq!(Utc.ymd(2017, 2, 26).and_hms(0, 0, 0),
-                   events.next().unwrap());
-        assert_eq!(Utc.ymd(2017, 2, 26).and_hms(1, 0, 0),
-                   events.next().unwrap());
+        assert_eq!(
+            Utc.ymd(2017, 2, 25).and_hms(23, 0, 0),
+            events.next().unwrap()
+        );
+        assert_eq!(
+            Utc.ymd(2017, 2, 26).and_hms(0, 0, 0),
+            events.next().unwrap()
+        );
+        assert_eq!(
+            Utc.ymd(2017, 2, 26).and_hms(1, 0, 0),
+            events.next().unwrap()
+        );
     }
 
     #[test]
@@ -170,127 +180,139 @@ mod tests {
         let mut events = schedule.after(&starting_date);
 
         assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 0, 0), events.next().unwrap());
-        assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 0, 20),
-                   events.next().unwrap());
-        assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 0, 40),
-                   events.next().unwrap());
+        assert_eq!(
+            Utc.ymd(2018, 1, 1).and_hms(0, 0, 20),
+            events.next().unwrap()
+        );
+        assert_eq!(
+            Utc.ymd(2018, 1, 1).and_hms(0, 0, 40),
+            events.next().unwrap()
+        );
 
         assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 5, 0), events.next().unwrap());
-        assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 5, 20),
-                   events.next().unwrap());
-        assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 5, 40),
-                   events.next().unwrap());
+        assert_eq!(
+            Utc.ymd(2018, 1, 1).and_hms(0, 5, 20),
+            events.next().unwrap()
+        );
+        assert_eq!(
+            Utc.ymd(2018, 1, 1).and_hms(0, 5, 40),
+            events.next().unwrap()
+        );
 
-        assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 10, 0),
-                   events.next().unwrap());
-        assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 10, 20),
-                   events.next().unwrap());
-        assert_eq!(Utc.ymd(2018, 1, 1).and_hms(0, 10, 40),
-                   events.next().unwrap());
+        assert_eq!(
+            Utc.ymd(2018, 1, 1).and_hms(0, 10, 0),
+            events.next().unwrap()
+        );
+        assert_eq!(
+            Utc.ymd(2018, 1, 1).and_hms(0, 10, 20),
+            events.next().unwrap()
+        );
+        assert_eq!(
+            Utc.ymd(2018, 1, 1).and_hms(0, 10, 40),
+            events.next().unwrap()
+        );
     }
 
     #[test]
     fn test_time_unit_spec_years() {
-      let expression = "* * * * * * 2015-2044";
-      let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
+        let expression = "* * * * * * 2015-2044";
+        let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
 
-      // Membership
-      assert_eq!(true, schedule.years().includes(2031));
-      assert_eq!(false, schedule.years().includes(1969));
+        // Membership
+        assert_eq!(true, schedule.years().includes(2031));
+        assert_eq!(false, schedule.years().includes(1969));
 
-      // Number of years specified
-      assert_eq!(30, schedule.years().count());
+        // Number of years specified
+        assert_eq!(30, schedule.years().count());
 
-      // Iterator
-      let mut years_iter = schedule.years().iter();
-      assert_eq!(Some(2015), years_iter.next());
-      assert_eq!(Some(2016), years_iter.next());
-      // ...
+        // Iterator
+        let mut years_iter = schedule.years().iter();
+        assert_eq!(Some(2015), years_iter.next());
+        assert_eq!(Some(2016), years_iter.next());
+        // ...
 
-      // Range Iterator
-      let mut five_year_plan = schedule.years().range((Included(2017), Excluded(2017 + 5)));
-      assert_eq!(Some(2017), five_year_plan.next());
-      assert_eq!(Some(2018), five_year_plan.next());
-      assert_eq!(Some(2019), five_year_plan.next());
-      assert_eq!(Some(2020), five_year_plan.next());
-      assert_eq!(Some(2021), five_year_plan.next());
-      assert_eq!(None, five_year_plan.next());
+        // Range Iterator
+        let mut five_year_plan = schedule.years().range((Included(2017), Excluded(2017 + 5)));
+        assert_eq!(Some(2017), five_year_plan.next());
+        assert_eq!(Some(2018), five_year_plan.next());
+        assert_eq!(Some(2019), five_year_plan.next());
+        assert_eq!(Some(2020), five_year_plan.next());
+        assert_eq!(Some(2021), five_year_plan.next());
+        assert_eq!(None, five_year_plan.next());
     }
 
-  #[test]
-  fn test_time_unit_spec_months() {
-    let expression = "* * * * 5-8 * *";
-    let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
+    #[test]
+    fn test_time_unit_spec_months() {
+        let expression = "* * * * 5-8 * *";
+        let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
 
-    // Membership
-    assert_eq!(false, schedule.months().includes(4));
-    assert_eq!(true, schedule.months().includes(6));
+        // Membership
+        assert_eq!(false, schedule.months().includes(4));
+        assert_eq!(true, schedule.months().includes(6));
 
-    // Iterator
-    let mut summer = schedule.months().iter();
-    assert_eq!(Some(5), summer.next());
-    assert_eq!(Some(6), summer.next());
-    assert_eq!(Some(7), summer.next());
-    assert_eq!(Some(8), summer.next());
-    assert_eq!(None, summer.next());
+        // Iterator
+        let mut summer = schedule.months().iter();
+        assert_eq!(Some(5), summer.next());
+        assert_eq!(Some(6), summer.next());
+        assert_eq!(Some(7), summer.next());
+        assert_eq!(Some(8), summer.next());
+        assert_eq!(None, summer.next());
 
-    // Number of months specified
-    assert_eq!(4, schedule.months().count());
+        // Number of months specified
+        assert_eq!(4, schedule.months().count());
 
-    // Range Iterator
-    let mut first_half_of_summer = schedule.months().range((Included(1), Included(6)));
-    assert_eq!(Some(5), first_half_of_summer.next());
-    assert_eq!(Some(6), first_half_of_summer.next());
-    assert_eq!(None, first_half_of_summer.next());
-  }
+        // Range Iterator
+        let mut first_half_of_summer = schedule.months().range((Included(1), Included(6)));
+        assert_eq!(Some(5), first_half_of_summer.next());
+        assert_eq!(Some(6), first_half_of_summer.next());
+        assert_eq!(None, first_half_of_summer.next());
+    }
 
-  #[test]
-  fn test_time_unit_spec_days_of_month() {
-    let expression = "* * * 1,15 * * *";
-    let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
-    // Membership
-    assert_eq!(true,  schedule.days_of_month().includes(1));
-    assert_eq!(false, schedule.days_of_month().includes(7));
+    #[test]
+    fn test_time_unit_spec_days_of_month() {
+        let expression = "* * * 1,15 * * *";
+        let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
+        // Membership
+        assert_eq!(true, schedule.days_of_month().includes(1));
+        assert_eq!(false, schedule.days_of_month().includes(7));
 
-    // Iterator
-    let mut paydays = schedule.days_of_month().iter();
-    assert_eq!(Some(1), paydays.next());
-    assert_eq!(Some(15), paydays.next());
-    assert_eq!(None, paydays.next());
+        // Iterator
+        let mut paydays = schedule.days_of_month().iter();
+        assert_eq!(Some(1), paydays.next());
+        assert_eq!(Some(15), paydays.next());
+        assert_eq!(None, paydays.next());
 
-    // Number of years specified
-    assert_eq!(2, schedule.days_of_month().count());
+        // Number of years specified
+        assert_eq!(2, schedule.days_of_month().count());
 
-    // Range Iterator
-    let mut mid_month_paydays = schedule.days_of_month().range((Included(5), Included(25)));
-    assert_eq!(Some(15), mid_month_paydays.next());
-    assert_eq!(None, mid_month_paydays.next());
-  }
+        // Range Iterator
+        let mut mid_month_paydays = schedule.days_of_month().range((Included(5), Included(25)));
+        assert_eq!(Some(15), mid_month_paydays.next());
+        assert_eq!(None, mid_month_paydays.next());
+    }
 
-  #[test]
-  fn test_first_ordinals_not_in_set_1() {
-    let schedule = "0 0/10 * * * * *".parse::<Schedule>().unwrap();
-    let start_time_1 = NaiveDate::from_ymd(2017, 10, 24).and_hms(0, 0, 59);
-    let start_time_1 = Utc.from_utc_datetime(&start_time_1);
-    let next_time_1 = schedule.after(&start_time_1).next().unwrap();
+    #[test]
+    fn test_first_ordinals_not_in_set_1() {
+        let schedule = "0 0/10 * * * * *".parse::<Schedule>().unwrap();
+        let start_time_1 = NaiveDate::from_ymd(2017, 10, 24).and_hms(0, 0, 59);
+        let start_time_1 = Utc.from_utc_datetime(&start_time_1);
+        let next_time_1 = schedule.after(&start_time_1).next().unwrap();
 
-    let start_time_2 = NaiveDate::from_ymd(2017, 10, 24).and_hms(0, 1, 0);
-    let start_time_2 = Utc.from_utc_datetime(&start_time_2);
-    let next_time_2 = schedule.after(&start_time_2).next().unwrap();
-    assert_eq!(next_time_1, next_time_2);
-  }
-  
+        let start_time_2 = NaiveDate::from_ymd(2017, 10, 24).and_hms(0, 1, 0);
+        let start_time_2 = Utc.from_utc_datetime(&start_time_2);
+        let next_time_2 = schedule.after(&start_time_2).next().unwrap();
+        assert_eq!(next_time_1, next_time_2);
+    }
 
+    #[test]
+    fn test_first_ordinals_not_in_set_2() {
+        let schedule_1 = "00 00 23 * * * *".parse::<Schedule>().unwrap();
+        let start_time = NaiveDate::from_ymd(2018, 11, 15).and_hms(22, 30, 00);
+        let start_time = Utc.from_utc_datetime(&start_time);
+        let next_time_1 = schedule_1.after(&start_time).next().unwrap();
 
-#[test]
-  fn test_first_ordinals_not_in_set_2() {
-    let schedule_1 = "00 00 23 * * * *".parse::<Schedule>().unwrap();
-    let start_time = NaiveDate::from_ymd(2018, 11, 15).and_hms(22, 30, 00);
-    let start_time = Utc.from_utc_datetime(&start_time);
-    let next_time_1 = schedule_1.after(&start_time).next().unwrap();
-
-    let schedule_2 = "00 00 * * * * *".parse::<Schedule>().unwrap();
-    let next_time_2 = schedule_2.after(&start_time).next().unwrap();
-    assert_eq!(next_time_1, next_time_2);
-  }
+        let schedule_2 = "00 00 * * * * *".parse::<Schedule>().unwrap();
+        let next_time_2 = schedule_2.after(&start_time).next().unwrap();
+        assert_eq!(next_time_1, next_time_2);
+    }
 }

@@ -1,7 +1,7 @@
-use schedule::{Ordinal, OrdinalSet};
-use time_unit::TimeUnitField;
-use std::borrow::Cow;
 use error::*;
+use schedule::{Ordinal, OrdinalSet};
+use std::borrow::Cow;
+use time_unit::TimeUnitField;
 
 pub struct DaysOfWeek(OrdinalSet);
 
@@ -28,7 +28,10 @@ impl TimeUnitField for DaysOfWeek {
             "thu" | "thurs" | "thursday" => 5,
             "fri" | "friday" => 6,
             "sat" | "saturday" => 7,
-            _ => bail!(ErrorKind::Expression(format!("'{}' is not a valid day of the week.", name))),
+            _ => bail!(ErrorKind::Expression(format!(
+                "'{}' is not a valid day of the week.",
+                name
+            ))),
         };
         Ok(ordinal)
     }
