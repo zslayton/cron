@@ -1,7 +1,7 @@
 use chrono::offset::TimeZone;
 use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
 use error::{Error, ErrorKind};
-use nom::*;
+use nom::{types::CompleteStr as Input, *};
 use std::collections::BTreeSet;
 use std::collections::Bound::{Included, Unbounded};
 use std::iter::{self, Iterator};
@@ -314,13 +314,9 @@ impl Schedule {
 impl FromStr for Schedule {
     type Err = Error;
     fn from_str(expression: &str) -> Result<Self, Self::Err> {
-        use nom::IResult::*;
-        match schedule(expression.as_bytes()) {
-            Done(_, schedule) => Ok(schedule), // Extract from nom tuple
-            Error(_) => bail!(ErrorKind::Expression("Invalid cron expression.".to_owned())), //TODO: Details
-            Incomplete(_) => bail!(ErrorKind::Expression(
-                "Incomplete cron expression.".to_owned()
-            )),
+        match schedule(Input(expression)) {
+            Ok((_, schedule)) => Ok(schedule), // Extract from nom tuple
+            Err(_) => bail!(ErrorKind::Expression("Invalid cron expression.".to_owned())), //TODO: Details
         }
     }
 }
@@ -415,55 +411,55 @@ where
 }
 
 named!(
-    ordinal<u32>,
-    map_res!(map_res!(ws!(digit), str::from_utf8), FromStr::from_str)
+    ordinal<Input, u32>,
+    map_res!(ws!(digit), |x: Input| x.0.parse())
 );
 
 named!(
-    name<String>,
-    map!(map_res!(ws!(alpha), str::from_utf8), str::to_owned)
+    name<Input, String>,
+    map!(ws!(alpha), |x| x.0.to_owned())
 );
 
 named!(
-    point<Specifier>,
+    point<Input, Specifier>,
     do_parse!(o: ordinal >> (Specifier::Point(o)))
 );
 
 named!(
-    named_point<Specifier>,
+    named_point<Input, Specifier>,
     do_parse!(n: name >> (Specifier::NamedPoint(n)))
 );
 
 named!(
-    period<Specifier>,
+    period<Input, Specifier>,
     complete!(do_parse!(
         start: ordinal >> tag!("/") >> step: ordinal >> (Specifier::Period(start, step))
     ))
 );
 
 named!(
-    range<Specifier>,
+    range<Input, Specifier>,
     complete!(do_parse!(
         start: ordinal >> tag!("-") >> end: ordinal >> (Specifier::Range(start, end))
     ))
 );
 
 named!(
-    named_range<Specifier>,
+    named_range<Input, Specifier>,
     complete!(do_parse!(
         start: name >> tag!("-") >> end: name >> (Specifier::NamedRange(start, end))
     ))
 );
 
-named!(all<Specifier>, do_parse!(tag!("*") >> (Specifier::All)));
+named!(all<Input, Specifier>, do_parse!(tag!("*") >> (Specifier::All)));
 
 named!(
-    specifier<Specifier>,
+    specifier<Input, Specifier>,
     alt!(all | period | range | point | named_range | named_point)
 );
 
 named!(
-    specifier_list<Vec<Specifier>>,
+    specifier_list<Input, Vec<Specifier>>,
     ws!(alt!(
         do_parse!(list: separated_nonempty_list!(tag!(","), specifier) >> (list))
             | do_parse!(spec: specifier >> (vec![spec]))
@@ -471,17 +467,12 @@ named!(
 );
 
 named!(
-    field<Field>,
-    do_parse!(
-        specifiers: specifier_list
-            >> (Field {
-                specifiers: specifiers
-            })
-    )
+    field<Input, Field>,
+    do_parse!(specifiers: specifier_list >> (Field { specifiers }))
 );
 
 named!(
-    shorthand_yearly<Schedule>,
+    shorthand_yearly<Input, Schedule>,
     do_parse!(
         tag!("@yearly")
             >> (Schedule::from(
@@ -497,7 +488,7 @@ named!(
 );
 
 named!(
-    shorthand_monthly<Schedule>,
+    shorthand_monthly<Input, Schedule>,
     do_parse!(
         tag!("@monthly")
             >> (Schedule::from(
@@ -513,7 +504,7 @@ named!(
 );
 
 named!(
-    shorthand_weekly<Schedule>,
+    shorthand_weekly<Input, Schedule>,
     do_parse!(
         tag!("@weekly")
             >> (Schedule::from(
@@ -529,7 +520,7 @@ named!(
 );
 
 named!(
-    shorthand_daily<Schedule>,
+    shorthand_daily<Input, Schedule>,
     do_parse!(
         tag!("@daily")
             >> (Schedule::from(
@@ -545,7 +536,7 @@ named!(
 );
 
 named!(
-    shorthand_hourly<Schedule>,
+    shorthand_hourly<Input, Schedule>,
     do_parse!(
         tag!("@hourly")
             >> (Schedule::from(
@@ -561,7 +552,7 @@ named!(
 );
 
 named!(
-    shorthand<Schedule>,
+    shorthand<Input, Schedule>,
     alt!(
         shorthand_yearly
             | shorthand_monthly
@@ -572,7 +563,7 @@ named!(
 );
 
 named!(
-    longhand<Schedule>,
+    longhand<Input, Schedule>,
     map_res!(
         complete!(do_parse!(
             fields: many_m_n!(6, 7, field) >> eof!() >> (fields)
@@ -581,7 +572,7 @@ named!(
     )
 );
 
-named!(schedule<Schedule>, alt!(shorthand | longhand));
+named!(schedule<Input, Schedule>, alt!(shorthand | longhand));
 
 fn is_leap_year(year: Ordinal) -> bool {
     let by_four = year % 4 == 0;
@@ -603,9 +594,7 @@ fn days_in_month(month: Ordinal, year: Ordinal) -> u32 {
 #[test]
 fn test_next_after() {
     let expression = "0 5,13,40-42 17 1 Jan *";
-    let schedule = schedule(expression.as_bytes());
-    assert!(schedule.is_done());
-    let schedule = schedule.unwrap().1;
+    let schedule = schedule(Input(expression)).unwrap().1;
     let next = schedule.next_after(&Utc::now());
     println!("NEXT AFTER for {} {:?}", expression, next);
     assert!(next.is_some());
@@ -614,9 +603,7 @@ fn test_next_after() {
 #[test]
 fn test_upcoming_utc() {
     let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
-    let schedule = schedule(expression.as_bytes());
-    assert!(schedule.is_done());
-    let schedule = schedule.unwrap().1;
+    let schedule = schedule(Input(expression)).unwrap().1;
     let mut upcoming = schedule.upcoming(Utc);
     let next1 = upcoming.next();
     assert!(next1.is_some());
@@ -633,9 +620,7 @@ fn test_upcoming_utc() {
 fn test_upcoming_local() {
     use chrono::Local;
     let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
-    let schedule = schedule(expression.as_bytes());
-    assert!(schedule.is_done());
-    let schedule = schedule.unwrap().1;
+    let schedule = schedule(Input(expression)).unwrap().1;
     let mut upcoming = schedule.upcoming(Local);
     let next1 = upcoming.next();
     assert!(next1.is_some());
@@ -651,7 +636,7 @@ fn test_upcoming_local() {
 #[test]
 fn test_valid_from_str() {
     let schedule = Schedule::from_str("0 0,30 0,6,12,18 1,15 Jan-March Thurs");
-    assert!(schedule.is_ok());
+    schedule.unwrap();
 }
 
 #[test]
@@ -663,143 +648,143 @@ fn test_invalid_from_str() {
 #[test]
 fn test_nom_valid_number() {
     let expression = "1997";
-    assert!(point(expression.as_bytes()).is_done());
+    point(Input(expression)).unwrap();
 }
 
 #[test]
 fn test_nom_invalid_point() {
     let expression = "a";
-    assert!(point(expression.as_bytes()).is_err());
+    assert!(point(Input(expression)).is_err());
 }
 
 #[test]
 fn test_nom_valid_named_point() {
     let expression = "WED";
-    assert!(named_point(expression.as_bytes()).is_done());
+    named_point(Input(expression)).unwrap();
 }
 
 #[test]
 fn test_nom_invalid_named_point() {
     let expression = "8";
-    assert!(named_point(expression.as_bytes()).is_err());
+    assert!(named_point(Input(expression)).is_err());
 }
 
 #[test]
 fn test_nom_valid_period() {
     let expression = "1/2";
-    assert!(period(expression.as_bytes()).is_done());
+    period(Input(expression)).unwrap();
 }
 
 #[test]
 fn test_nom_invalid_period() {
     let expression = "Wed/4";
-    assert!(period(expression.as_bytes()).is_err());
+    assert!(period(Input(expression)).is_err());
 }
 
 #[test]
 fn test_nom_valid_number_list() {
     let expression = "1,2";
-    assert!(field(expression.as_bytes()).is_done());
+    field(Input(expression)).unwrap();
 }
 
 #[test]
 fn test_nom_invalid_number_list() {
     let expression = ",1,2";
-    assert!(field(expression.as_bytes()).is_err());
+    assert!(field(Input(expression)).is_err());
 }
 
 #[test]
 fn test_nom_valid_range_field() {
     let expression = "1-4";
-    assert!(range(expression.as_bytes()).is_done());
+    range(Input(expression)).unwrap();
 }
 
 #[test]
 fn test_nom_invalid_range_field() {
     let expression = "-4";
-    assert!(range(expression.as_bytes()).is_err());
+    assert!(range(Input(expression)).is_err());
 }
 
 #[test]
 fn test_nom_valid_named_range_field() {
     let expression = "TUES-THURS";
-    assert!(named_range(expression.as_bytes()).is_done());
+    named_range(Input(expression)).unwrap();
 }
 
 #[test]
 fn test_nom_invalid_named_range_field() {
     let expression = "3-THURS";
-    assert!(named_range(expression.as_bytes()).is_err());
+    assert!(named_range(Input(expression)).is_err());
 }
 
 #[test]
 fn test_nom_valid_schedule() {
     let expression = "* * * * * *";
-    assert!(schedule(expression.as_bytes()).is_done());
+    schedule(Input(expression)).unwrap();
 }
 
 #[test]
 fn test_nom_invalid_schedule() {
     let expression = "* * * *";
-    assert!(schedule(expression.as_bytes()).is_err());
+    assert!(schedule(Input(expression)).is_err());
 }
 
 #[test]
 fn test_nom_valid_seconds_list() {
     let expression = "0,20,40 * * * * *";
-    assert!(schedule(expression.as_bytes()).is_done());
+    schedule(Input(expression)).unwrap();
 }
 
 #[test]
 fn test_nom_valid_seconds_range() {
     let expression = "0-40 * * * * *";
-    assert!(schedule(expression.as_bytes()).is_done());
+    schedule(Input(expression)).unwrap();
 }
 
 #[test]
 fn test_nom_valid_seconds_mix() {
     let expression = "0-5,58 * * * * *";
-    assert!(schedule(expression.as_bytes()).is_done());
+    schedule(Input(expression)).unwrap();
 }
 
 #[test]
 fn test_nom_invalid_seconds_range() {
     let expression = "0-65 * * * * *";
-    assert!(schedule(expression.as_bytes()).is_err());
+    assert!(schedule(Input(expression)).is_err());
 }
 
 #[test]
 fn test_nom_invalid_seconds_list() {
     let expression = "103,12 * * * * *";
-    assert!(schedule(expression.as_bytes()).is_err());
+    assert!(schedule(Input(expression)).is_err());
 }
 
 #[test]
 fn test_nom_invalid_seconds_mix() {
     let expression = "0-5,102 * * * * *";
-    assert!(schedule(expression.as_bytes()).is_err());
+    assert!(schedule(Input(expression)).is_err());
 }
 
 #[test]
 fn test_nom_valid_days_of_week_list() {
     let expression = "* * * * * MON,WED,FRI";
-    assert!(schedule(expression.as_bytes()).is_done());
+    schedule(Input(expression)).unwrap();
 }
 
 #[test]
 fn test_nom_invalid_days_of_week_list() {
     let expression = "* * * * * MON,TURTLE";
-    assert!(schedule(expression.as_bytes()).is_err());
+    assert!(schedule(Input(expression)).is_err());
 }
 
 #[test]
 fn test_nom_valid_days_of_week_range() {
     let expression = "* * * * * MON-FRI";
-    assert!(schedule(expression.as_bytes()).is_done());
+    schedule(Input(expression)).unwrap();
 }
 
 #[test]
 fn test_nom_invalid_days_of_week_range() {
     let expression = "* * * * * BEAR-OWL";
-    assert!(schedule(expression.as_bytes()).is_err());
+    assert!(schedule(Input(expression)).is_err());
 }
