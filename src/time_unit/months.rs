@@ -1,7 +1,7 @@
-use schedule::{Ordinal, OrdinalSet};
 use error::*;
-use time_unit::TimeUnitField;
+use schedule::{Ordinal, OrdinalSet};
 use std::borrow::Cow;
+use time_unit::TimeUnitField;
 
 pub struct Months(OrdinalSet);
 
@@ -33,7 +33,10 @@ impl TimeUnitField for Months {
             "oct" | "october" => 10,
             "nov" | "november" => 11,
             "dec" | "december" => 12,
-            _ => bail!(ErrorKind::Expression(format!("'{}' is not a valid month name.", name))),
+            _ => bail!(ErrorKind::Expression(format!(
+                "'{}' is not a valid month name.",
+                name
+            ))),
         };
         Ok(ordinal)
     }

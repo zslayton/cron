@@ -10,7 +10,7 @@
 //! use cron::Schedule;
 //! use chrono::Utc;
 //! use std::str::FromStr;
-//! 
+//!
 //! fn main() {
 //!   //               sec  min   hour   day of month   month   day of week   year
 //!   let expression = "0   30   9,12,15     1,15       May-Aug  Mon,Wed,Fri  2018/2";
@@ -20,7 +20,7 @@
 //!     println!("-> {}", datetime);
 //!   }
 //! }
-//! 
+//!
 //! /*
 //! Upcoming fire times:
 //! -> 2018-06-01 09:30:00 UTC
@@ -42,9 +42,9 @@ extern crate nom;
 #[macro_use]
 extern crate error_chain;
 
-mod time_unit;
-mod schedule;
 pub mod error;
+mod schedule;
+mod time_unit;
 
 pub use schedule::Schedule;
 pub use time_unit::TimeUnitSpec;

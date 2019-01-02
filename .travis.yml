@@ -1,7 +1,7 @@
 language: rust
 rust:
   - nightly
-  - 1.28.0
+  - 1.30.0
 matrix:
   allow_failures:
     - rust: nightly
@@ -21,4 +21,3 @@ after_success: |
   sudo pip install ghp-import &&
   ghp-import -n target/doc &&
   git push -fq https://${GH_TOKEN}@github.com/${TRAVIS_REPO_SLUG}.git gh-pages
-
