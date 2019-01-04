@@ -39,9 +39,6 @@
 extern crate chrono;
 extern crate nom;
 
-#[macro_use]
-extern crate error_chain;
-
 pub mod error;
 mod schedule;
 mod time_unit;
