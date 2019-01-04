@@ -19,7 +19,7 @@ impl TimeUnitField for DaysOfWeek {
     fn inclusive_max() -> Ordinal {
         7
     }
-    fn ordinal_from_name(name: &str) -> Result<Ordinal> {
+    fn ordinal_from_name(name: &str) -> Result<Ordinal, Error> {
         //TODO: Use phf crate
         let ordinal = match name.to_lowercase().as_ref() {
             "sun" | "sunday" => 1,
@@ -29,10 +29,13 @@ impl TimeUnitField for DaysOfWeek {
             "thu" | "thurs" | "thursday" => 5,
             "fri" | "friday" => 6,
             "sat" | "saturday" => 7,
-            _ => bail!(ErrorKind::Expression(format!(
-                "'{}' is not a valid day of the week.",
-                name
-            ))),
+            _ => {
+                return Err(ErrorKind::Expression(format!(
+                    "'{}' is not a valid day of the week.",
+                    name
+                ))
+                .into())
+            }
         };
         Ok(ordinal)
     }
