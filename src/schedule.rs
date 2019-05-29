@@ -552,6 +552,22 @@ named!(
 );
 
 named!(
+    shorthand_minute<Input, Schedule>,
+    do_parse!(
+        tag!("@minute")
+            >> (Schedule::from(
+                Seconds::from_ordinal_set(iter::once(0).collect()),
+                Minutes::all(),
+                Hours::all(),
+                DaysOfMonth::all(),
+                Months::all(),
+                DaysOfWeek::all(),
+                Years::all()
+            ))
+    )
+);
+
+named!(
     shorthand<Input, Schedule>,
     alt!(
         shorthand_yearly
@@ -559,6 +575,7 @@ named!(
             | shorthand_weekly
             | shorthand_daily
             | shorthand_hourly
+            | shorthand_minute
     )
 );
 
