@@ -2,6 +2,7 @@ use schedule::{Ordinal, OrdinalSet};
 use std::borrow::Cow;
 use time_unit::TimeUnitField;
 
+#[derive(Eq, PartialEq, Clone)]
 pub struct DaysOfMonth(OrdinalSet);
 
 impl TimeUnitField for DaysOfMonth {

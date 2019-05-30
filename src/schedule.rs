@@ -9,6 +9,7 @@ use std::str::{self, FromStr};
 
 use time_unit::*;
 
+#[derive(Eq, PartialEq, Clone)]
 pub struct Schedule {
     years: Years,
     days_of_week: DaysOfWeek,
