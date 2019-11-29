@@ -3,6 +3,7 @@ use schedule::{Ordinal, OrdinalSet};
 use std::borrow::Cow;
 use time_unit::TimeUnitField;
 
+#[derive(Clone)]
 pub struct Months(OrdinalSet);
 
 impl TimeUnitField for Months {
