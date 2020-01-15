@@ -38,6 +38,8 @@
 
 extern crate chrono;
 extern crate nom;
+#[cfg(test)]
+extern crate chrono_tz;
 
 #[macro_use]
 extern crate error_chain;

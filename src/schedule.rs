@@ -226,9 +226,16 @@ impl Schedule {
 
                             for second in self.seconds.ordinals().range(second_range).cloned() {
                                 let timezone = after.timezone();
-                                let candidate = timezone
+
+                                let maybe_candidate = timezone
                                     .ymd(year as i32, month, day_of_month)
-                                    .and_hms(hour, minute, second);
+                                    .and_hms_opt(hour, minute, second);
+
+                                let candidate = match maybe_candidate {
+                                    Some(dt) => dt,
+                                    None => continue 'day_loop
+                                };
+
                                 if !self
                                     .days_of_week
                                     .ordinals()
@@ -790,3 +797,21 @@ fn test_nom_invalid_days_of_week_range() {
     let expression = "* * * * * BEAR-OWL";
     assert!(schedule(Input(expression)).is_err());
 }
+
+#[test]
+fn test_no_panic_on_nonexistent_time() {
+    use chrono_tz::Tz;
+    use chrono::offset::TimeZone;
+
+    let schedule_tz: Tz = "Europe/London".parse().unwrap();
+    let dt = schedule_tz
+        .ymd(2019, 10, 27)
+        .and_hms(0, 3, 29)
+        .checked_add_signed(chrono::Duration::hours(1)) // puts it in the middle of the DST transition
+        .unwrap();
+    let schedule = Schedule::from_str("* * * * * Sat,Sun *").unwrap();
+    let next = schedule.after(&dt).next().unwrap();
+    assert!(next > dt); // test is ensuring line above does not panic
+}
+
+
