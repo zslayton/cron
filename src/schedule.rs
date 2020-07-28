@@ -4,6 +4,7 @@ use error::{Error, ErrorKind};
 use nom::{types::CompleteStr as Input, *};
 use std::collections::BTreeSet;
 use std::collections::Bound::{Included, Unbounded};
+use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::iter::{self, Iterator};
 use std::str::{self, FromStr};
 
@@ -11,6 +12,7 @@ use time_unit::*;
 
 #[derive(Clone)]
 pub struct Schedule {
+    source: Option<String>,
     years: Years,
     days_of_week: DaysOfWeek,
     months: Months,
@@ -162,6 +164,7 @@ impl Schedule {
         years: Years,
     ) -> Schedule {
         Schedule {
+            source: None,
             years: years,
             days_of_week: days_of_week,
             months: months,
@@ -316,9 +319,24 @@ impl FromStr for Schedule {
     type Err = Error;
     fn from_str(expression: &str) -> Result<Self, Self::Err> {
         match schedule(Input(expression)) {
-            Ok((_, schedule)) => Ok(schedule), // Extract from nom tuple
+            Ok((_, mut schedule)) => {
+                schedule.source.replace(expression.to_owned());
+                Ok(schedule)
+            }, // Extract from nom tuple
             Err(_) => bail!(ErrorKind::Expression("Invalid cron expression.".to_owned())), //TODO: Details
         }
+    }
+}
+
+impl From<Schedule> for String {
+    fn from(schedule: Schedule) -> String {
+        schedule.source.unwrap()
+    }
+}
+
+impl Display for Schedule {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        self.source.as_ref().map(|s| write!(f, "{}", s)).unwrap()
     }
 }
 
@@ -633,6 +651,24 @@ fn test_upcoming_local() {
     println!("Upcoming 1 for {} {:?}", expression, next1);
     println!("Upcoming 2 for {} {:?}", expression, next2);
     println!("Upcoming 3 for {} {:?}", expression, next3);
+}
+
+#[test]
+fn test_schedule_to_string() {
+    let expression = "* 1,2,3 * * * *";
+    let schedule: Schedule = Schedule::from_str(expression).unwrap();
+    let result = String::from(schedule);
+    assert_eq!(expression, result);
+}
+
+#[test]
+fn test_display_schedule() {
+    use std::fmt::Write;
+    let expression = "@monthly";
+    let schedule = Schedule::from_str(expression).unwrap();
+    let mut result = String::new();
+    write!(result, "{}", schedule).unwrap();
+    assert_eq!(expression, result);
 }
 
 #[test]
