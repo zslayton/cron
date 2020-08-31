@@ -42,6 +42,9 @@ extern crate nom;
 #[macro_use]
 extern crate error_chain;
 
+#[cfg(test)]
+extern crate chrono_tz;
+
 pub mod error;
 mod schedule;
 mod time_unit;
