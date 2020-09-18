@@ -1,9 +1,11 @@
 extern crate chrono;
+extern crate chrono_tz;
 extern crate cron;
 
 #[cfg(test)]
 mod tests {
     use chrono::*;
+    use chrono_tz::Tz;
     use cron::{Schedule, TimeUnitSpec};
     use std::collections::Bound::{Excluded, Included};
     use std::str::FromStr;
@@ -314,5 +316,174 @@ mod tests {
         let schedule_2 = "00 00 * * * * *".parse::<Schedule>().unwrap();
         let next_time_2 = schedule_2.after(&start_time).next().unwrap();
         assert_eq!(next_time_1, next_time_2);
+    }
+
+    #[test]
+    fn test_period_values_any_dom() {
+        let schedule = Schedule::from_str("0 0 0 ? * *").unwrap();
+        let schedule_tz: Tz = "Europe/London".parse().unwrap();
+        let dt = schedule_tz.ymd(2020, 9, 17).and_hms(0, 0, 0);
+        let mut schedule_iter = schedule.after(&dt);
+        assert_eq!(
+            schedule_tz.ymd(2020, 9, 18).and_hms(0, 0, 0),
+            schedule_iter.next().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_period_values_any_dow() {
+        let schedule = Schedule::from_str("0 0 0 * * ?").unwrap();
+        let schedule_tz: Tz = "Europe/London".parse().unwrap();
+        let dt = schedule_tz.ymd(2020, 9, 17).and_hms(0, 0, 0);
+        let mut schedule_iter = schedule.after(&dt);
+        assert_eq!(
+            schedule_tz.ymd(2020, 9, 18).and_hms(0, 0, 0),
+            schedule_iter.next().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_period_values_all_seconds() {
+        let schedule = Schedule::from_str("*/17 * * * * ?").unwrap();
+        let schedule_tz: Tz = "Europe/London".parse().unwrap();
+        let dt = schedule_tz.ymd(2020, 1, 1).and_hms(0, 0, 0);
+        let mut schedule_iter = schedule.after(&dt);
+        let expected_values = vec![
+            schedule_tz.ymd(2020, 1, 1).and_hms(0, 0, 17),
+            schedule_tz.ymd(2020, 1, 1).and_hms(0, 0, 34),
+            schedule_tz.ymd(2020, 1, 1).and_hms(0, 0, 51),
+            schedule_tz.ymd(2020, 1, 1).and_hms(0, 1, 0),
+            schedule_tz.ymd(2020, 1, 1).and_hms(0, 1, 17),
+            schedule_tz.ymd(2020, 1, 1).and_hms(0, 1, 34),
+        ];
+        for expected_value in expected_values.iter() {
+            assert_eq!(*expected_value, schedule_iter.next().unwrap());
+        }
+    }
+
+    #[test]
+    fn test_period_values_range() {
+        let schedule = Schedule::from_str("0 0 0 1 1-4/2 ?").unwrap();
+        let schedule_tz: Tz = "Europe/London".parse().unwrap();
+        let dt = schedule_tz.ymd(2020, 1, 1).and_hms(0, 0, 0);
+        let mut schedule_iter = schedule.after(&dt);
+        let expected_values = vec![
+            schedule_tz.ymd(2020, 3, 1).and_hms(0, 0, 0),
+            schedule_tz.ymd(2021, 1, 1).and_hms(0, 0, 0),
+            schedule_tz.ymd(2021, 3, 1).and_hms(0, 0, 0),
+            schedule_tz.ymd(2022, 1, 1).and_hms(0, 0, 0),
+        ];
+        for expected_value in expected_values.iter() {
+            assert_eq!(*expected_value, schedule_iter.next().unwrap());
+        }
+    }
+
+    #[test]
+    fn test_period_values_range_hours() {
+        let schedule = Schedule::from_str("0 0 10-12/2 * * ?").unwrap();
+        let schedule_tz: Tz = "Europe/London".parse().unwrap();
+        let dt = schedule_tz.ymd(2020, 1, 1).and_hms(0, 0, 0);
+        let mut schedule_iter = schedule.after(&dt);
+        let expected_values = vec![
+            schedule_tz.ymd(2020, 1, 1).and_hms(10, 0, 0),
+            schedule_tz.ymd(2020, 1, 1).and_hms(12, 0, 0),
+            schedule_tz.ymd(2020, 1, 2).and_hms(10, 0, 0),
+            schedule_tz.ymd(2020, 1, 2).and_hms(12, 0, 0),
+        ];
+        for expected_value in expected_values.iter() {
+            assert_eq!(*expected_value, schedule_iter.next().unwrap());
+        }
+    }
+
+    #[test]
+    fn test_period_values_range_days() {
+        let schedule = Schedule::from_str("0 0 0 1-31/10 * ?").unwrap();
+        let schedule_tz: Tz = "Europe/London".parse().unwrap();
+        let dt = schedule_tz.ymd(2020, 1, 1).and_hms(0, 0, 0);
+        let mut schedule_iter = schedule.after(&dt);
+        let expected_values = vec![
+            schedule_tz.ymd(2020, 1, 11).and_hms(0, 0, 0),
+            schedule_tz.ymd(2020, 1, 21).and_hms(0, 0, 0),
+            schedule_tz.ymd(2020, 1, 31).and_hms(0, 0, 0),
+            schedule_tz.ymd(2020, 2, 1).and_hms(0, 0, 0),
+            schedule_tz.ymd(2020, 2, 11).and_hms(0, 0, 0),
+            schedule_tz.ymd(2020, 2, 21).and_hms(0, 0, 0),
+            schedule_tz.ymd(2020, 3, 1).and_hms(0, 0, 0),
+        ];
+        for expected_value in expected_values.iter() {
+            assert_eq!(*expected_value, schedule_iter.next().unwrap());
+        }
+    }
+
+    #[test]
+    fn test_period_values_range_months() {
+        let schedule = Schedule::from_str("0 0 0 1 January-June/1 *").unwrap();
+        let schedule_tz: Tz = "Europe/London".parse().unwrap();
+        let dt = schedule_tz.ymd(2020, 1, 1).and_hms(0, 0, 0);
+        let mut schedule_iter = schedule.after(&dt);
+        let expected_values = vec![
+            schedule_tz.ymd(2020, 2, 1).and_hms(0, 0, 0),
+            schedule_tz.ymd(2020, 3, 1).and_hms(0, 0, 0),
+            schedule_tz.ymd(2020, 4, 1).and_hms(0, 0, 0),
+            schedule_tz.ymd(2020, 5, 1).and_hms(0, 0, 0),
+            schedule_tz.ymd(2020, 6, 1).and_hms(0, 0, 0),
+            schedule_tz.ymd(2021, 1, 1).and_hms(0, 0, 0),
+        ];
+        for expected_value in expected_values.iter() {
+            assert_eq!(*expected_value, schedule_iter.next().unwrap());
+        }
+    }
+
+    #[test]
+    fn test_period_values_range_years() {
+        let schedule = Schedule::from_str("0 0 0 1 1 ? 2020-2040/10").unwrap();
+        let schedule_tz: Tz = "Europe/London".parse().unwrap();
+        let dt = schedule_tz.ymd(2020, 1, 1).and_hms(0, 0, 0);
+        let mut schedule_iter = schedule.after(&dt);
+        let expected_values = vec![
+            schedule_tz.ymd(2030, 1, 1).and_hms(0, 0, 0),
+            schedule_tz.ymd(2040, 1, 1).and_hms(0, 0, 0),
+        ];
+        for expected_value in expected_values.iter() {
+            assert_eq!(*expected_value, schedule_iter.next().unwrap());
+        }
+    }
+
+    #[test]
+    fn test_period_values_point() {
+        let schedule = Schedule::from_str("0 */21 * * * ?").unwrap();
+        let schedule_tz: Tz = "Europe/London".parse().unwrap();
+        let dt = schedule_tz.ymd(2020, 1, 1).and_hms(0, 0, 0);
+        let mut schedule_iter = schedule.after(&dt);
+        let expected_values = vec![
+            schedule_tz.ymd(2020, 1, 1).and_hms(0, 21, 0),
+            schedule_tz.ymd(2020, 1, 1).and_hms(0, 42, 0),
+            schedule_tz.ymd(2020, 1, 1).and_hms(1, 0, 0),
+            schedule_tz.ymd(2020, 1, 1).and_hms(1, 21, 0),
+            schedule_tz.ymd(2020, 1, 1).and_hms(1, 42, 0),
+            schedule_tz.ymd(2020, 1, 1).and_hms(2, 0, 0),
+            schedule_tz.ymd(2020, 1, 1).and_hms(2, 21, 0),
+            schedule_tz.ymd(2020, 1, 1).and_hms(2, 42, 0),
+        ];
+        for expected_value in expected_values.iter() {
+            assert_eq!(*expected_value, schedule_iter.next().unwrap());
+        }
+    }
+
+    #[test]
+    fn test_period_values_named_range() {
+        let schedule = Schedule::from_str("0 0 0 1 January-April/2 ?").unwrap();
+        let schedule_tz: Tz = "Europe/London".parse().unwrap();
+        let dt = schedule_tz.ymd(2020, 1, 1).and_hms(0, 0, 0);
+        let mut schedule_iter = schedule.after(&dt);
+        let expected_values = vec![
+            schedule_tz.ymd(2020, 3, 1).and_hms(0, 0, 0),
+            schedule_tz.ymd(2021, 1, 1).and_hms(0, 0, 0),
+            schedule_tz.ymd(2021, 3, 1).and_hms(0, 0, 0),
+            schedule_tz.ymd(2022, 1, 1).and_hms(0, 0, 0),
+        ];
+        for expected_value in expected_values.iter() {
+            assert_eq!(*expected_value, schedule_iter.next().unwrap());
+        }
     }
 }

@@ -166,13 +166,13 @@ impl Schedule {
     ) -> Schedule {
         Schedule {
             source: None,
-            years: years,
-            days_of_week: days_of_week,
-            months: months,
-            days_of_month: days_of_month,
-            hours: hours,
-            minutes: minutes,
-            seconds: seconds,
+            years,
+            days_of_week,
+            months,
+            days_of_month,
+            hours,
+            minutes,
+            seconds,
         }
     }
 
@@ -400,15 +400,33 @@ pub type OrdinalSet = BTreeSet<Ordinal>;
 pub enum Specifier {
     All,
     Point(Ordinal),
-    NamedPoint(String),
-    Period(Ordinal, u32),
     Range(Ordinal, Ordinal),
     NamedRange(String, String),
 }
 
+// Separating out a root specifier allows for a higher tiered specifier, allowing us to achieve
+// periods with base values that are more advanced than an ordinal:
+// - all: '*/2'
+// - range: '10-2/2'
+// - named range: 'Mon-Thurs/2'
+//
+// Without this separation we would end up with invalid combinations such as 'Mon/2'
+#[derive(Debug, PartialEq)]
+pub enum RootSpecifier {
+    Specifier(Specifier),
+    Period(Specifier, u32),
+    NamedPoint(String),
+}
+
+impl From<Specifier> for RootSpecifier {
+    fn from(specifier: Specifier) -> Self {
+        Self::Specifier(specifier)
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Field {
-    pub specifiers: Vec<Specifier>, // TODO: expose iterator?
+    pub specifiers: Vec<RootSpecifier>, // TODO: expose iterator?
 }
 
 trait FromField
@@ -426,7 +444,7 @@ where
     fn from_field(field: Field) -> Result<T, Error> {
         let mut ordinals = OrdinalSet::new(); // TODO:Combinator
         for specifier in field.specifiers {
-            let specifier_ordinals: OrdinalSet = T::ordinals_from_specifier(&specifier)?;
+            let specifier_ordinals: OrdinalSet = T::ordinals_from_root_specifier(&specifier)?;
             for ordinal in specifier_ordinals {
                 ordinals.insert(T::validate_ordinal(ordinal)?);
             }
@@ -451,14 +469,21 @@ named!(
 );
 
 named!(
-    named_point<Input, Specifier>,
-    do_parse!(n: name >> (Specifier::NamedPoint(n)))
+    named_point<Input, RootSpecifier>,
+    do_parse!(n: name >> (RootSpecifier::NamedPoint(n)))
 );
 
 named!(
-    period<Input, Specifier>,
+    period<Input, RootSpecifier>,
     complete!(do_parse!(
-        start: ordinal >> tag!("/") >> step: ordinal >> (Specifier::Period(start, step))
+        start: specifier >> tag!("/") >> step: ordinal >> (RootSpecifier::Period(start, step))
+    ))
+);
+
+named!(
+    period_with_any<Input, RootSpecifier>,
+    complete!(do_parse!(
+        start: specifier_with_any >> tag!("/") >> step: ordinal >> (RootSpecifier::Period(start, step))
     ))
 );
 
@@ -482,27 +507,52 @@ named!(any<Input, Specifier>, do_parse!(tag!("?") >> (Specifier::All)));
 
 named!(
     specifier<Input, Specifier>,
-    alt!(all | period | range | point | named_range | named_point)
+    alt!(all | range | point | named_range)
 );
 
 named!(
-    specifier_list<Input, Vec<Specifier>>,
+    specifier_with_any<Input, Specifier>,
+    alt!(
+        any |
+        specifier
+    )
+);
+
+named!(
+    root_specifier<Input, RootSpecifier>,
+    alt!(period | map!(specifier, RootSpecifier::from) | named_point)
+);
+
+named!(
+    root_specifier_with_any<Input, RootSpecifier>,
+    alt!(period_with_any | map!(specifier_with_any, RootSpecifier::from) | named_point)
+);
+
+named!(
+    root_specifier_list<Input, Vec<RootSpecifier>>,
     ws!(alt!(
-        do_parse!(list: separated_nonempty_list!(tag!(","), specifier) >> (list))
-            | do_parse!(spec: specifier >> (vec![spec]))
+        do_parse!(list: separated_nonempty_list!(tag!(","), root_specifier) >> (list))
+            | do_parse!(spec: root_specifier >> (vec![spec]))
+    ))
+);
+
+named!(
+    root_specifier_list_with_any<Input, Vec<RootSpecifier>>,
+    ws!(alt!(
+        do_parse!(list: separated_nonempty_list!(tag!(","), root_specifier_with_any) >> (list))
+            | do_parse!(spec: root_specifier_with_any >> (vec![spec]))
     ))
 );
 
 named!(
     field<Input, Field>,
-    do_parse!(specifiers: specifier_list >> (Field { specifiers }))
+    do_parse!(specifiers: root_specifier_list >> (Field { specifiers }))
 );
 
 named!(
-    any_or_field<Input, Field>,
+    field_with_any<Input, Field>,
     alt!(
-        do_parse!(any: any >> (Field { specifiers: vec![any] })) |
-        do_parse!(specifiers: specifier_list >> (Field { specifiers }))
+        do_parse!(specifiers: root_specifier_list_with_any >> (Field { specifiers }))
     )
 );
 
@@ -604,9 +654,9 @@ named!(
             seconds: field >>
             minutes: field >>
             hours: field >>
-            days_of_month: any_or_field >>
+            days_of_month: field_with_any >>
             months: field >>
-            days_of_week: any_or_field >>
+            days_of_week: field_with_any >>
             years: opt!(field) >>
             eof!() >>
             ({
@@ -759,20 +809,20 @@ fn test_nom_invalid_period() {
 fn test_nom_valid_number_list() {
     let expression = "1,2";
     field(Input(expression)).unwrap();
-    any_or_field(Input(expression)).unwrap();
+    field_with_any(Input(expression)).unwrap();
 }
 
 #[test]
 fn test_nom_invalid_number_list() {
     let expression = ",1,2";
     assert!(field(Input(expression)).is_err());
-    assert!(any_or_field(Input(expression)).is_err());
+    assert!(field_with_any(Input(expression)).is_err());
 }
 
 #[test]
-fn test_nom_any_or_field_valid_any() {
+fn test_nom_field_with_any_valid_any() {
     let expression = "?";
-    any_or_field(Input(expression)).unwrap();
+    field_with_any(Input(expression)).unwrap();
 }
 
 #[test]
@@ -785,6 +835,102 @@ fn test_nom_field_invalid_any() {
 fn test_nom_valid_range_field() {
     let expression = "1-4";
     range(Input(expression)).unwrap();
+}
+
+#[test]
+fn test_nom_valid_period_all() {
+    let expression = "*/2";
+    period(Input(expression)).unwrap();
+}
+
+#[test]
+fn test_nom_valid_period_range() {
+    let expression = "10-20/2";
+    period(Input(expression)).unwrap();
+}
+
+#[test]
+fn test_nom_valid_period_named_range() {
+    let expression = "Mon-Thurs/2";
+    period(Input(expression)).unwrap();
+
+    let expression = "February-November/2";
+    period(Input(expression)).unwrap();
+}
+
+#[test]
+fn test_nom_valid_period_point() {
+    let expression = "10/2";
+    period(Input(expression)).unwrap();
+}
+
+#[test]
+fn test_nom_invalid_period_any() {
+    let expression = "?/2";
+    assert!(period(Input(expression)).is_err());
+}
+
+#[test]
+fn test_nom_invalid_period_named_point() {
+    let expression = "Tues/2";
+    assert!(period(Input(expression)).is_err());
+
+    let expression = "February/2";
+    assert!(period(Input(expression)).is_err());
+}
+
+#[test]
+fn test_nom_invalid_period_specifier_range() {
+    let expression = "10-12/*";
+    assert!(period(Input(expression)).is_err());
+}
+
+#[test]
+fn test_nom_valid_period_with_any_all() {
+    let expression = "*/2";
+    period_with_any(Input(expression)).unwrap();
+}
+
+#[test]
+fn test_nom_valid_period_with_any_range() {
+    let expression = "10-20/2";
+    period_with_any(Input(expression)).unwrap();
+}
+
+#[test]
+fn test_nom_valid_period_with_any_named_range() {
+    let expression = "Mon-Thurs/2";
+    period_with_any(Input(expression)).unwrap();
+
+    let expression = "February-November/2";
+    period_with_any(Input(expression)).unwrap();
+}
+
+#[test]
+fn test_nom_valid_period_with_any_point() {
+    let expression = "10/2";
+    period_with_any(Input(expression)).unwrap();
+}
+
+#[test]
+fn test_nom_valid_period_with_any_any() {
+    let expression = "?/2";
+    period_with_any(Input(expression)).unwrap();
+}
+
+#[test]
+fn test_nom_invalid_period_with_any_named_point() {
+    let expression = "Tues/2";
+    assert!(period_with_any(Input(expression)).is_err());
+
+    let expression = "February/2";
+    assert!(period_with_any(Input(expression)).is_err());
+}
+
+#[test]
+fn test_nom_invalid_period_with_any_specifier_range() {
+    let expression = "10-12/*";
+    assert!(period_with_any(Input(expression)).is_err());
 }
 
 #[test]
@@ -874,6 +1020,12 @@ fn test_nom_valid_days_of_week_range() {
 #[test]
 fn test_nom_invalid_days_of_week_range() {
     let expression = "* * * * * BEAR-OWL";
+    assert!(schedule(Input(expression)).is_err());
+}
+
+#[test]
+fn test_nom_invalid_period_with_range_specifier() {
+    let expression = "10-12/10-12 * * * * ?";
     assert!(schedule(Input(expression)).is_err());
 }
 
