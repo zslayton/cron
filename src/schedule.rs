@@ -120,6 +120,15 @@ where
 } // End of impl
 
 impl Schedule {
+    // For the DOM and DOW fields there can be at most one '?', whereas both can be '*'.
+    //
+    // Supported:
+    // - '* * * * * *'
+    // - '* * * ? * *'
+    // - '* * * * * ?'
+    //
+    // Not supported:
+    // - '* * * ? * ?'
     fn from_field_list(fields: Vec<Field>) -> Result<Schedule, Error> {
         let number_of_fields = fields.len();
         if number_of_fields != 6 && number_of_fields != 7 {
@@ -135,9 +144,17 @@ impl Schedule {
         let seconds = Seconds::from_field(iter.next().unwrap())?;
         let minutes = Minutes::from_field(iter.next().unwrap())?;
         let hours = Hours::from_field(iter.next().unwrap())?;
-        let days_of_month = DaysOfMonth::from_field(iter.next().unwrap())?;
+        let days_of_month_field = iter.next().unwrap();
+        let days_of_month_is_any = days_of_month_field.is_any();
+        let days_of_month = DaysOfMonth::from_field(days_of_month_field)?;
         let months = Months::from_field(iter.next().unwrap())?;
-        let days_of_week = DaysOfWeek::from_field(iter.next().unwrap())?;
+        let days_of_week_field = iter.next().unwrap();
+        if days_of_month_is_any && days_of_week_field.is_any() {
+            bail!(ErrorKind::Expression(format!(
+                "'?' can only be specfied for day of month or day of week, exclusively"
+            )));
+        }
+        let days_of_week = DaysOfWeek::from_field(days_of_week_field)?;
         let years: Years = iter
             .next()
             .map(Years::from_field)
@@ -395,7 +412,7 @@ pub type Ordinal = u32;
 // queries
 pub type OrdinalSet = BTreeSet<Ordinal>;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Specifier {
     All,
     Point(Ordinal),
@@ -405,9 +422,48 @@ pub enum Specifier {
     NamedRange(String, String),
 }
 
-#[derive(Debug)]
-pub struct Field {
-    pub specifiers: Vec<Specifier>, // TODO: expose iterator?
+#[derive(Debug, PartialEq)]
+pub enum Field {
+    Standard(StandardField),
+    DayOf(DayOfField),
+}
+
+impl Field {
+    pub fn is_any(&self) -> bool {
+        match self {
+            Self::DayOf(field) => field.is_any(),
+            _ => false,
+        }
+    }
+}
+
+impl From<StandardField> for Field {
+    fn from(standard_field: StandardField) -> Self {
+        Self::Standard(standard_field)
+    }
+}
+
+impl From<DayOfField> for Field {
+    fn from(day_of_field: DayOfField) -> Self {
+        Self::DayOf(day_of_field)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct StandardField {
+    pub specifiers: Vec<Specifier>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum DayOfField {
+    Any,
+    Specifiers(Vec<Specifier>),
+}
+
+impl DayOfField {
+    pub fn is_any(&self) -> bool {
+        *self == DayOfField::Any
+    }
 }
 
 trait FromField
@@ -423,14 +479,32 @@ where
     T: TimeUnitField,
 {
     fn from_field(field: Field) -> Result<T, Error> {
-        let mut ordinals = OrdinalSet::new(); //TODO: Combinator
-        for specifier in field.specifiers {
-            let specifier_ordinals: OrdinalSet = T::ordinals_from_specifier(&specifier)?;
-            for ordinal in specifier_ordinals {
-                ordinals.insert(T::validate_ordinal(ordinal)?);
+        let ordinals = match field {
+            Field::Standard(field) => {
+                let mut ordinals = OrdinalSet::new(); //TODO: Combinator
+                for specifier in field.specifiers {
+                    let specifier_ordinals: OrdinalSet = T::ordinals_from_specifier(&specifier)?;
+                    for ordinal in specifier_ordinals {
+                        ordinals.insert(T::validate_ordinal(ordinal)?);
+                    }
+                }
+                ordinals
             }
-        }
-
+            Field::DayOf(field) => match field {
+                DayOfField::Any => T::supported_ordinals(),
+                DayOfField::Specifiers(specifiers) => {
+                    let mut ordinals = OrdinalSet::new();
+                    for specifier in specifiers {
+                        let specifier_ordinals: OrdinalSet =
+                            T::ordinals_from_specifier(&specifier)?;
+                        for ordinal in specifier_ordinals {
+                            ordinals.insert(T::validate_ordinal(ordinal)?);
+                        }
+                    }
+                    ordinals
+                }
+            },
+        };
         Ok(T::from_ordinal_set(ordinals))
     }
 }
@@ -478,6 +552,8 @@ named!(
 
 named!(all<Input, Specifier>, do_parse!(tag!("*") >> (Specifier::All)));
 
+named!(any<Input, DayOfField>, do_parse!(tag!("?") >> (DayOfField::Any)));
+
 named!(
     specifier<Input, Specifier>,
     alt!(all | period | range | point | named_range | named_point)
@@ -492,8 +568,22 @@ named!(
 );
 
 named!(
-    field<Input, Field>,
-    do_parse!(specifiers: specifier_list >> (Field { specifiers }))
+    standard_field<Input, Field>,
+    map!(
+        do_parse!(specifiers: specifier_list >> (StandardField { specifiers })),
+        Field::from
+    )
+);
+
+named!(
+    day_of_field<Input, Field>,
+    map!(
+        alt!(
+            any |
+            do_parse!(specifiers: specifier_list >> (DayOfField::Specifiers(specifiers)))
+        ),
+        Field::from
+    )
 );
 
 named!(
@@ -591,7 +681,28 @@ named!(
     longhand<Input, Schedule>,
     map_res!(
         complete!(do_parse!(
-            fields: many_m_n!(6, 7, field) >> eof!() >> (fields)
+            seconds: standard_field >>
+            minutes: standard_field >>
+            hours: standard_field >>
+            days_of_month: day_of_field >>
+            months: standard_field >>
+            days_of_week: day_of_field >>
+            years: opt!(standard_field) >>
+            eof!() >>
+            ({
+                let mut fields = vec![
+                    seconds,
+                    minutes,
+                    hours,
+                    days_of_month,
+                    months,
+                    days_of_week,
+                ];
+                if let Some(years) = years {
+                    fields.push(years);
+                }
+                fields
+            })
         )),
         Schedule::from_field_list
     )
@@ -727,13 +838,27 @@ fn test_nom_invalid_period() {
 #[test]
 fn test_nom_valid_number_list() {
     let expression = "1,2";
-    field(Input(expression)).unwrap();
+    standard_field(Input(expression)).unwrap();
+    day_of_field(Input(expression)).unwrap();
 }
 
 #[test]
 fn test_nom_invalid_number_list() {
     let expression = ",1,2";
-    assert!(field(Input(expression)).is_err());
+    assert!(standard_field(Input(expression)).is_err());
+    assert!(day_of_field(Input(expression)).is_err());
+}
+
+#[test]
+fn test_nom_day_of_field_valid_any() {
+    let expression = "?";
+    day_of_field(Input(expression)).unwrap();
+}
+
+#[test]
+fn test_nom_standard_field_invalid_any() {
+    let expression = "?";
+    assert!(standard_field(Input(expression)).is_err());
 }
 
 #[test]
@@ -846,4 +971,58 @@ fn test_no_panic_on_nonexistent_time() {
     let schedule = Schedule::from_str("* * * * * Sat,Sun *").unwrap();
     let next = schedule.after(&dt).next().unwrap();
     assert!(next > dt); // test is ensuring line above does not panic
+}
+
+#[test]
+fn test_nom_valid_days_of_month_any() {
+    let expression = "* * * ? * *";
+    schedule(Input(expression)).unwrap();
+}
+
+#[test]
+fn test_nom_valid_days_of_week_any() {
+    let expression = "* * * * * ?";
+    schedule(Input(expression)).unwrap();
+}
+
+#[test]
+fn test_nom_valid_days_of_month_any_days_of_week_specific() {
+    let expression = "* * * ? * Mon,Thu";
+    schedule(Input(expression)).unwrap();
+}
+
+#[test]
+fn test_nom_valid_days_of_week_any_days_of_month_specific() {
+    let expression = "* * * 1,2 * ?";
+    schedule(Input(expression)).unwrap();
+}
+
+#[test]
+fn test_nom_invalid_other_fields_any() {
+    let expression = "? * * * * *";
+    assert!(schedule(Input(expression)).is_err());
+
+    let expression = "* ? * * * *";
+    assert!(schedule(Input(expression)).is_err());
+
+    let expression = "* * ? * * *";
+    assert!(schedule(Input(expression)).is_err());
+
+    let expression = "* * * * ? *";
+    assert!(schedule(Input(expression)).is_err());
+}
+
+#[test]
+fn test_nom_invalid_dom_and_dow_any() {
+    let expression = "* * * ? * ?";
+    assert!(schedule(Input(expression)).is_err());
+}
+
+#[test]
+fn test_nom_invalid_trailing_characters() {
+    let expression = "* * * * * *foo *";
+    assert!(schedule(Input(expression)).is_err());
+
+    let expression = "* * * * * * * foo";
+    assert!(schedule(Input(expression)).is_err());
 }
