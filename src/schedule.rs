@@ -269,6 +269,16 @@ impl Schedule {
         self.after(&timezone.from_utc_datetime(&Utc::now().naive_utc()))
     }
 
+    /// Provides an owned iterator which will return each DateTime that matches the schedule starting with
+    /// the current time if applicable.
+    pub fn into_upcoming<Z>(self, timezone: Z) -> IntoScheduleIterator<Z>
+    where
+        Z: TimeZone,
+    {
+        let after = timezone.from_utc_datetime(&Utc::now().naive_utc());
+        IntoScheduleIterator::new(self, &after)
+    }
+
     /// Like the `upcoming` method, but allows you to specify a start time other than the present.
     pub fn after<'a, Z>(&'a self, after: &DateTime<Z>) -> ScheduleIterator<'a, Z>
     where
@@ -355,38 +365,56 @@ where
 }
 //TODO: Cutoff datetime?
 
-impl<'a, Z> ScheduleIterator<'a, Z>
+pub struct IntoScheduleIterator<Z>
 where
     Z: TimeZone,
 {
-    fn new(schedule: &'a Schedule, starting_datetime: &DateTime<Z>) -> ScheduleIterator<'a, Z> {
-        ScheduleIterator {
-            is_done: false,
-            schedule: schedule,
-            previous_datetime: starting_datetime.clone(),
+    is_done: bool,
+    schedule: Schedule,
+    previous_datetime: DateTime<Z>,
+}
+
+macro_rules! gen_iter {
+    ($it:ty, $sc:ty, impl $($args:tt)*) => {
+         impl $($args)* $it
+         where
+             Z: TimeZone,
+         {
+             fn new(schedule: $sc, starting_datetime: &DateTime<Z>) -> $it {
+                 Self {
+                     is_done: false,
+                     schedule: schedule,
+                     previous_datetime: starting_datetime.clone(),
+                 }
+             }
+         }
+
+
+         impl $($args)* Iterator for $it
+         where
+             Z: TimeZone,
+         {
+
+             type Item = DateTime<Z>;
+
+             fn next(&mut self) -> Option<DateTime<Z>> {
+                 if self.is_done {
+                     return None;
+                 }
+                 if let Some(next_datetime) = self.schedule.next_after(&self.previous_datetime) {
+                     self.previous_datetime = next_datetime.clone();
+                     Some(next_datetime)
+                 } else {
+                     self.is_done = true;
+                     None
+                 }
+             }
         }
     }
 }
 
-impl<'a, Z> Iterator for ScheduleIterator<'a, Z>
-where
-    Z: TimeZone,
-{
-    type Item = DateTime<Z>;
-
-    fn next(&mut self) -> Option<DateTime<Z>> {
-        if self.is_done {
-            return None;
-        }
-        if let Some(next_datetime) = self.schedule.next_after(&self.previous_datetime) {
-            self.previous_datetime = next_datetime.clone();
-            Some(next_datetime)
-        } else {
-            self.is_done = true;
-            None
-        }
-    }
-}
+gen_iter!(ScheduleIterator<'a, Z>, &'a Schedule, impl <'a, Z>);
+gen_iter!(IntoScheduleIterator<Z>, Schedule, impl <Z>);
 
 pub type Ordinal = u32;
 // TODO: Make OrdinalSet an enum.
@@ -642,11 +670,44 @@ fn test_upcoming_utc() {
 }
 
 #[test]
+fn test_into_upcoming_utc() {
+    let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
+    let schedule = schedule(Input(expression)).unwrap().1;
+    let mut upcoming = schedule.into_upcoming(Utc);
+    let next1 = upcoming.next();
+    assert!(next1.is_some());
+    let next2 = upcoming.next();
+    assert!(next2.is_some());
+    let next3 = upcoming.next();
+    assert!(next3.is_some());
+    println!("Upcoming 1 for {} {:?}", expression, next1);
+    println!("Upcoming 2 for {} {:?}", expression, next2);
+    println!("Upcoming 3 for {} {:?}", expression, next3);
+}
+
+#[test]
 fn test_upcoming_local() {
     use chrono::Local;
     let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
     let schedule = schedule(Input(expression)).unwrap().1;
     let mut upcoming = schedule.upcoming(Local);
+    let next1 = upcoming.next();
+    assert!(next1.is_some());
+    let next2 = upcoming.next();
+    assert!(next2.is_some());
+    let next3 = upcoming.next();
+    assert!(next3.is_some());
+    println!("Upcoming 1 for {} {:?}", expression, next1);
+    println!("Upcoming 2 for {} {:?}", expression, next2);
+    println!("Upcoming 3 for {} {:?}", expression, next3);
+}
+
+#[test]
+fn test_into_upcoming_local() {
+    use chrono::Local;
+    let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
+    let schedule = schedule(Input(expression)).unwrap().1;
+    let mut upcoming = schedule.into_upcoming(Local);
     let next1 = upcoming.next();
     assert!(next1.is_some());
     let next2 = upcoming.next();
