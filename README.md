@@ -1,4 +1,4 @@
-# cron [![](https://api.travis-ci.org/zslayton/cron.png?branch=master)](https://travis-ci.org/zslayton/cron) [![](http://meritbadge.herokuapp.com/cron)](https://crates.io/crates/cron) [![](https://docs.rs/cron/badge.svg)](https://docs.rs/cron)
+# cron ![Rust](https://github.com/zslayton/cron/workflows/Rust/badge.svg) [![](http://meritbadge.herokuapp.com/cron)](https://crates.io/crates/cron) [![](https://docs.rs/cron/badge.svg)](https://docs.rs/cron)
 A cron expression parser. Works with stable Rust v1.28.0.
 
 ```rust
