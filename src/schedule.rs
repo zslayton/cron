@@ -10,7 +10,8 @@ use std::str::{self, FromStr};
 
 use time_unit::*;
 
-#[derive(Clone, Debug)]
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Schedule {
     source: Option<String>,
     years: Years,

@@ -2,7 +2,7 @@ use schedule::{Ordinal, OrdinalSet};
 use std::borrow::Cow;
 use time_unit::TimeUnitField;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Years(OrdinalSet);
 
 impl TimeUnitField for Years {
