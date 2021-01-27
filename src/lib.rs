@@ -36,9 +36,6 @@
 //! */
 //! ```
 
-extern crate chrono;
-extern crate nom;
-
 #[macro_use]
 extern crate error_chain;
 
@@ -49,5 +46,5 @@ pub mod error;
 mod schedule;
 mod time_unit;
 
-pub use schedule::Schedule;
-pub use time_unit::TimeUnitSpec;
+pub use crate::schedule::Schedule;
+pub use crate::time_unit::TimeUnitSpec;

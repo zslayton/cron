@@ -8,6 +8,7 @@ readme = "README.md"
 description = "A cron expression parser and schedule explorer."
 keywords = [ "cron", "schedule", "repeat", "periodic", "time" ]
 license = "MIT"
+edition = "2018"
 
 [lib]
 name = "cron"

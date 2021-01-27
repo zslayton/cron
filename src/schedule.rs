@@ -1,6 +1,6 @@
+use crate::error::{Error, ErrorKind};
 use chrono::offset::TimeZone;
 use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
-use error::{Error, ErrorKind};
 use nom::{types::CompleteStr as Input, *};
 use std::collections::BTreeSet;
 use std::collections::Bound::{Included, Unbounded};
@@ -8,7 +8,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::iter::{self, Iterator};
 use std::str::{self, FromStr};
 
-use time_unit::*;
+use crate::time_unit::*;
 
 #[derive(Clone, Debug)]
 pub struct Schedule {
@@ -327,7 +327,7 @@ impl FromStr for Schedule {
             Ok((_, mut schedule)) => {
                 schedule.source.replace(expression.to_owned());
                 Ok(schedule)
-            }, // Extract from nom tuple
+            } // Extract from nom tuple
             Err(_) => bail!(ErrorKind::Expression("Invalid cron expression.".to_owned())), //TODO: Details
         }
     }
