@@ -14,8 +14,8 @@ pub use self::months::Months;
 pub use self::seconds::Seconds;
 pub use self::years::Years;
 
-use error::*;
-use schedule::{Ordinal, OrdinalSet, Specifier};
+use crate::error::*;
+use crate::schedule::{Ordinal, OrdinalSet, Specifier};
 use std::borrow::Cow;
 use std::collections::btree_set;
 use std::iter;

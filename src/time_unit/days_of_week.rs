@@ -1,7 +1,7 @@
-use error::*;
-use schedule::{Ordinal, OrdinalSet};
+use crate::error::*;
+use crate::schedule::{Ordinal, OrdinalSet};
+use crate::time_unit::TimeUnitField;
 use std::borrow::Cow;
-use time_unit::TimeUnitField;
 
 #[derive(Clone, Debug)]
 pub struct DaysOfWeek(OrdinalSet);
