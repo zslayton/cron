@@ -92,6 +92,18 @@ mod tests {
     }
 
     #[test]
+    fn test_prev_utc() {
+        let expression = "1 2 3 4 10 Fri";
+        let schedule = Schedule::from_str(expression).unwrap();
+        let prev = schedule
+            .upcoming(Utc)
+            .rev()
+            .next()
+            .expect("There was no previous upcoming fire time.");
+        println!("Previous fire time: {}", prev.to_rfc3339());
+    }
+
+    #[test]
     fn test_yearly() {
         let expression = "@yearly";
         let schedule = Schedule::from_str(expression).expect("Failed to parse @yearly.");
