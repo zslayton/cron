@@ -32,6 +32,12 @@ impl<'a> Iterator for OrdinalIter<'a> {
     }
 }
 
+impl<'a> DoubleEndedIterator for OrdinalIter<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.set_iter.next_back().map(|ordinal| ordinal.clone()) // No real expense; Ordinal is u32: Copy
+    }
+}
+
 pub struct OrdinalRangeIter<'a> {
     range_iter: btree_set::Range<'a, Ordinal>,
 }
@@ -40,6 +46,12 @@ impl<'a> Iterator for OrdinalRangeIter<'a> {
     type Item = Ordinal;
     fn next(&mut self) -> Option<Ordinal> {
         self.range_iter.next().map(|ordinal| ordinal.clone()) // No real expense; Ordinal is u32: Copy
+    }
+}
+
+impl<'a> DoubleEndedIterator for OrdinalRangeIter<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.range_iter.next_back().map(|ordinal| ordinal.clone())
     }
 }
 
