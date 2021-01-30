@@ -50,7 +50,6 @@ mod tests {
             date = schedule.after(&date).next().expect("No further dates!");
             println!("-> {}", date);
         }
-        assert!(true);
     }
 
     #[test]
@@ -61,7 +60,6 @@ mod tests {
         for datetime in schedule.upcoming(Utc).take(12) {
             println!("-> {}", datetime);
         }
-        assert!(true);
     }
 
     #[test]
