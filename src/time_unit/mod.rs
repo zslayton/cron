@@ -188,35 +188,38 @@ where
     fn all() -> Self {
         Self::from_ordinal_set(Self::supported_ordinals())
     }
-    fn ordinal_from_name(name: &str) -> Result<Ordinal> {
-        bail!(ErrorKind::Expression(format!(
+    fn ordinal_from_name(name: &str) -> Result<Ordinal, Error> {
+        Err(ErrorKind::Expression(format!(
             "The '{}' field does not support using names. '{}' \
              specified.",
             Self::name(),
             name
-        )))
+        ))
+        .into())
     }
-    fn validate_ordinal(ordinal: Ordinal) -> Result<Ordinal> {
+    fn validate_ordinal(ordinal: Ordinal) -> Result<Ordinal, Error> {
         //println!("validate_ordinal for {} => {}", Self::name(), ordinal);
         match ordinal {
-            i if i < Self::inclusive_min() => bail!(ErrorKind::Expression(format!(
+            i if i < Self::inclusive_min() => Err(ErrorKind::Expression(format!(
                 "{} must be greater than or equal to {}. ('{}' \
                  specified.)",
                 Self::name(),
                 Self::inclusive_min(),
                 i
-            ))),
-            i if i > Self::inclusive_max() => bail!(ErrorKind::Expression(format!(
+            ))
+            .into()),
+            i if i > Self::inclusive_max() => Err(ErrorKind::Expression(format!(
                 "{} must be less than {}. ('{}' specified.)",
                 Self::name(),
                 Self::inclusive_max(),
                 i
-            ))),
+            ))
+            .into()),
             i => Ok(i),
         }
     }
 
-    fn ordinals_from_specifier(specifier: &Specifier) -> Result<OrdinalSet> {
+    fn ordinals_from_specifier(specifier: &Specifier) -> Result<OrdinalSet, Error> {
         use self::Specifier::*;
         //println!("ordinals_from_specifier for {} => {:?}", Self::name(), specifier);
         match *specifier {
@@ -235,12 +238,13 @@ where
             Range(start, end) => {
                 match (Self::validate_ordinal(start), Self::validate_ordinal(end)) {
                     (Ok(start), Ok(end)) if start <= end => Ok((start..end + 1).collect()),
-                    _ => bail!(ErrorKind::Expression(format!(
+                    _ => Err(ErrorKind::Expression(format!(
                         "Invalid range for {}: {}-{}",
                         Self::name(),
                         start,
                         end
-                    ))),
+                    ))
+                    .into()),
                 }
             }
             NamedRange(ref start_name, ref end_name) => {
@@ -248,12 +252,13 @@ where
                 let end = Self::ordinal_from_name(end_name)?;
                 match (Self::validate_ordinal(start), Self::validate_ordinal(end)) {
                     (Ok(start), Ok(end)) if start <= end => Ok((start..end + 1).collect()),
-                    _ => bail!(ErrorKind::Expression(format!(
+                    _ => Err(ErrorKind::Expression(format!(
                         "Invalid named range for {}: {}-{}",
                         Self::name(),
                         start_name,
                         end_name
-                    ))),
+                    ))
+                    .into()),
                 }
             }
         }

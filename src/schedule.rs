@@ -123,11 +123,12 @@ impl Schedule {
     fn from_field_list(fields: Vec<Field>) -> Result<Schedule, Error> {
         let number_of_fields = fields.len();
         if number_of_fields != 6 && number_of_fields != 7 {
-            bail!(ErrorKind::Expression(format!(
+            return Err(ErrorKind::Expression(format!(
                 "Expression has {} fields. Valid cron \
                  expressions have 6 or 7.",
                 number_of_fields
-            )));
+            ))
+            .into());
         }
 
         let mut iter = fields.into_iter();
@@ -328,7 +329,7 @@ impl FromStr for Schedule {
                 schedule.source.replace(expression.to_owned());
                 Ok(schedule)
             } // Extract from nom tuple
-            Err(_) => bail!(ErrorKind::Expression("Invalid cron expression.".to_owned())), //TODO: Details
+            Err(_) => Err(ErrorKind::Expression("Invalid cron expression.".to_owned()).into()), //TODO: Details
         }
     }
 }

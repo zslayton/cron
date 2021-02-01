@@ -16,7 +16,6 @@ name = "cron"
 [dependencies]
 chrono = "~0.4"
 nom = "~4.1"
-error-chain="~0.10.0"
 
 [dev-dependencies]
 chrono-tz = "0.4"
