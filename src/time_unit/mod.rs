@@ -254,7 +254,7 @@ where
         }
     }
 
-    fn ordinals_from_root_specifier(root_specifier: &RootSpecifier) -> Result<OrdinalSet> {
+    fn ordinals_from_root_specifier(root_specifier: &RootSpecifier) -> Result<OrdinalSet, Error> {
         let ordinals = match root_specifier {
             RootSpecifier::Specifier(specifier) => Self::ordinals_from_specifier(&specifier)?,
             RootSpecifier::Period(start, step) => {
