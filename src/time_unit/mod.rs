@@ -263,7 +263,7 @@ where
                     // point and terminating inclusively with the inclusive max
                     Specifier::Point(start) => {
                         let start = Self::validate_ordinal(*start)?;
-                        (start..Self::inclusive_max() + 1).collect()
+                        (start..=Self::inclusive_max()).collect()
                     }
                     specifier => Self::ordinals_from_specifier(&specifier)?,
                 };
