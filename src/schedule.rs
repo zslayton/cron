@@ -164,12 +164,12 @@ where
         self.reset_day_of_month();
     }
 
-    fn day_of_month_lower_bound(&mut self) -> Ordinal {
+    fn day_of_month_upper_bound(&mut self) -> Ordinal {
         if self.first_day_of_month {
             self.first_day_of_month = false;
             return self.initial_datetime.day();
         }
-        DaysOfMonth::inclusive_min()
+        DaysOfMonth::inclusive_max()
     }
 
     fn reset_day_of_month(&mut self) {
@@ -370,19 +370,24 @@ impl Schedule {
             .cloned()
         {
             let month_start = query.month_upper_bound();
+
             if !self.months.ordinals().contains(&month_start) {
                 query.reset_month();
             }
             let month_range = (Included(Months::inclusive_min()), Included(month_start));
+
             for month in self.months.ordinals().range(month_range).rev().cloned() {
-                let day_of_month_start = query.day_of_month_lower_bound();
-                if !self.days_of_month.ordinals().contains(&day_of_month_start) {
+                let day_of_month_end = query.day_of_month_upper_bound();
+                if !self.days_of_month.ordinals().contains(&day_of_month_end) {
                     query.reset_day_of_month();
                 }
 
-                let day_of_month_end = days_in_month(month, year);
+                let day_of_month_end = days_in_month(month, year).min(day_of_month_end);
 
-                let day_of_month_range = (Included(day_of_month_start), Included(day_of_month_end));
+                let day_of_month_range = (
+                    Included(DaysOfMonth::inclusive_min()),
+                    Included(day_of_month_end),
+                );
 
                 'day_loop: for day_of_month in self
                     .days_of_month
@@ -1127,7 +1132,7 @@ fn test_nom_invalid_days_of_week_range() {
 }
 
 #[test]
-fn test_no_panic_on_nonexistent_time() {
+fn test_no_panic_on_nonexistent_time_after() {
     use chrono::offset::TimeZone;
     use chrono_tz::Tz;
 
@@ -1140,6 +1145,21 @@ fn test_no_panic_on_nonexistent_time() {
     let schedule = Schedule::from_str("* * * * * Sat,Sun *").unwrap();
     let next = schedule.after(&dt).next().unwrap();
     assert!(next > dt); // test is ensuring line above does not panic
+}
+#[test]
+fn test_no_panic_on_nonexistent_time_before() {
+    use chrono::offset::TimeZone;
+    use chrono_tz::Tz;
+
+    let schedule_tz: Tz = "Europe/London".parse().unwrap();
+    let dt = schedule_tz
+        .ymd(2019, 10, 27)
+        .and_hms(0, 3, 29)
+        .checked_add_signed(chrono::Duration::hours(1)) // puts it in the middle of the DST transition
+        .unwrap();
+    let schedule = Schedule::from_str("* * * * * Sat,Sun *").unwrap();
+    let prev = schedule.after(&dt).rev().next().unwrap();
+    assert!(prev < dt); // test is ensuring line above does not panic
 }
 
 #[test]
