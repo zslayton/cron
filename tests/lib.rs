@@ -52,7 +52,6 @@ mod tests {
             date = schedule.after(&date).next().expect("No further dates!");
             println!("-> {}", date);
         }
-        assert!(true);
     }
 
     #[test]
@@ -63,7 +62,6 @@ mod tests {
         for datetime in schedule.upcoming(Utc).take(12) {
             println!("-> {}", datetime);
         }
-        assert!(true);
     }
 
     #[test]
@@ -93,6 +91,18 @@ mod tests {
             .next()
             .expect("There was no upcoming fire time.");
         println!("Next fire time: {}", next.to_rfc3339());
+    }
+
+    #[test]
+    fn test_prev_utc() {
+        let expression = "1 2 3 4 10 Fri";
+        let schedule = Schedule::from_str(expression).unwrap();
+        let prev = schedule
+            .upcoming(Utc)
+            .rev()
+            .next()
+            .expect("There was no previous upcoming fire time.");
+        println!("Previous fire time: {}", prev.to_rfc3339());
     }
 
     #[test]

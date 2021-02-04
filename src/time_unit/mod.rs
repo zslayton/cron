@@ -28,7 +28,13 @@ pub struct OrdinalIter<'a> {
 impl<'a> Iterator for OrdinalIter<'a> {
     type Item = Ordinal;
     fn next(&mut self) -> Option<Ordinal> {
-        self.set_iter.next().map(|ordinal| ordinal.clone()) // No real expense; Ordinal is u32: Copy
+        self.set_iter.next().copied()
+    }
+}
+
+impl<'a> DoubleEndedIterator for OrdinalIter<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.set_iter.next_back().copied()
     }
 }
 
@@ -39,7 +45,13 @@ pub struct OrdinalRangeIter<'a> {
 impl<'a> Iterator for OrdinalRangeIter<'a> {
     type Item = Ordinal;
     fn next(&mut self) -> Option<Ordinal> {
-        self.range_iter.next().map(|ordinal| ordinal.clone()) // No real expense; Ordinal is u32: Copy
+        self.range_iter.next().copied()
+    }
+}
+
+impl<'a> DoubleEndedIterator for OrdinalRangeIter<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.range_iter.next_back().copied()
     }
 }
 
@@ -110,7 +122,7 @@ pub trait TimeUnitSpec {
     /// assert_eq!(Some(8), summer.next());
     /// assert_eq!(None, summer.next());
     /// ```
-    fn iter<'a>(&'a self) -> OrdinalIter<'a>;
+    fn iter(&self) -> OrdinalIter;
 
     /// Provides an iterator which will return each included ordinal within the specified range.
     /// # Example
@@ -127,7 +139,7 @@ pub trait TimeUnitSpec {
     /// assert_eq!(Some(15), mid_month_paydays.next());
     /// assert_eq!(None, mid_month_paydays.next());
     /// ```
-    fn range<'a, R>(&'a self, range: R) -> OrdinalRangeIter<'a>
+    fn range<R>(&self, range: R) -> OrdinalRangeIter
     where
         R: RangeBounds<Ordinal>;
 
@@ -152,12 +164,12 @@ where
     fn includes(&self, ordinal: Ordinal) -> bool {
         self.ordinals().contains(&ordinal)
     }
-    fn iter<'a>(&'a self) -> OrdinalIter<'a> {
+    fn iter(&self) -> OrdinalIter {
         OrdinalIter {
             set_iter: TimeUnitField::ordinals(self).iter(),
         }
     }
-    fn range<'a, R>(&'a self, range: R) -> OrdinalRangeIter<'a>
+    fn range<R>(&'_ self, range: R) -> OrdinalRangeIter<'_>
     where
         R: RangeBounds<Ordinal>,
     {
