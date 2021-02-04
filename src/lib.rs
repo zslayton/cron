@@ -36,9 +36,6 @@
 //! */
 //! ```
 
-#[macro_use]
-extern crate error_chain;
-
 #[cfg(test)]
 extern crate chrono_tz;
 
