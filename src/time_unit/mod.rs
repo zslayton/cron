@@ -15,7 +15,7 @@ pub use self::seconds::Seconds;
 pub use self::years::Years;
 
 use crate::error::*;
-use crate::schedule::{Ordinal, OrdinalSet, Specifier};
+use crate::schedule::{Ordinal, OrdinalSet, RootSpecifier, Specifier};
 use std::borrow::Cow;
 use std::collections::btree_set;
 use std::iter;
@@ -225,16 +225,6 @@ where
         match *specifier {
             All => Ok(Self::supported_ordinals()),
             Point(ordinal) => Ok((&[ordinal]).iter().cloned().collect()),
-            NamedPoint(ref name) => Ok((&[Self::ordinal_from_name(name)?])
-                .iter()
-                .cloned()
-                .collect()),
-            Period(start, step) => {
-                let start = Self::validate_ordinal(start)?;
-                Ok((start..Self::inclusive_max() + 1)
-                    .step_by(step as usize)
-                    .collect())
-            }
             Range(start, end) => {
                 match (Self::validate_ordinal(start), Self::validate_ordinal(end)) {
                     (Ok(start), Ok(end)) if start <= end => Ok((start..end + 1).collect()),
@@ -262,5 +252,28 @@ where
                 }
             }
         }
+    }
+
+    fn ordinals_from_root_specifier(root_specifier: &RootSpecifier) -> Result<OrdinalSet, Error> {
+        let ordinals = match root_specifier {
+            RootSpecifier::Specifier(specifier) => Self::ordinals_from_specifier(&specifier)?,
+            RootSpecifier::Period(start, step) => {
+                let base_set = match start {
+                    // A point prior to a period implies a range whose start is the specified
+                    // point and terminating inclusively with the inclusive max
+                    Specifier::Point(start) => {
+                        let start = Self::validate_ordinal(*start)?;
+                        (start..=Self::inclusive_max()).collect()
+                    }
+                    specifier => Self::ordinals_from_specifier(&specifier)?,
+                };
+                base_set.into_iter().step_by(*step as usize).collect()
+            }
+            RootSpecifier::NamedPoint(ref name) => (&[Self::ordinal_from_name(name)?])
+                .iter()
+                .cloned()
+                .collect::<OrdinalSet>(),
+        };
+        Ok(ordinals)
     }
 }
