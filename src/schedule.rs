@@ -530,43 +530,46 @@ impl Schedule {
 
     /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the years included
     /// in this [Schedule](struct.Schedule.html).
-    pub fn years(&self) -> &impl TimeUnitSpec {
-        &self.years
+    pub fn years(&self) -> &Years {
+        &self.years.as_ref().unwrap_or(&Years::all())
     }
 
     /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the months of the year included
     /// in this [Schedule](struct.Schedule.html).
-    pub fn months(&self) -> &impl TimeUnitSpec {
-        &self.months
+    pub fn months(&self) -> &Months  {
+        &self.months.as_ref().unwrap_or(&Months::all())
     }
 
     /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the days of the month included
     /// in this [Schedule](struct.Schedule.html).
-    pub fn days_of_month(&self) -> &impl TimeUnitSpec {
-        &self.days_of_month
+    pub fn days_of_month(&self) -> &DaysOfMonth  {
+        &self.days_of_month.as_ref().unwrap_or(&DaysOfMonth::all())
     }
 
     /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the days of the week included
     /// in this [Schedule](struct.Schedule.html).
-    pub fn days_of_week(&self) -> &impl TimeUnitSpec {
-        &self.days_of_week
+    pub fn days_of_week(&self) -> &DaysOfWeek {
+        &self.days_of_week.as_ref().unwrap_or(&DaysOfWeek::all())
     }
 
     /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the hours of the day included
     /// in this [Schedule](struct.Schedule.html).
-    pub fn hours(&self) -> &impl TimeUnitSpec {
-        &self.hours
+    pub fn hours(&self) -> &Hours {
+        &self.hours.as_ref().unwrap_or(&Hours::all())
     }
 
     /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the minutes of the hour included
     /// in this [Schedule](struct.Schedule.html).
-    pub fn minutes(&self) -> &impl TimeUnitSpec {
-        &self.minutes
+    pub fn minutes(&self) -> &Minutes {
+        &self.minutes.as_ref().unwrap_or(&Minutes::all())
     }
 
     /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the seconds of the minute included
     /// in this [Schedule](struct.Schedule.html).
-    pub fn seconds(&self) -> &impl TimeUnitSpec {
+    pub fn seconds(&self) -> &Seconds {
+        &self.seconds.as_ref().unwrap_or(&Seconds::all())
+    }
+
     /// Returns an Option of [TimeUnitSpec](trait.TimeUnitSpec.html) describing the years included
     /// in this [Schedule](struct.Schedule.html), or None if they where unspecified.
     pub fn years_or_unspecified(&self) -> &Option<Years> {
