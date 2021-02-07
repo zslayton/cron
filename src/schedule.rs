@@ -34,16 +34,18 @@ impl Schedule {
         let days_of_month = DaysOfMonth::from_field(iter.next().unwrap())?;
         let months = Months::from_field(iter.next().unwrap())?;
         let days_of_week = DaysOfWeek::from_field(iter.next().unwrap())?;
-        let years: Years = iter.next().map(Years::from_field).unwrap_or_else(|| Ok(Years::all()))?;
+        let years: Option<Years> = match iter.next() {
+            Some(f) => Years::from_field(f)?,
+            None => None
+        };
 
-        //TODO: Remove Some(...)
-        Ok(Schedule::from(Some(seconds),
-                        Some(minutes),
-                        Some(hours),
-                        Some(days_of_month),
-                        Some(months),
-                        Some(days_of_week),
-                        Some(years)))
+        Ok(Schedule::from(seconds,
+                          minutes,
+                          hours,
+                          days_of_month,
+                          months,
+                          days_of_week,
+                          years,))
     }
 
     fn from(seconds: Option<Seconds>,
