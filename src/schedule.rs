@@ -567,6 +567,45 @@ impl Schedule {
     /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the seconds of the minute included
     /// in this [Schedule](struct.Schedule.html).
     pub fn seconds(&self) -> &impl TimeUnitSpec {
+    /// Returns an Option of [TimeUnitSpec](trait.TimeUnitSpec.html) describing the years included
+    /// in this [Schedule](struct.Schedule.html), or None if they where unspecified.
+    pub fn years_or_unspecified(&self) -> &Option<Years> {
+        &self.years
+    }
+
+    /// Returns an Option of [TimeUnitSpec](trait.TimeUnitSpec.html) describing the months of the year included
+    /// in this [Schedule](struct.Schedule.html), or None if they where unspecified.
+    pub fn months_or_unspecified(&self) -> &Option<Months>  {
+        &self.months
+    }
+
+    /// Returns an Option of [TimeUnitSpec](trait.TimeUnitSpec.html) describing the days of the month included
+    /// in this [Schedule](struct.Schedule.html), or None if they where unspecified.
+    pub fn days_of_month_or_unspecified(&self) -> &Option<DaysOfMonth>  {
+        &self.days_of_month
+    }
+
+    /// Returns an Option of [TimeUnitSpec](trait.TimeUnitSpec.html) describing the days of the week included
+    /// in this [Schedule](struct.Schedule.html), or None if they where unspecified.
+    pub fn days_of_week_or_unspecified(&self) -> &Option<DaysOfWeek> {
+        &self.days_of_week
+    }
+
+    /// Returns an Option of [TimeUnitSpec](trait.TimeUnitSpec.html) describing the hours of the day included
+    /// in this [Schedule](struct.Schedule.html), or None if they where unspecified.
+    pub fn hours_or_unspecified(&self) -> &Option<Hours> {
+        &self.hours
+    }
+
+    /// Returns an Option of [TimeUnitSpec](trait.TimeUnitSpec.html) describing the minutes of the hour included
+    /// in this [Schedule](struct.Schedule.html), or None if they where unspecified.
+    pub fn minutes_or_unspecified(&self) -> &Option<Minutes> {
+        &self.minutes
+    }
+
+    /// Returns an Option of [TimeUnitSpec](trait.TimeUnitSpec.html) describing the seconds of the minute included
+    /// in this [Schedule](struct.Schedule.html), or None if they where unspecified.
+    pub fn seconds_or_unspecified(&self) -> &Option<Seconds> {
         &self.seconds
     }
 }
