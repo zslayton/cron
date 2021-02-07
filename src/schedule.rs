@@ -9,13 +9,13 @@ use std::iter::{self, Iterator};
 use time_unit::*;
 
 pub struct Schedule {
-    years: Years,
-    days_of_week: DaysOfWeek,
-    months: Months,
-    days_of_month: DaysOfMonth,
-    hours: Hours,
-    minutes: Minutes,
-    seconds: Seconds,
+    years: Option<Years>,
+    days_of_week: Option<DaysOfWeek>,
+    months: Option<Months>,
+    days_of_month: Option<DaysOfMonth>,
+    hours: Option<Hours>,
+    minutes: Option<Minutes>,
+    seconds: Option<Seconds>,
 }
 
 impl Schedule {
