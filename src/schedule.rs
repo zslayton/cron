@@ -229,7 +229,7 @@ pub type Ordinal = u32;
 //`All` can iterate from inclusive_min to inclusive_max and answer membership queries
 pub type OrdinalSet = BTreeSet<Ordinal>;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Specifier {
     All,
     Point(Ordinal),
@@ -248,13 +248,14 @@ trait FromField
     where Self: Sized
 {
     //TODO: Replace with std::convert::TryFrom when stable
-    fn from_field(field: Field) -> Result<Self, ExpressionError>;
+    fn from_field(field: Field) -> Result<Option<Self>, ExpressionError>;
 }
 
 impl<T> FromField for T
     where T: TimeUnitField
 {
-    fn from_field(field: Field) -> Result<T, ExpressionError> {
+    fn from_field(field: Field) -> Result<Option<T>, ExpressionError> {
+        if field.specifiers.contains(&Specifier::All) { return Ok(None); }
         let mut ordinals = OrdinalSet::new(); //TODO: Combinator
         for specifier in field.specifiers {
             let specifier_ordinals: OrdinalSet = T::ordinals_from_specifier(&specifier)?;
@@ -263,7 +264,7 @@ impl<T> FromField for T
             }
         }
 
-        Ok(T::from_ordinal_set(ordinals))
+        Ok(Some(T::from_ordinal_set(ordinals)))
     }
 }
 

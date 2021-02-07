@@ -67,7 +67,7 @@ pub trait TimeUnitField
         use std::convert::TryInto;
         //println!("ordinals_from_specifier for {} => {:?}", Self::name(), specifier);
         match *specifier {
-            All => Ok(Self::supported_ordinals()),
+            All => Err(ExpressionError(String::from("This should never happen"))), //TODO: Descriptive error
             Point(ordinal) => Ok((&[ordinal]).iter().cloned().collect()),
             NamedPoint(ref name) => {
                 Ok((&[Self::ordinal_from_name(name)?]).iter().cloned().collect())
