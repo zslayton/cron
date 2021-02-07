@@ -497,208 +497,211 @@ fn days_in_month(month: Ordinal, year: Ordinal) -> u32 {
         _ => 31,
     }
 }
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn test_next_after() {
+        let expression = "0 5,13,40-42 17 1 Jan *";
+        let schedule = schedule(expression.as_bytes());
+        assert!(schedule.is_done());
+        let schedule = schedule.unwrap().1;
+        let next = schedule.next_after(&UTC::now());
+        println!("NEXT AFTER for {} {:?}", expression, next);
+        assert!(next.is_some());
+    }
 
-#[test]
-fn test_next_after() {
-    let expression = "0 5,13,40-42 17 1 Jan *";
-    let schedule = schedule(expression.as_bytes());
-    assert!(schedule.is_done());
-    let schedule = schedule.unwrap().1;
-    let next = schedule.next_after(&UTC::now());
-    println!("NEXT AFTER for {} {:?}", expression, next);
-    assert!(next.is_some());
-}
+    #[test]
+    fn test_upcoming_utc() {
+        let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
+        let schedule = schedule(expression.as_bytes());
+        assert!(schedule.is_done());
+        let schedule = schedule.unwrap().1;
+        let mut upcoming = schedule.upcoming(UTC);
+        let next1 = upcoming.next();
+        assert!(next1.is_some());
+        let next2 = upcoming.next();
+        assert!(next2.is_some());
+        let next3 = upcoming.next();
+        assert!(next3.is_some());
+        println!("Upcoming 1 for {} {:?}", expression, next1);
+        println!("Upcoming 2 for {} {:?}", expression, next2);
+        println!("Upcoming 3 for {} {:?}", expression, next3);
+    }
 
-#[test]
-fn test_upcoming_utc() {
-    let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
-    let schedule = schedule(expression.as_bytes());
-    assert!(schedule.is_done());
-    let schedule = schedule.unwrap().1;
-    let mut upcoming = schedule.upcoming(UTC);
-    let next1 = upcoming.next();
-    assert!(next1.is_some());
-    let next2 = upcoming.next();
-    assert!(next2.is_some());
-    let next3 = upcoming.next();
-    assert!(next3.is_some());
-    println!("Upcoming 1 for {} {:?}", expression, next1);
-    println!("Upcoming 2 for {} {:?}", expression, next2);
-    println!("Upcoming 3 for {} {:?}", expression, next3);
-}
-
-#[test]
-fn test_upcoming_local() {
-    use chrono::Local;
-    let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
-    let schedule = schedule(expression.as_bytes());
-    assert!(schedule.is_done());
-    let schedule = schedule.unwrap().1;
-    let mut upcoming = schedule.upcoming(Local);
-    let next1 = upcoming.next();
-    assert!(next1.is_some());
-    let next2 = upcoming.next();
-    assert!(next2.is_some());
-    let next3 = upcoming.next();
-    assert!(next3.is_some());
-    println!("Upcoming 1 for {} {:?}", expression, next1);
-    println!("Upcoming 2 for {} {:?}", expression, next2);
-    println!("Upcoming 3 for {} {:?}", expression, next3);
-}
+    #[test]
+    fn test_upcoming_local() {
+        use chrono::Local;
+        let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
+        let schedule = schedule(expression.as_bytes());
+        assert!(schedule.is_done());
+        let schedule = schedule.unwrap().1;
+        let mut upcoming = schedule.upcoming(Local);
+        let next1 = upcoming.next();
+        assert!(next1.is_some());
+        let next2 = upcoming.next();
+        assert!(next2.is_some());
+        let next3 = upcoming.next();
+        assert!(next3.is_some());
+        println!("Upcoming 1 for {} {:?}", expression, next1);
+        println!("Upcoming 2 for {} {:?}", expression, next2);
+        println!("Upcoming 3 for {} {:?}", expression, next3);
+    }
 
 
-#[test]
-fn test_valid_from_str() {
-    let schedule = Schedule::from_str("0 0,30 0,6,12,18 1,15 Jan-March Thurs");
-    assert!(schedule.is_ok());
-}
+    #[test]
+    fn test_valid_from_str() {
+        let schedule = Schedule::from_str("0 0,30 0,6,12,18 1,15 Jan-March Thurs");
+        assert!(schedule.is_ok());
+    }
 
-#[test]
-fn test_invalid_from_str() {
-    let schedule = Schedule::from_str("cheesecake 0,30 0,6,12,18 1,15 Jan-March Thurs");
-    assert!(schedule.is_err());
-}
+    #[test]
+    fn test_invalid_from_str() {
+        let schedule = Schedule::from_str("cheesecake 0,30 0,6,12,18 1,15 Jan-March Thurs");
+        assert!(schedule.is_err());
+    }
 
-#[test]
-fn test_nom_valid_number() {
-    let expression = "1997";
-    assert!(point(expression.as_bytes()).is_done());
-}
+    #[test]
+    fn test_nom_valid_number() {
+        let expression = "1997";
+        assert!(point(expression.as_bytes()).is_done());
+    }
 
-#[test]
-fn test_nom_invalid_point() {
-    let expression = "a";
-    assert!(point(expression.as_bytes()).is_err());
-}
+    #[test]
+    fn test_nom_invalid_point() {
+        let expression = "a";
+        assert!(point(expression.as_bytes()).is_err());
+    }
 
-#[test]
-fn test_nom_valid_named_point() {
-    let expression = "WED";
-    assert!(named_point(expression.as_bytes()).is_done());
-}
+    #[test]
+    fn test_nom_valid_named_point() {
+        let expression = "WED";
+        assert!(named_point(expression.as_bytes()).is_done());
+    }
 
-#[test]
-fn test_nom_invalid_named_point() {
-    let expression = "8";
-    assert!(named_point(expression.as_bytes()).is_err());
-}
+    #[test]
+    fn test_nom_invalid_named_point() {
+        let expression = "8";
+        assert!(named_point(expression.as_bytes()).is_err());
+    }
 
-#[test]
-fn test_nom_valid_period() {
-    let expression = "1/2";
-    assert!(period(expression.as_bytes()).is_done());
-}
+    #[test]
+    fn test_nom_valid_period() {
+        let expression = "1/2";
+        assert!(period(expression.as_bytes()).is_done());
+    }
 
-#[test]
-fn test_nom_invalid_period() {
-    let expression = "Wed/4";
-    assert!(period(expression.as_bytes()).is_err());
-}
+    #[test]
+    fn test_nom_invalid_period() {
+        let expression = "Wed/4";
+        assert!(period(expression.as_bytes()).is_err());
+    }
 
-#[test]
-fn test_nom_valid_number_list() {
-    let expression = "1,2";
-    assert!(field(expression.as_bytes()).is_done());
-}
+    #[test]
+    fn test_nom_valid_number_list() {
+        let expression = "1,2";
+        assert!(field(expression.as_bytes()).is_done());
+    }
 
-#[test]
-fn test_nom_invalid_number_list() {
-    let expression = ",1,2";
-    assert!(field(expression.as_bytes()).is_err());
-}
+    #[test]
+    fn test_nom_invalid_number_list() {
+        let expression = ",1,2";
+        assert!(field(expression.as_bytes()).is_err());
+    }
 
-#[test]
-fn test_nom_valid_range_field() {
-    let expression = "1-4";
-    assert!(range(expression.as_bytes()).is_done());
-}
+    #[test]
+    fn test_nom_valid_range_field() {
+        let expression = "1-4";
+        assert!(range(expression.as_bytes()).is_done());
+    }
 
-#[test]
-fn test_nom_invalid_range_field() {
-    let expression = "-4";
-    assert!(range(expression.as_bytes()).is_err());
-}
+    #[test]
+    fn test_nom_invalid_range_field() {
+        let expression = "-4";
+        assert!(range(expression.as_bytes()).is_err());
+    }
 
-#[test]
-fn test_nom_valid_named_range_field() {
-    let expression = "TUES-THURS";
-    assert!(named_range(expression.as_bytes()).is_done());
-}
+    #[test]
+    fn test_nom_valid_named_range_field() {
+        let expression = "TUES-THURS";
+        assert!(named_range(expression.as_bytes()).is_done());
+    }
 
-#[test]
-fn test_nom_invalid_named_range_field() {
-    let expression = "3-THURS";
-    assert!(named_range(expression.as_bytes()).is_err());
-}
+    #[test]
+    fn test_nom_invalid_named_range_field() {
+        let expression = "3-THURS";
+        assert!(named_range(expression.as_bytes()).is_err());
+    }
 
-#[test]
-fn test_nom_valid_schedule() {
-    let expression = "* * * * * *";
-    assert!(schedule(expression.as_bytes()).is_done());
-}
+    #[test]
+    fn test_nom_valid_schedule() {
+        let expression = "* * * * * *";
+        assert!(schedule(expression.as_bytes()).is_done());
+    }
 
-#[test]
-fn test_nom_invalid_schedule() {
-    let expression = "* * * *";
-    assert!(schedule(expression.as_bytes()).is_err());
-}
+    #[test]
+    fn test_nom_invalid_schedule() {
+        let expression = "* * * *";
+        assert!(schedule(expression.as_bytes()).is_err());
+    }
 
-#[test]
-fn test_nom_valid_seconds_list() {
-    let expression = "0,20,40 * * * * *";
-    assert!(schedule(expression.as_bytes()).is_done());
-}
+    #[test]
+    fn test_nom_valid_seconds_list() {
+        let expression = "0,20,40 * * * * *";
+        assert!(schedule(expression.as_bytes()).is_done());
+    }
 
-#[test]
-fn test_nom_valid_seconds_range() {
-    let expression = "0-40 * * * * *";
-    assert!(schedule(expression.as_bytes()).is_done());
-}
+    #[test]
+    fn test_nom_valid_seconds_range() {
+        let expression = "0-40 * * * * *";
+        assert!(schedule(expression.as_bytes()).is_done());
+    }
 
-#[test]
-fn test_nom_valid_seconds_mix() {
-    let expression = "0-5,58 * * * * *";
-    assert!(schedule(expression.as_bytes()).is_done());
-}
+    #[test]
+    fn test_nom_valid_seconds_mix() {
+        let expression = "0-5,58 * * * * *";
+        assert!(schedule(expression.as_bytes()).is_done());
+    }
 
-#[test]
-fn test_nom_invalid_seconds_range() {
-    let expression = "0-65 * * * * *";
-    assert!(schedule(expression.as_bytes()).is_err());
-}
+    #[test]
+    fn test_nom_invalid_seconds_range() {
+        let expression = "0-65 * * * * *";
+        assert!(schedule(expression.as_bytes()).is_err());
+    }
 
-#[test]
-fn test_nom_invalid_seconds_list() {
-    let expression = "103,12 * * * * *";
-    assert!(schedule(expression.as_bytes()).is_err());
-}
+    #[test]
+    fn test_nom_invalid_seconds_list() {
+        let expression = "103,12 * * * * *";
+        assert!(schedule(expression.as_bytes()).is_err());
+    }
 
-#[test]
-fn test_nom_invalid_seconds_mix() {
-    let expression = "0-5,102 * * * * *";
-    assert!(schedule(expression.as_bytes()).is_err());
-}
+    #[test]
+    fn test_nom_invalid_seconds_mix() {
+        let expression = "0-5,102 * * * * *";
+        assert!(schedule(expression.as_bytes()).is_err());
+    }
 
-#[test]
-fn test_nom_valid_days_of_week_list() {
-    let expression = "* * * * * MON,WED,FRI";
-    assert!(schedule(expression.as_bytes()).is_done());
-}
+    #[test]
+    fn test_nom_valid_days_of_week_list() {
+        let expression = "* * * * * MON,WED,FRI";
+        assert!(schedule(expression.as_bytes()).is_done());
+    }
 
-#[test]
-fn test_nom_invalid_days_of_week_list() {
-    let expression = "* * * * * MON,TURTLE";
-    assert!(schedule(expression.as_bytes()).is_err());
-}
+    #[test]
+    fn test_nom_invalid_days_of_week_list() {
+        let expression = "* * * * * MON,TURTLE";
+        assert!(schedule(expression.as_bytes()).is_err());
+    }
 
-#[test]
-fn test_nom_valid_days_of_week_range() {
-    let expression = "* * * * * MON-FRI";
-    assert!(schedule(expression.as_bytes()).is_done());
-}
+    #[test]
+    fn test_nom_valid_days_of_week_range() {
+        let expression = "* * * * * MON-FRI";
+        assert!(schedule(expression.as_bytes()).is_done());
+    }
 
-#[test]
-fn test_nom_invalid_days_of_week_range() {
-    let expression = "* * * * * BEAR-OWL";
-    assert!(schedule(expression.as_bytes()).is_err());
+    #[test]
+    fn test_nom_invalid_days_of_week_range() {
+        let expression = "* * * * * BEAR-OWL";
+        assert!(schedule(expression.as_bytes()).is_err());
+    }
 }
