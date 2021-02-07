@@ -36,13 +36,14 @@ impl Schedule {
         let days_of_week = DaysOfWeek::from_field(iter.next().unwrap())?;
         let years: Years = iter.next().map(Years::from_field).unwrap_or_else(|| Ok(Years::all()))?;
 
-        Ok(Schedule::from(seconds,
-                          minutes,
-                          hours,
-                          days_of_month,
-                          months,
-                          days_of_week,
-                          years))
+        //TODO: Remove Some(...)
+        Ok(Schedule::from(Some(seconds),
+                        Some(minutes),
+                        Some(hours),
+                        Some(days_of_month),
+                        Some(months),
+                        Some(days_of_week),
+                        Some(years)))
     }
 
     fn from(seconds: Option<Seconds>,
@@ -81,7 +82,7 @@ impl Schedule {
         let mut second_starts = once_and_then(datetime.second(), Seconds::inclusive_min());
 
         //    println!("Looking for next schedule time after {}", after.to_rfc3339());
-        for year in self.years
+        for year in self.years.as_ref().unwrap_or(&Years::all()) // TODO: Change to unwrap_or_else
             .ordinals()
             .range((Included(datetime.year() as u32), Unbounded))
             .cloned() {
@@ -90,13 +91,13 @@ impl Schedule {
             let month_end = Months::inclusive_max();
             let month_range = (Included(month_start), Included(month_end));
 
-            for month in self.months.ordinals().range(month_range).cloned() {
+            for month in self.months.as_ref().unwrap_or(&Months::all()).ordinals().range(month_range).cloned() {
 
                 let day_of_month_start = day_of_month_starts.next().unwrap();
                 let day_of_month_end = days_in_month(month, year);
                 let day_of_month_range = (Included(day_of_month_start), Included(day_of_month_end));
 
-                'day_loop: for day_of_month in self.days_of_month
+                'day_loop: for day_of_month in self.days_of_month.as_ref().unwrap_or(&DaysOfMonth::all())
                     .ordinals()
                     .range(day_of_month_range)
                     .cloned() {
@@ -105,23 +106,23 @@ impl Schedule {
                     let hour_end = Hours::inclusive_max();
                     let hour_range = (Included(hour_start), Included(hour_end));
 
-                    for hour in self.hours.ordinals().range(hour_range).cloned() {
+                    for hour in self.hours.as_ref().unwrap_or(&Hours::all()).ordinals().range(hour_range).cloned() {
 
                         let minute_start = minute_starts.next().unwrap();
                         let minute_end = Minutes::inclusive_max();
                         let minute_range = (Included(minute_start), Included(minute_end));
 
-                        for minute in self.minutes.ordinals().range(minute_range).cloned() {
+                        for minute in self.minutes.as_ref().unwrap_or(&Minutes::all()).ordinals().range(minute_range).cloned() {
 
                             let second_start = second_starts.next().unwrap();
                             let second_end = Seconds::inclusive_max();
                             let second_range = (Included(second_start), Included(second_end));
 
-                            for second in self.seconds.ordinals().range(second_range).cloned() {
+                            for second in self.seconds.as_ref()?.ordinals().range(second_range).cloned() {
                                 let timezone = datetime.timezone();
                                 let candidate = timezone.ymd(year as i32, month, day_of_month)
                                     .and_hms(hour, minute, second);
-                                if !self.days_of_week
+                                if !self.days_of_week.as_ref().unwrap_or(&DaysOfWeek::all())
                                     .ordinals()
                                     .contains(&candidate.weekday().number_from_sunday()) {
                                     continue 'day_loop;
