@@ -45,13 +45,13 @@ impl Schedule {
                           years))
     }
 
-    fn from(seconds: Seconds,
-            minutes: Minutes,
-            hours: Hours,
-            days_of_month: DaysOfMonth,
-            months: Months,
-            days_of_week: DaysOfWeek,
-            years: Years)
+    fn from(seconds: Option<Seconds>,
+            minutes: Option<Minutes>,
+            hours: Option<Hours>,
+            days_of_month: Option<DaysOfMonth>,
+            months: Option<Months>,
+            days_of_week: Option<DaysOfWeek>,
+            years: Option<Years>)
             -> Schedule {
         Schedule {
             years: years,
@@ -379,13 +379,13 @@ named!(shorthand_yearly <Schedule>,
   do_parse!(
     tag!("@yearly") >>
     (Schedule::from(
-      Seconds::from_ordinal(0),
-      Minutes::from_ordinal(0),
-      Hours::from_ordinal(0),
-      DaysOfMonth::from_ordinal(1),
-      Months::from_ordinal(1),
-      DaysOfWeek::all(),
-      Years::all()
+      Some(Seconds::from_ordinal(0)),
+      Some(Minutes::from_ordinal(0)),
+      Some(Hours::from_ordinal(0)),
+      Some(DaysOfMonth::from_ordinal(1)),
+      Some(Months::from_ordinal(1)),
+      None,
+      None,
     ))
   )
 );
@@ -394,13 +394,13 @@ named!(shorthand_monthly <Schedule>,
   do_parse!(
     tag!("@monthly") >>
     (Schedule::from(
-      Seconds::from_ordinal_set(iter::once(0).collect()),
-      Minutes::from_ordinal_set(iter::once(0).collect()),
-      Hours::from_ordinal_set(iter::once(0).collect()),
-      DaysOfMonth::from_ordinal_set(iter::once(1).collect()),
-      Months::all(),
-      DaysOfWeek::all(),
-      Years::all()
+      Some(Seconds::from_ordinal(0)),
+      Some(Minutes::from_ordinal(0)),
+      Some(Hours::from_ordinal(0)),
+      Some(DaysOfMonth::from_ordinal(1)),
+      None,
+      None,
+      None,
     ))
   )
 );
@@ -409,13 +409,13 @@ named!(shorthand_weekly <Schedule>,
   do_parse!(
     tag!("@weekly") >>
     (Schedule::from(
-      Seconds::from_ordinal_set(iter::once(0).collect()),
-      Minutes::from_ordinal_set(iter::once(0).collect()),
-      Hours::from_ordinal_set(iter::once(0).collect()),
-      DaysOfMonth::all(),
-      Months::all(),
-      DaysOfWeek::from_ordinal_set(iter::once(1).collect()),
-      Years::all()
+      Some(Seconds::from_ordinal(0)),
+      Some(Minutes::from_ordinal(0)),
+      Some(Hours::from_ordinal(0)),
+      None,
+      None,
+      Some(DaysOfWeek::from_ordinal(1)),
+      None,
     ))
   )
 );
@@ -424,13 +424,13 @@ named!(shorthand_daily <Schedule>,
   do_parse!(
     tag!("@daily") >>
     (Schedule::from(
-      Seconds::from_ordinal_set(iter::once(0).collect()),
-      Minutes::from_ordinal_set(iter::once(0).collect()),
-      Hours::from_ordinal_set(iter::once(0).collect()),
-      DaysOfMonth::all(),
-      Months::all(),
-      DaysOfWeek::all(),
-      Years::all()
+      Some(Seconds::from_ordinal(0)),
+      Some(Minutes::from_ordinal(0)),
+      Some(Hours::from_ordinal(0)),
+      None,
+      None,
+      None,
+      None,
     ))
   )
 );
@@ -439,13 +439,13 @@ named!(shorthand_hourly <Schedule>,
   do_parse!(
     tag!("@hourly") >>
     (Schedule::from(
-      Seconds::from_ordinal_set(iter::once(0).collect()),
-      Minutes::from_ordinal_set(iter::once(0).collect()),
-      Hours::all(),
-      DaysOfMonth::all(),
-      Months::all(),
-      DaysOfWeek::all(),
-      Years::all()
+      Some(Seconds::from_ordinal(0)),
+      Some(Minutes::from_ordinal(0)),
+      None,
+      None,
+      None,
+      None,
+      None,
     ))
   )
 );
