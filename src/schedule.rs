@@ -277,55 +277,82 @@ impl Schedule {
     where
         Z: TimeZone,
     {
+
         let mut query = NextAfterQuery::from(after);
-        for year in self
-            .years
+        for year in self.years
+            .as_ref()
+            .unwrap_or(&Years::all())
             .ordinals()
             .range((Included(query.year_lower_bound()), Unbounded))
             .cloned()
         {
             let month_start = query.month_lower_bound();
-            if !self.months.ordinals().contains(&month_start) {
+            let all_months = &Months::all();
+            let month_ordinals = self.months
+                .as_ref()
+                .unwrap_or(all_months)
+                .ordinals(); 
+            if !month_ordinals.contains(&month_start) {
                 query.reset_month();
             }
             let month_range = (Included(month_start), Included(Months::inclusive_max()));
-            for month in self.months.ordinals().range(month_range).cloned() {
+            for month in month_ordinals.range(month_range).cloned() {
                 let day_of_month_start = query.day_of_month_lower_bound();
-                if !self.days_of_month.ordinals().contains(&day_of_month_start) {
+                let all_days_of_month = &DaysOfMonth::all();
+                let day_of_month_ordinals = self.days_of_month
+                    .as_ref()
+                    .unwrap_or(all_days_of_month)
+                    .ordinals();
+
+                if !day_of_month_ordinals.contains(&day_of_month_start) {
                     query.reset_day_of_month();
                 }
                 let day_of_month_end = days_in_month(month, year);
                 let day_of_month_range = (Included(day_of_month_start), Included(day_of_month_end));
 
-                'day_loop: for day_of_month in self
-                    .days_of_month
-                    .ordinals()
-                    .range(day_of_month_range)
-                    .cloned()
+                'day_loop: for day_of_month in day_of_month_ordinals.range(day_of_month_range).cloned()
                 {
                     let hour_start = query.hour_lower_bound();
-                    if !self.hours.ordinals().contains(&hour_start) {
+                    let all_hours = &Hours::all();
+                    let hour_ordinals = self.hours
+                        .as_ref()
+                        .unwrap_or(all_hours)
+                        .ordinals();
+
+                    if !hour_ordinals.contains(&hour_start) {
                         query.reset_hour();
                     }
                     let hour_range = (Included(hour_start), Included(Hours::inclusive_max()));
 
-                    for hour in self.hours.ordinals().range(hour_range).cloned() {
+                    for hour in hour_ordinals.range(hour_range).cloned() {
                         let minute_start = query.minute_lower_bound();
-                        if !self.minutes.ordinals().contains(&minute_start) {
+                        let all_minutes = &Minutes::all();
+                        let minute_ordinals = self.minutes
+                            .as_ref()
+                            .unwrap_or(all_minutes)
+                            .ordinals();
+
+                        if !minute_ordinals.contains(&minute_start) {
                             query.reset_minute();
                         }
                         let minute_range =
                             (Included(minute_start), Included(Minutes::inclusive_max()));
 
-                        for minute in self.minutes.ordinals().range(minute_range).cloned() {
+                        for minute in minute_ordinals.range(minute_range).cloned() {
                             let second_start = query.second_lower_bound();
-                            if !self.seconds.ordinals().contains(&second_start) {
+                            let all_seconds = &Seconds::all();
+                            let second_ordinals = self.seconds
+                                .as_ref()
+                                .unwrap_or(all_seconds)
+                                .ordinals();
+
+                            if !second_ordinals.contains(&second_start) {
                                 query.reset_second();
                             }
                             let second_range =
                                 (Included(second_start), Included(Seconds::inclusive_max()));
 
-                            for second in self.seconds.ordinals().range(second_range).cloned() {
+                            for second in second_ordinals.range(second_range).cloned() {
                                 let timezone = after.timezone();
                                 let candidate = if let Some(candidate) = timezone
                                     .ymd(year as i32, month, day_of_month)
@@ -335,8 +362,9 @@ impl Schedule {
                                 } else {
                                     continue;
                                 };
-                                if !self
-                                    .days_of_week
+                                if !self.days_of_week
+                                    .as_ref()
+                                    .unwrap_or(&DaysOfWeek::all())
                                     .ordinals()
                                     .contains(&candidate.weekday().number_from_sunday())
                                 {
@@ -358,28 +386,41 @@ impl Schedule {
         None
     }
 
+    // TODO: find whats common with next_after and extract (also create less indentation in process)
     fn prev_from<Z>(&self, before: &DateTime<Z>) -> Option<DateTime<Z>>
     where
         Z: TimeZone,
     {
+        // TODO: Repeating myself here
         let mut query = PrevFromQuery::from(before);
-        for year in self
-            .years
-            .ordinals()
-            .range((Unbounded, Included(query.year_upper_bound())))
-            .rev()
-            .cloned()
+        for year in self.years
+        .as_ref()
+        .unwrap_or(&Years::all())
+        .ordinals()
+        .range((Included(query.year_upper_bound()), Unbounded))
+        .cloned()
         {
             let month_start = query.month_upper_bound();
+            let all_months = &Months::all();
+            let month_ordinals = self.months
+                .as_ref()
+                .unwrap_or(all_months)
+                .ordinals(); 
 
-            if !self.months.ordinals().contains(&month_start) {
+            if !month_ordinals.contains(&month_start) {
                 query.reset_month();
             }
             let month_range = (Included(Months::inclusive_min()), Included(month_start));
 
-            for month in self.months.ordinals().range(month_range).rev().cloned() {
+            for month in month_ordinals.range(month_range).rev().cloned() {
                 let day_of_month_end = query.day_of_month_upper_bound();
-                if !self.days_of_month.ordinals().contains(&day_of_month_end) {
+                let all_days_of_month = &DaysOfMonth::all();
+                let day_of_month_ordinals = self.days_of_month
+                    .as_ref()
+                    .unwrap_or(all_days_of_month)
+                    .ordinals();
+
+                if !day_of_month_ordinals.contains(&day_of_month_end) {
                     query.reset_day_of_month();
                 }
 
@@ -390,36 +431,52 @@ impl Schedule {
                     Included(day_of_month_end),
                 );
 
-                'day_loop: for day_of_month in self
-                    .days_of_month
-                    .ordinals()
+                'day_loop: for day_of_month in day_of_month_ordinals
                     .range(day_of_month_range)
                     .rev()
                     .cloned()
                 {
                     let hour_start = query.hour_upper_bound();
-                    if !self.hours.ordinals().contains(&hour_start) {
+                    let all_hours = &Hours::all();
+                    let hour_ordinals = self.hours
+                        .as_ref()
+                        .unwrap_or(all_hours)
+                        .ordinals();
+
+                    if !hour_ordinals.contains(&hour_start) {
                         query.reset_hour();
                     }
                     let hour_range = (Included(Hours::inclusive_min()), Included(hour_start));
 
-                    for hour in self.hours.ordinals().range(hour_range).rev().cloned() {
+                    for hour in hour_ordinals.range(hour_range).rev().cloned() {
                         let minute_start = query.minute_upper_bound();
-                        if !self.minutes.ordinals().contains(&minute_start) {
+                        let all_minutes = &Minutes::all();
+                        let minute_ordinals = self.minutes
+                            .as_ref()
+                            .unwrap_or(all_minutes)
+                            .ordinals();
+
+                        if !minute_ordinals.contains(&minute_start) {
                             query.reset_minute();
                         }
                         let minute_range =
                             (Included(Minutes::inclusive_min()), Included(minute_start));
 
-                        for minute in self.minutes.ordinals().range(minute_range).rev().cloned() {
+                        for minute in minute_ordinals.range(minute_range).rev().cloned() {
                             let second_start = query.second_upper_bound();
-                            if !self.seconds.ordinals().contains(&second_start) {
+                            let all_seconds = &Seconds::all();
+                            let second_ordinals = self.seconds
+                                .as_ref()
+                                .unwrap_or(all_seconds)
+                                .ordinals();
+
+                            if !second_ordinals.contains(&second_start) {
                                 query.reset_second();
                             }
                             let second_range =
                                 (Included(Seconds::inclusive_min()), Included(second_start));
 
-                            for second in self.seconds.ordinals().range(second_range).rev().cloned()
+                            for second in second_ordinals.range(second_range).rev().cloned()
                             {
                                 let timezone = before.timezone();
                                 let candidate = if let Some(candidate) = timezone
@@ -430,8 +487,9 @@ impl Schedule {
                                 } else {
                                     continue;
                                 };
-                                if !self
-                                    .days_of_week
+                                if !self.days_of_week
+                                    .as_ref()
+                                    .unwrap_or(&DaysOfWeek::all())
                                     .ordinals()
                                     .contains(&candidate.weekday().number_from_sunday())
                                 {
