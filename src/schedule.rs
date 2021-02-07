@@ -5,7 +5,7 @@ use nom::{types::CompleteStr as Input, *};
 use std::collections::BTreeSet;
 use std::collections::Bound::{Included, Unbounded};
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::iter::{self, Iterator};
+use std::iter::{Iterator};
 use std::str::{self, FromStr};
 
 use crate::time_unit::*;
@@ -530,44 +530,44 @@ impl Schedule {
 
     /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the years included
     /// in this [Schedule](struct.Schedule.html).
-    pub fn years(&self) -> &Years {
-        &self.years.as_ref().unwrap_or(&Years::all())
+    pub fn years(&self) -> Years {
+        self.years.clone().unwrap_or(Years::all())
     }
 
     /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the months of the year included
     /// in this [Schedule](struct.Schedule.html).
-    pub fn months(&self) -> &Months  {
-        &self.months.as_ref().unwrap_or(&Months::all())
+    pub fn months(&self) -> Months  {
+        self.months.clone().unwrap_or(Months::all())
     }
 
     /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the days of the month included
     /// in this [Schedule](struct.Schedule.html).
-    pub fn days_of_month(&self) -> &DaysOfMonth  {
-        &self.days_of_month.as_ref().unwrap_or(&DaysOfMonth::all())
+    pub fn days_of_month(&self) -> DaysOfMonth  {
+        self.days_of_month.clone().unwrap_or(DaysOfMonth::all())
     }
 
     /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the days of the week included
     /// in this [Schedule](struct.Schedule.html).
-    pub fn days_of_week(&self) -> &DaysOfWeek {
-        &self.days_of_week.as_ref().unwrap_or(&DaysOfWeek::all())
+    pub fn days_of_week(&self) -> DaysOfWeek {
+        self.days_of_week.clone().unwrap_or(DaysOfWeek::all())
     }
 
     /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the hours of the day included
     /// in this [Schedule](struct.Schedule.html).
-    pub fn hours(&self) -> &Hours {
-        &self.hours.as_ref().unwrap_or(&Hours::all())
+    pub fn hours(&self) -> Hours {
+        self.hours.clone().unwrap_or(Hours::all())
     }
 
     /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the minutes of the hour included
     /// in this [Schedule](struct.Schedule.html).
-    pub fn minutes(&self) -> &Minutes {
-        &self.minutes.as_ref().unwrap_or(&Minutes::all())
+    pub fn minutes(&self) -> Minutes {
+        self.minutes.clone().unwrap_or(Minutes::all())
     }
 
     /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the seconds of the minute included
     /// in this [Schedule](struct.Schedule.html).
-    pub fn seconds(&self) -> &Seconds {
-        &self.seconds.as_ref().unwrap_or(&Seconds::all())
+    pub fn seconds(&self) -> Seconds {
+        self.seconds.clone().unwrap_or(Seconds::all())
     }
 
     /// Returns an Option of [TimeUnitSpec](trait.TimeUnitSpec.html) describing the years included
