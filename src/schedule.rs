@@ -742,22 +742,24 @@ where
     Self: Sized,
 {
     //TODO: Replace with std::convert::TryFrom when stable
-    fn from_field(field: Field) -> Result<Self, Error>;
+    fn from_field(field: Field) -> Result<Option<Self>, Error>;
 }
 
 impl<T> FromField for T
 where
     T: TimeUnitField,
 {
-    fn from_field(field: Field) -> Result<T, Error> {
+    fn from_field(field: Field) -> Result<Option<T>, Error> {
+
         let mut ordinals = OrdinalSet::new(); // TODO:Combinator
         for specifier in field.specifiers {
+            if specifier == RootSpecifier::Specifier(Specifier::All) { return Ok(None); }
             let specifier_ordinals: OrdinalSet = T::ordinals_from_root_specifier(&specifier)?;
             for ordinal in specifier_ordinals {
                 ordinals.insert(T::validate_ordinal(ordinal)?);
             }
         }
-        Ok(T::from_ordinal_set(ordinals))
+        Ok(Some(T::from_ordinal_set(ordinals)))
     }
 }
 
@@ -867,80 +869,80 @@ named!(
 named!(
     shorthand_yearly<Input, Schedule>,
     do_parse!(
-        tag!("@yearly")
-            >> (Schedule::from(
-                Seconds::from_ordinal(0),
-                Minutes::from_ordinal(0),
-                Hours::from_ordinal(0),
-                DaysOfMonth::from_ordinal(1),
-                Months::from_ordinal(1),
-                DaysOfWeek::all(),
-                Years::all()
-            ))
+        tag!("@yearly") >>
+        (Schedule::from(
+        Some(Seconds::from_ordinal(0)),
+        Some(Minutes::from_ordinal(0)),
+        Some(Hours::from_ordinal(0)),
+        Some(DaysOfMonth::from_ordinal(1)),
+        Some(Months::from_ordinal(1)),
+        None,
+        None,
+        ))
     )
 );
 
 named!(
     shorthand_monthly<Input, Schedule>,
     do_parse!(
-        tag!("@monthly")
-            >> (Schedule::from(
-                Seconds::from_ordinal_set(iter::once(0).collect()),
-                Minutes::from_ordinal_set(iter::once(0).collect()),
-                Hours::from_ordinal_set(iter::once(0).collect()),
-                DaysOfMonth::from_ordinal_set(iter::once(1).collect()),
-                Months::all(),
-                DaysOfWeek::all(),
-                Years::all()
-            ))
+        tag!("@monthly") >>
+        (Schedule::from(
+        Some(Seconds::from_ordinal(0)),
+        Some(Minutes::from_ordinal(0)),
+        Some(Hours::from_ordinal(0)),
+        Some(DaysOfMonth::from_ordinal(1)),
+        None,
+        None,
+        None,
+        ))
     )
 );
 
 named!(
     shorthand_weekly<Input, Schedule>,
     do_parse!(
-        tag!("@weekly")
-            >> (Schedule::from(
-                Seconds::from_ordinal_set(iter::once(0).collect()),
-                Minutes::from_ordinal_set(iter::once(0).collect()),
-                Hours::from_ordinal_set(iter::once(0).collect()),
-                DaysOfMonth::all(),
-                Months::all(),
-                DaysOfWeek::from_ordinal_set(iter::once(1).collect()),
-                Years::all()
-            ))
+        tag!("@weekly") >>
+        (Schedule::from(
+        Some(Seconds::from_ordinal(0)),
+        Some(Minutes::from_ordinal(0)),
+        Some(Hours::from_ordinal(0)),
+        None,
+        None,
+        Some(DaysOfWeek::from_ordinal(1)),
+        None,
+        ))
     )
 );
 
 named!(
     shorthand_daily<Input, Schedule>,
     do_parse!(
-        tag!("@daily")
-            >> (Schedule::from(
-                Seconds::from_ordinal_set(iter::once(0).collect()),
-                Minutes::from_ordinal_set(iter::once(0).collect()),
-                Hours::from_ordinal_set(iter::once(0).collect()),
-                DaysOfMonth::all(),
-                Months::all(),
-                DaysOfWeek::all(),
-                Years::all()
-            ))
+        tag!("@daily") >>
+        (Schedule::from(
+        Some(Seconds::from_ordinal(0)),
+        Some(Minutes::from_ordinal(0)),
+        Some(Hours::from_ordinal(0)),
+        None,
+        None,
+        None,
+        None,
+        ))
     )
 );
 
 named!(
     shorthand_hourly<Input, Schedule>,
     do_parse!(
-        tag!("@hourly")
-            >> (Schedule::from(
-                Seconds::from_ordinal_set(iter::once(0).collect()),
-                Minutes::from_ordinal_set(iter::once(0).collect()),
-                Hours::all(),
-                DaysOfMonth::all(),
-                Months::all(),
-                DaysOfWeek::all(),
-                Years::all()
-            ))
+        tag!("@hourly") >>
+        (Schedule::from(
+        Some(Seconds::from_ordinal(0)),
+        Some(Minutes::from_ordinal(0)),
+        None,
+        None,
+        None,
+        None,
+        None,
+        ))
     )
 );
 
