@@ -13,13 +13,13 @@ use crate::time_unit::*;
 #[derive(Clone, Debug)]
 pub struct Schedule {
     source: Option<String>,
-    years: Years,
-    days_of_week: DaysOfWeek,
-    months: Months,
-    days_of_month: DaysOfMonth,
-    hours: Hours,
-    minutes: Minutes,
-    seconds: Seconds,
+    years: Option<Years>,
+    days_of_week: Option<DaysOfWeek>,
+    months: Option<Months>,
+    days_of_month: Option<DaysOfMonth>,
+    hours: Option<Hours>,
+    minutes: Option<Minutes>,
+    seconds: Option<Seconds>,
 }
 
 struct NextAfterQuery<Z>
@@ -236,10 +236,10 @@ impl Schedule {
         let days_of_month = DaysOfMonth::from_field(iter.next().unwrap())?;
         let months = Months::from_field(iter.next().unwrap())?;
         let days_of_week = DaysOfWeek::from_field(iter.next().unwrap())?;
-        let years: Years = iter
-            .next()
-            .map(Years::from_field)
-            .unwrap_or_else(|| Ok(Years::all()))?;
+        let years = match iter.next() {
+            Some(f) => Years::from_field(f)?,
+            None => None
+        };
 
         Ok(Schedule::from(
             seconds,
@@ -253,13 +253,13 @@ impl Schedule {
     }
 
     fn from(
-        seconds: Seconds,
-        minutes: Minutes,
-        hours: Hours,
-        days_of_month: DaysOfMonth,
-        months: Months,
-        days_of_week: DaysOfWeek,
-        years: Years,
+        seconds: Option<Seconds>,
+        minutes: Option<Minutes>,
+        hours: Option<Hours>,
+        days_of_month: Option<DaysOfMonth>,
+        months: Option<Months>,
+        days_of_week: Option<DaysOfWeek>,
+        years: Option<Years>
     ) -> Schedule {
         Schedule {
             source: None,
