@@ -64,6 +64,7 @@ pub trait TimeUnitField
 
     fn ordinals_from_specifier(specifier: &Specifier) -> Result<OrdinalSet, ExpressionError> {
         use self::Specifier::*;
+        use std::convert::TryInto;
         //println!("ordinals_from_specifier for {} => {:?}", Self::name(), specifier);
         match *specifier {
             All => Ok(Self::supported_ordinals()),
@@ -73,7 +74,7 @@ pub trait TimeUnitField
             }
             Period(start, step) => {
                 let start = Self::validate_ordinal(start)?;
-                Ok((start..Self::inclusive_max() + 1).step_by(step).collect())
+                Ok((start..Self::inclusive_max() + 1).step_by(step.try_into().unwrap()).collect())
             }
             Range(start, end) => {
                 match (Self::validate_ordinal(start), Self::validate_ordinal(end)) {
