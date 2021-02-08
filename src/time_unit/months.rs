@@ -2,6 +2,7 @@ use crate::error::*;
 use crate::ordinal::{Ordinal, OrdinalSet};
 use crate::time_unit::TimeUnitField;
 use std::borrow::Cow;
+use phf::{Map, phf_map};
 
 #[derive(Clone, Debug)]
 pub struct Months(OrdinalSet);
@@ -20,27 +21,40 @@ impl TimeUnitField for Months {
         12
     }
     fn ordinal_from_name(name: &str) -> Result<Ordinal, Error> {
-        //TODO: Use phf crate
-        let ordinal = match name.to_lowercase().as_ref() {
-            "jan" | "january" => 1,
-            "feb" | "february" => 2,
-            "mar" | "march" => 3,
-            "apr" | "april" => 4,
+        static MONTH_MAP : Map<&'static str, Ordinal> = phf_map! {
+            "jan" => 1,
+            "january" => 1,
+            "feb" => 2,
+            "february" => 2,
+            "mar" => 3,
+            "march" => 3,
+            "apr" => 4,
+            "april" => 4,
             "may" => 5,
-            "jun" | "june" => 6,
-            "jul" | "july" => 7,
-            "aug" | "august" => 8,
-            "sep" | "september" => 9,
-            "oct" | "october" => 10,
-            "nov" | "november" => 11,
-            "dec" | "december" => 12,
-            _ => {
-                return Err(
-                    ErrorKind::Expression(format!("'{}' is not a valid month name.", name)).into(),
-                )
-            }
+            "jun" => 6,
+            "june" => 6,
+            "jul" => 7,
+            "july" => 7,
+            "aug" => 8,
+            "august" => 8,
+            "sep" => 9,
+            "september" => 9,
+            "oct" => 10,
+            "october" => 10,
+            "nov" => 11,
+            "november" => 11,
+            "dec" => 12,
+            "december" => 12,
         };
-        Ok(ordinal)
+
+        MONTH_MAP.get::<str>(name.to_lowercase().as_ref())
+        .copied()
+        .ok_or(Error::from( ErrorKind::Expression(
+            format!( 
+                "'{}' is not a valid day of the month name.",
+                name
+            )
+        )))
     }
     fn ordinals(&self) -> &OrdinalSet {
         &self.0
