@@ -1,6 +1,6 @@
 use crate::error::{Error, ErrorKind};
 use chrono::offset::TimeZone;
-use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
+use chrono::{DateTime, Datelike, Utc};
 use nom::{types::CompleteStr as Input, *};
 use std::collections::Bound::{Included, Unbounded};
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -10,6 +10,7 @@ use std::str::{self, FromStr};
 use crate::time_unit::*;
 use crate::ordinal::*;
 use crate::specifier::*;
+use crate::queries::*;
 
 #[derive(Clone, Debug)]
 pub struct Schedule {
@@ -21,200 +22,6 @@ pub struct Schedule {
     hours: Hours,
     minutes: Minutes,
     seconds: Seconds,
-}
-
-struct NextAfterQuery<Z>
-where
-    Z: TimeZone,
-{
-    initial_datetime: DateTime<Z>,
-    first_month: bool,
-    first_day_of_month: bool,
-    first_hour: bool,
-    first_minute: bool,
-    first_second: bool,
-}
-
-impl<Z> NextAfterQuery<Z>
-where
-    Z: TimeZone,
-{
-    fn from(after: &DateTime<Z>) -> NextAfterQuery<Z> {
-        NextAfterQuery {
-            initial_datetime: after.clone() + Duration::seconds(1),
-            first_month: true,
-            first_day_of_month: true,
-            first_hour: true,
-            first_minute: true,
-            first_second: true,
-        }
-    }
-
-    fn year_lower_bound(&self) -> Ordinal {
-        // Unlike the other units, years will never wrap around.
-        self.initial_datetime.year() as u32
-    }
-
-    fn month_lower_bound(&mut self) -> Ordinal {
-        if self.first_month {
-            self.first_month = false;
-            return self.initial_datetime.month();
-        }
-        Months::inclusive_min()
-    }
-
-    fn reset_month(&mut self) {
-        self.first_month = false;
-        self.reset_day_of_month();
-    }
-
-    fn day_of_month_lower_bound(&mut self) -> Ordinal {
-        if self.first_day_of_month {
-            self.first_day_of_month = false;
-            return self.initial_datetime.day();
-        }
-        DaysOfMonth::inclusive_min()
-    }
-
-    fn reset_day_of_month(&mut self) {
-        self.first_day_of_month = false;
-        self.reset_hour();
-    }
-
-    fn hour_lower_bound(&mut self) -> Ordinal {
-        if self.first_hour {
-            self.first_hour = false;
-            return self.initial_datetime.hour();
-        }
-        Hours::inclusive_min()
-    }
-
-    fn reset_hour(&mut self) {
-        self.first_hour = false;
-        self.reset_minute();
-    }
-
-    fn minute_lower_bound(&mut self) -> Ordinal {
-        if self.first_minute {
-            self.first_minute = false;
-            return self.initial_datetime.minute();
-        }
-        Minutes::inclusive_min()
-    }
-
-    fn reset_minute(&mut self) {
-        self.first_minute = false;
-        self.reset_second();
-    }
-
-    fn second_lower_bound(&mut self) -> Ordinal {
-        if self.first_second {
-            self.first_second = false;
-            return self.initial_datetime.second();
-        }
-        Seconds::inclusive_min()
-    }
-
-    fn reset_second(&mut self) {
-        self.first_second = false;
-    }
-} // End of impl
-
-struct PrevFromQuery<Z>
-where
-    Z: TimeZone,
-{
-    initial_datetime: DateTime<Z>,
-    first_month: bool,
-    first_day_of_month: bool,
-    first_hour: bool,
-    first_minute: bool,
-    first_second: bool,
-}
-
-impl<Z> PrevFromQuery<Z>
-where
-    Z: TimeZone,
-{
-    fn from(before: &DateTime<Z>) -> PrevFromQuery<Z> {
-        PrevFromQuery {
-            initial_datetime: before.clone() - Duration::seconds(1),
-            first_month: true,
-            first_day_of_month: true,
-            first_hour: true,
-            first_minute: true,
-            first_second: true,
-        }
-    }
-
-    fn year_upper_bound(&self) -> Ordinal {
-        // Unlike the other units, years will never wrap around.
-        self.initial_datetime.year() as u32
-    }
-
-    fn month_upper_bound(&mut self) -> Ordinal {
-        if self.first_month {
-            self.first_month = false;
-            return self.initial_datetime.month();
-        }
-        Months::inclusive_max()
-    }
-
-    fn reset_month(&mut self) {
-        self.first_month = false;
-        self.reset_day_of_month();
-    }
-
-    fn day_of_month_upper_bound(&mut self) -> Ordinal {
-        if self.first_day_of_month {
-            self.first_day_of_month = false;
-            return self.initial_datetime.day();
-        }
-        DaysOfMonth::inclusive_max()
-    }
-
-    fn reset_day_of_month(&mut self) {
-        self.first_day_of_month = false;
-        self.reset_hour();
-    }
-
-    fn hour_upper_bound(&mut self) -> Ordinal {
-        if self.first_hour {
-            self.first_hour = false;
-            return self.initial_datetime.hour();
-        }
-        Hours::inclusive_max()
-    }
-
-    fn reset_hour(&mut self) {
-        self.first_hour = false;
-        self.reset_minute();
-    }
-
-    fn minute_upper_bound(&mut self) -> Ordinal {
-        if self.first_minute {
-            self.first_minute = false;
-            return self.initial_datetime.minute();
-        }
-        Minutes::inclusive_max()
-    }
-
-    fn reset_minute(&mut self) {
-        self.first_minute = false;
-        self.reset_second();
-    }
-
-    fn second_upper_bound(&mut self) -> Ordinal {
-        if self.first_second {
-            self.first_second = false;
-            return self.initial_datetime.second();
-        }
-        Seconds::inclusive_max()
-    }
-
-    fn reset_second(&mut self) {
-        self.first_second = false;
-    }
 }
 
 impl Schedule {
