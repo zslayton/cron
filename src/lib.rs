@@ -43,6 +43,7 @@ pub mod error;
 mod schedule;
 mod time_unit;
 mod ordinal;
+mod specifier;
 
 pub use crate::schedule::Schedule;
 pub use crate::time_unit::TimeUnitSpec;
