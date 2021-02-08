@@ -42,6 +42,7 @@ extern crate chrono_tz;
 pub mod error;
 mod schedule;
 mod time_unit;
+mod ordinal;
 
 pub use crate::schedule::Schedule;
 pub use crate::time_unit::TimeUnitSpec;

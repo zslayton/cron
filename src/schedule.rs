@@ -2,13 +2,13 @@ use crate::error::{Error, ErrorKind};
 use chrono::offset::TimeZone;
 use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
 use nom::{types::CompleteStr as Input, *};
-use std::collections::BTreeSet;
 use std::collections::Bound::{Included, Unbounded};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::iter::{self, Iterator};
 use std::str::{self, FromStr};
 
 use crate::time_unit::*;
+use crate::ordinal::*;
 
 #[derive(Clone, Debug)]
 pub struct Schedule {
@@ -599,13 +599,6 @@ where
         }
     }
 }
-
-pub type Ordinal = u32;
-// TODO: Make OrdinalSet an enum.
-// It should either be a BTreeSet of ordinals or an `All` option to save space.
-// `All` can iterate from inclusive_min to inclusive_max and answer membership
-// queries
-pub type OrdinalSet = BTreeSet<Ordinal>;
 
 #[derive(Debug, PartialEq)]
 pub enum Specifier {

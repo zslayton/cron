@@ -1,5 +1,5 @@
 use crate::error::*;
-use crate::schedule::{Ordinal, OrdinalSet};
+use crate::ordinal::{Ordinal, OrdinalSet};
 use crate::time_unit::TimeUnitField;
 use std::borrow::Cow;
 
