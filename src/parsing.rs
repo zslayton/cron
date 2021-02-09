@@ -82,7 +82,7 @@ where
                 ordinals.insert(T::validate_ordinal(ordinal)?);
             }
         }
-        Ok(T::from_ordinal_set(ordinals))
+        Ok(T::from_ordinal_set(Some(ordinals)))
     }
 }
 

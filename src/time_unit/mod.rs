@@ -187,20 +187,20 @@ pub trait TimeUnitField
 where
     Self: Sized,
 {
-    fn from_ordinal_set(ordinal_set: OrdinalSet) -> Self;
+    fn from_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self;
     fn name() -> Cow<'static, str>;
     fn inclusive_min() -> Ordinal;
     fn inclusive_max() -> Ordinal;
     fn ordinals(&self) -> &OrdinalSet;
     fn is_specified(&self) -> bool;
     fn from_ordinal(ordinal: Ordinal) -> Self {
-        Self::from_ordinal_set(iter::once(ordinal).collect())
+        Self::from_ordinal_set(Some(iter::once(ordinal).collect()))
     }
     fn supported_ordinals() -> OrdinalSet {
         (Self::inclusive_min()..Self::inclusive_max() + 1).collect()
     }
     fn all() -> Self {
-        Self::from_ordinal_set(Self::supported_ordinals())
+        Self::from_ordinal_set(None)
     }
     fn ordinal_from_name(name: &str) -> Result<Ordinal, Error> {
         Err(ErrorKind::Expression(format!(
