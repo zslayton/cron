@@ -3,7 +3,7 @@ use std::iter::{self, Iterator};
 use std::str::{self, FromStr};
 
 use crate::error::{Error, ErrorKind};
-use crate::schedule::Schedule;
+use crate::schedule::{ScheduleFields, Schedule};
 use crate::specifier::*;
 use crate::time_unit::*;
 use crate::ordinal::*;
@@ -12,17 +12,16 @@ impl FromStr for Schedule {
     type Err = Error;
     fn from_str(expression: &str) -> Result<Self, Self::Err> {
         match schedule(Input(expression)) {
-            Ok((_, mut schedule)) => {
-                schedule.source.replace(expression.to_owned());
-                Ok(schedule)
+            Ok((_, schedule_fields)) => {
+                Ok(Schedule::new(String::from(expression), schedule_fields))
             } // Extract from nom tuple
             Err(_) => Err(ErrorKind::Expression("Invalid cron expression.".to_owned()).into()), //TODO: Details
         }
     }
 }
 
-impl Schedule {
-    fn from_field_list(fields: Vec<Field>) -> Result<Schedule, Error> {
+impl ScheduleFields {
+    fn from_field_list(fields: Vec<Field>) -> Result<ScheduleFields, Error> {
         let number_of_fields = fields.len();
         if number_of_fields != 6 && number_of_fields != 7 {
             return Err(ErrorKind::Expression(format!(
@@ -46,7 +45,7 @@ impl Schedule {
             .map(Years::from_field)
             .unwrap_or_else(|| Ok(Years::all()))?;
 
-        Ok(Schedule::new(
+        Ok(ScheduleFields::new(
             seconds,
             minutes,
             hours,
@@ -191,10 +190,10 @@ named!(
 );
 
 named!(
-    shorthand_yearly<Input, Schedule>,
+    shorthand_yearly<Input, ScheduleFields>,
     do_parse!(
         tag!("@yearly")
-            >> (Schedule::new(
+            >> (ScheduleFields::new(
                 Seconds::from_ordinal(0),
                 Minutes::from_ordinal(0),
                 Hours::from_ordinal(0),
@@ -207,10 +206,10 @@ named!(
 );
 
 named!(
-    shorthand_monthly<Input, Schedule>,
+    shorthand_monthly<Input, ScheduleFields>,
     do_parse!(
         tag!("@monthly")
-            >> (Schedule::new(
+            >> (ScheduleFields::new(
                 Seconds::from_ordinal_set(iter::once(0).collect()),
                 Minutes::from_ordinal_set(iter::once(0).collect()),
                 Hours::from_ordinal_set(iter::once(0).collect()),
@@ -223,10 +222,10 @@ named!(
 );
 
 named!(
-    shorthand_weekly<Input, Schedule>,
+    shorthand_weekly<Input, ScheduleFields>,
     do_parse!(
         tag!("@weekly")
-            >> (Schedule::new(
+            >> (ScheduleFields::new(
                 Seconds::from_ordinal_set(iter::once(0).collect()),
                 Minutes::from_ordinal_set(iter::once(0).collect()),
                 Hours::from_ordinal_set(iter::once(0).collect()),
@@ -239,10 +238,10 @@ named!(
 );
 
 named!(
-    shorthand_daily<Input, Schedule>,
+    shorthand_daily<Input, ScheduleFields>,
     do_parse!(
         tag!("@daily")
-            >> (Schedule::new(
+            >> (ScheduleFields::new(
                 Seconds::from_ordinal_set(iter::once(0).collect()),
                 Minutes::from_ordinal_set(iter::once(0).collect()),
                 Hours::from_ordinal_set(iter::once(0).collect()),
@@ -255,10 +254,10 @@ named!(
 );
 
 named!(
-    shorthand_hourly<Input, Schedule>,
+    shorthand_hourly<Input, ScheduleFields>,
     do_parse!(
         tag!("@hourly")
-            >> (Schedule::new(
+            >> (ScheduleFields::new(
                 Seconds::from_ordinal_set(iter::once(0).collect()),
                 Minutes::from_ordinal_set(iter::once(0).collect()),
                 Hours::all(),
@@ -271,7 +270,7 @@ named!(
 );
 
 named!(
-    shorthand<Input, Schedule>,
+    shorthand<Input, ScheduleFields>,
     alt!(
         shorthand_yearly
             | shorthand_monthly
@@ -282,7 +281,7 @@ named!(
 );
 
 named!(
-    longhand<Input, Schedule>,
+    longhand<Input, ScheduleFields>,
     map_res!(
         complete!(do_parse!(
             seconds: field >>
@@ -308,11 +307,11 @@ named!(
                 fields
             })
         )),
-        Schedule::from_field_list
+        ScheduleFields::from_field_list
     )
 );
 
-named!(schedule<Input, Schedule>, alt!(shorthand | longhand));
+named!(schedule<Input, ScheduleFields>, alt!(shorthand | longhand));
 #[cfg(test)]
 mod test {
     use super::*;
