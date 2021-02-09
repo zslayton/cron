@@ -1,13 +1,22 @@
 use crate::ordinal::{Ordinal, OrdinalSet};
 use crate::time_unit::TimeUnitField;
 use std::borrow::Cow;
+use lazy_static::lazy_static;
+
+lazy_static!{
+    static ref ALL: OrdinalSet = Minutes::all().ordinals.unwrap();
+}
 
 #[derive(Clone, Debug)]
-pub struct Minutes(OrdinalSet);
+pub struct Minutes{
+    ordinals: Option<OrdinalSet>
+}
 
 impl TimeUnitField for Minutes {
     fn from_ordinal_set(ordinal_set: OrdinalSet) -> Self {
-        Minutes(ordinal_set)
+        Minutes{
+            ordinals: Some(ordinal_set)
+        }
     }
     fn name() -> Cow<'static, str> {
         Cow::from("Minutes")
@@ -19,6 +28,12 @@ impl TimeUnitField for Minutes {
         59
     }
     fn ordinals(&self) -> &OrdinalSet {
-        &self.0
+        match &self.ordinals {
+            Some(ordinal_set) => &ordinal_set,
+            None => &ALL
+        }
+    }
+    fn is_specified(&self) -> bool {
+        self.ordinals.is_some()
     }
 }
