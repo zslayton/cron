@@ -27,7 +27,7 @@ pub struct Schedule {
 }
 
 impl Schedule {
-    pub fn new(
+    pub(crate) fn new(
         seconds: Seconds,
         minutes: Minutes,
         hours: Hours,
