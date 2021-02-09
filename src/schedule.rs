@@ -16,7 +16,7 @@ impl From<Schedule> for String {
 
 #[derive(Clone, Debug)]
 pub struct Schedule {
-    pub source: Option<String>, //TODO: remove pub
+    pub(crate) source: Option<String>, //TODO: remove pub
     years: Years,
     days_of_week: DaysOfWeek,
     months: Months,
