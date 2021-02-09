@@ -578,38 +578,6 @@ mod test {
     }
 
     #[test]
-    fn test_no_panic_on_nonexistent_time_after() {
-        use chrono::offset::TimeZone;
-        use chrono_tz::Tz;
-
-        let schedule_tz: Tz = "Europe/London".parse().unwrap();
-        let dt = schedule_tz
-            .ymd(2019, 10, 27)
-            .and_hms(0, 3, 29)
-            .checked_add_signed(chrono::Duration::hours(1)) // puts it in the middle of the DST transition
-            .unwrap();
-        let schedule = Schedule::from_str("* * * * * Sat,Sun *").unwrap();
-        let next = schedule.after(&dt).next().unwrap();
-        assert!(next > dt); // test is ensuring line above does not panic
-    }
-
-    #[test]
-    fn test_no_panic_on_nonexistent_time_before() {
-        use chrono::offset::TimeZone;
-        use chrono_tz::Tz;
-
-        let schedule_tz: Tz = "Europe/London".parse().unwrap();
-        let dt = schedule_tz
-            .ymd(2019, 10, 27)
-            .and_hms(0, 3, 29)
-            .checked_add_signed(chrono::Duration::hours(1)) // puts it in the middle of the DST transition
-            .unwrap();
-        let schedule = Schedule::from_str("* * * * * Sat,Sun *").unwrap();
-        let prev = schedule.after(&dt).rev().next().unwrap();
-        assert!(prev < dt); // test is ensuring line above does not panic
-    }
-
-    #[test]
     fn test_nom_valid_days_of_month_any() {
         let expression = "* * * ? * *";
         schedule(Input(expression)).unwrap();
