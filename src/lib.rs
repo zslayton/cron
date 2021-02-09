@@ -48,4 +48,5 @@ mod queries;
 mod parsing;
 
 pub use crate::schedule::Schedule;
+pub use crate::schedule::ScheduleFields;
 pub use crate::time_unit::TimeUnitSpec;
