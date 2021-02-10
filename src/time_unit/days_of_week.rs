@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use lazy_static::lazy_static;
 
 lazy_static!{
-    static ref ALL: OrdinalSet = DaysOfWeek::all().ordinals.unwrap();
+    static ref ALL: OrdinalSet = DaysOfWeek::supported_ordinals();
 }
 
 #[derive(Clone, Debug)]
@@ -14,9 +14,9 @@ pub struct DaysOfWeek{
 }
 
 impl TimeUnitField for DaysOfWeek {
-    fn from_ordinal_set(ordinal_set: OrdinalSet) -> Self {
+    fn from_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self {
         DaysOfWeek{
-            ordinals: Some(ordinal_set)
+            ordinals: ordinal_set
         }
     }
     fn name() -> Cow<'static, str> {

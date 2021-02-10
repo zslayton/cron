@@ -1,5 +1,5 @@
 use nom::{types::CompleteStr as Input, *};
-use std::iter::{self, Iterator};
+use std::iter::{Iterator};
 use std::str::{self, FromStr};
 
 use crate::error::{Error, ErrorKind};
@@ -76,7 +76,10 @@ where
     T: TimeUnitField,
 {
     fn from_field(field: Field) -> Result<T, Error> {
-        let mut ordinals = OrdinalSet::new(); // TODO:Combinator
+        if field.specifiers.len() == 1 && 
+            field.specifiers.get(0).unwrap() == &RootSpecifier::from(Specifier::All) 
+            { return Ok(T::from_ordinal_set(None)); }
+        let mut ordinals = OrdinalSet::new(); 
         for specifier in field.specifiers {
             let specifier_ordinals: OrdinalSet = T::ordinals_from_root_specifier(&specifier)?;
             for ordinal in specifier_ordinals {
@@ -211,10 +214,10 @@ named!(
     do_parse!(
         tag!("@monthly")
             >> (Schedule::new(
-                Seconds::from_ordinal_set(iter::once(0).collect()),
-                Minutes::from_ordinal_set(iter::once(0).collect()),
-                Hours::from_ordinal_set(iter::once(0).collect()),
-                DaysOfMonth::from_ordinal_set(iter::once(1).collect()),
+                Seconds::from_ordinal(0),
+                Minutes::from_ordinal(0),
+                Hours::from_ordinal(0),
+                DaysOfMonth::from_ordinal(1),
                 Months::all(),
                 DaysOfWeek::all(),
                 Years::all()
@@ -227,12 +230,12 @@ named!(
     do_parse!(
         tag!("@weekly")
             >> (Schedule::new(
-                Seconds::from_ordinal_set(iter::once(0).collect()),
-                Minutes::from_ordinal_set(iter::once(0).collect()),
-                Hours::from_ordinal_set(iter::once(0).collect()),
+                Seconds::from_ordinal(0),
+                Minutes::from_ordinal(0),
+                Hours::from_ordinal(0),
                 DaysOfMonth::all(),
                 Months::all(),
-                DaysOfWeek::from_ordinal_set(iter::once(1).collect()),
+                DaysOfWeek::from_ordinal(1),
                 Years::all()
             ))
     )
@@ -243,9 +246,9 @@ named!(
     do_parse!(
         tag!("@daily")
             >> (Schedule::new(
-                Seconds::from_ordinal_set(iter::once(0).collect()),
-                Minutes::from_ordinal_set(iter::once(0).collect()),
-                Hours::from_ordinal_set(iter::once(0).collect()),
+                Seconds::from_ordinal(0),
+                Minutes::from_ordinal(0),
+                Hours::from_ordinal(0),
                 DaysOfMonth::all(),
                 Months::all(),
                 DaysOfWeek::all(),
@@ -259,8 +262,8 @@ named!(
     do_parse!(
         tag!("@hourly")
             >> (Schedule::new(
-                Seconds::from_ordinal_set(iter::once(0).collect()),
-                Minutes::from_ordinal_set(iter::once(0).collect()),
+                Seconds::from_ordinal(0),
+                Minutes::from_ordinal(0),
                 Hours::all(),
                 DaysOfMonth::all(),
                 Months::all(),

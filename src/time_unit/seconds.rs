@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use lazy_static::lazy_static;
 
 lazy_static!{
-    static ref ALL: OrdinalSet = Seconds::all().ordinals.unwrap();
+    static ref ALL: OrdinalSet = Seconds::supported_ordinals();
 }
 
 #[derive(Clone, Debug)]
@@ -13,9 +13,9 @@ pub struct Seconds {
 }
 
 impl TimeUnitField for Seconds {
-    fn from_ordinal_set(ordinal_set: OrdinalSet) -> Self {
+    fn from_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self {
         Seconds{
-            ordinals: Some(ordinal_set)
+            ordinals: ordinal_set
         }
     }
     fn name() -> Cow<'static, str> {
