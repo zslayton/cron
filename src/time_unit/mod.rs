@@ -15,7 +15,8 @@ pub use self::seconds::Seconds;
 pub use self::years::Years;
 
 use crate::error::*;
-use crate::schedule::{Ordinal, OrdinalSet, RootSpecifier, Specifier};
+use crate::ordinal::{Ordinal, OrdinalSet};
+use crate::specifier::{RootSpecifier, Specifier};
 use std::borrow::Cow;
 use std::collections::btree_set;
 use std::iter;
