@@ -1,11 +1,9 @@
 use crate::ordinal::{Ordinal, OrdinalSet};
 use crate::time_unit::TimeUnitField;
 use std::borrow::Cow;
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 
-lazy_static!{
-    static ref ALL: OrdinalSet = Hours::supported_ordinals();
-}
+static ALL: Lazy<OrdinalSet> = Lazy::new(|| { Hours::supported_ordinals() });
 
 #[derive(Clone, Debug)]
 pub struct Hours{

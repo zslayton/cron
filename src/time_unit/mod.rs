@@ -263,7 +263,7 @@ where
         use self::Specifier::*;
         //println!("ordinals_from_specifier for {} => {:?}", Self::name(), specifier);
         match *specifier {
-            All => Ok(Self::supported_ordinals()),  // TODO: change to Self::ALL
+            All => Ok(Self::supported_ordinals()),
             Point(ordinal) => Ok((&[ordinal]).iter().cloned().collect()),
             Range(start, end) => {
                 match (Self::validate_ordinal(start), Self::validate_ordinal(end)) {
