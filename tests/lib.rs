@@ -499,7 +499,7 @@ mod tests {
 
     #[test]
     fn test_is_all() {
-        let schedule = Schedule::from_str("* * * 1,15 * * *").unwrap();
+        let schedule = Schedule::from_str("0-59 * 0-23 1,15 * ? *").unwrap();
         assert!(schedule.years().is_all());
         assert!(!schedule.days_of_month().is_all());
         assert!(schedule.days_of_week().is_all());
