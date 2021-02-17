@@ -197,7 +197,8 @@ where
     }
 
     fn is_all(&self) -> bool {
-        self.is_all()
+        let max_supported_ordinals = Self::inclusive_max() - Self::inclusive_min() + 1;
+        self.ordinals().len() == max_supported_ordinals as usize
     }
 }
 
@@ -210,11 +211,6 @@ where
     fn inclusive_min() -> Ordinal;
     fn inclusive_max() -> Ordinal;
     fn ordinals(&self) -> &OrdinalSet;
-
-    fn is_all(&self) -> bool {
-        let max_supported_ordinals = Self::inclusive_max() - Self::inclusive_min() + 1;
-        self.ordinals().len() == max_supported_ordinals as usize
-    }
     
     fn from_ordinal(ordinal: Ordinal) -> Self {
         Self::from_ordinal_set(iter::once(ordinal).collect())
