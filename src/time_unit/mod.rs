@@ -157,7 +157,7 @@ pub trait TimeUnitSpec {
     /// ```
     fn count(&self) -> u32;
 
-    /// Checks if this TimeUnitSpec is specified (thus not created with a *)
+    /// Checks if this TimeUnitSpec defined as all possibilities (thus created with a '*', '?' or in the case of weekdays '1-7')
     /// # Example
     /// ```
     /// use cron::{Schedule,TimeUnitSpec};
@@ -166,10 +166,10 @@ pub trait TimeUnitSpec {
     /// let expression = "* * * 1,15 * * *";
     /// let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
     ///
-    /// assert_eq!(true, schedule.days_of_month().is_specified());
-    /// assert_eq!(false, schedule.months().is_specified());
+    /// assert_eq!(false, schedule.days_of_month().is_all());
+    /// assert_eq!(true, schedule.months().is_all());
     /// ```
-    fn is_specified(&self) -> bool;
+    fn is_all(&self) -> bool;
 }
 
 impl<T> TimeUnitSpec for T
@@ -196,8 +196,8 @@ where
         self.ordinals().len() as u32
     }
 
-    fn is_specified(&self) -> bool {
-        self.is_specified()
+    fn is_all(&self) -> bool {
+        self.is_all()
     }
 }
 
@@ -210,7 +210,11 @@ where
     fn inclusive_min() -> Ordinal;
     fn inclusive_max() -> Ordinal;
     fn ordinals(&self) -> &OrdinalSet;
-    fn is_specified(&self) -> bool;
+
+    fn is_all(&self) -> bool {
+        let max_supported_ordinals = Self::inclusive_max() - Self::inclusive_min() + 1;
+        self.ordinals().len() == max_supported_ordinals as usize
+    }
     
     fn from_ordinal(ordinal: Ordinal) -> Self {
         Self::from_ordinal_set(iter::once(ordinal).collect())

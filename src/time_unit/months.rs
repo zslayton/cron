@@ -55,7 +55,4 @@ impl TimeUnitField for Months {
             None => &ALL
         }
     }
-    fn is_specified(&self) -> bool {
-        self.ordinals.is_some()
-    }
 }

@@ -31,7 +31,4 @@ impl TimeUnitField for Seconds {
             None => &ALL
         }
     }
-    fn is_specified(&self) -> bool {
-        self.ordinals.is_some()
-    }
 }

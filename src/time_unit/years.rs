@@ -34,7 +34,4 @@ impl TimeUnitField for Years {
             None => &ALL
         }
     }
-    fn is_specified(&self) -> bool {
-        self.ordinals.is_some()
-    }
 }
