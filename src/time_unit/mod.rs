@@ -156,6 +156,20 @@ pub trait TimeUnitSpec {
     /// assert_eq!(2, schedule.days_of_month().count());
     /// ```
     fn count(&self) -> u32;
+
+    /// Checks if this TimeUnitSpec is specified (thus not created with a *)
+    /// # Example
+    /// ```
+    /// use cron::{Schedule,TimeUnitSpec};
+    /// use std::str::FromStr;
+    ///
+    /// let expression = "* * * 1,15 * * *";
+    /// let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
+    ///
+    /// assert_eq!(true, schedule.days_of_month().is_specified());
+    /// assert_eq!(false, schedule.months().is_specified());
+    /// ```
+    fn is_specified(&self) -> bool;
 }
 
 impl<T> TimeUnitSpec for T
@@ -180,6 +194,10 @@ where
     }
     fn count(&self) -> u32 {
         self.ordinals().len() as u32
+    }
+
+    fn is_specified(&self) -> bool {
+        self.is_specified()
     }
 }
 

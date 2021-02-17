@@ -496,4 +496,16 @@ mod tests {
             assert_eq!(*expected_value, schedule_iter.next().unwrap());
         }
     }
+
+    #[test]
+    fn test_is_specified() {
+        let schedule = Schedule::from_str("* * * 1,15 * * *").unwrap();
+        assert!(!schedule.years().is_specified());
+        assert!(schedule.days_of_month().is_specified());
+        assert!(!schedule.days_of_week().is_specified());
+        assert!(!schedule.months().is_specified());
+        assert!(!schedule.hours().is_specified());
+        assert!(!schedule.minutes().is_specified());
+        assert!(!schedule.seconds().is_specified());
+    }
 }
