@@ -14,7 +14,7 @@ impl From<Schedule> for String {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq)]
 pub struct Schedule {
     source: String,
     fields: ScheduleFields,
@@ -283,7 +283,13 @@ impl Display for Schedule {
     }
 }
 
-#[derive(Clone, Debug)]
+impl PartialEq for Schedule {
+    fn eq(&self, other: &Schedule) -> bool {
+        self.source == other.source
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ScheduleFields {
     years: Years,
     days_of_week: DaysOfWeek,
@@ -313,6 +319,25 @@ impl ScheduleFields {
             minutes,
             seconds,
         }
+    }
+}
+
+/// Wrapper over [`Schedule`] used if equivalence of its [`TimeUnitSpec`]s needs to be tested
+/// # Example
+/// ```
+/// use cron::{Schedule, TimeUnitSpecEq};
+/// use std::str::FromStr;
+/// let schedule_1 = Schedule::from_str("@weekly").unwrap();
+/// let schedule_2 = Schedule::from_str("0 0 0 * * 1 *").unwrap();
+/// assert_ne!(schedule_1, schedule_2);
+/// assert_eq!(TimeUnitSpecEq(schedule_1), TimeUnitSpecEq(schedule_2));
+/// ```
+#[derive(Clone, Debug, Eq)]
+pub struct TimeUnitSpecEq(pub Schedule);
+
+impl PartialEq for TimeUnitSpecEq {
+    fn eq(&self, other: &TimeUnitSpecEq) -> bool{
+        self.0.fields == other.0.fields
     }
 }
 
@@ -546,5 +571,13 @@ mod test {
         let schedule = Schedule::from_str("* * * * * Sat,Sun *").unwrap();
         let prev = schedule.after(&dt).rev().next().unwrap();
         assert!(prev < dt); // test is ensuring line above does not panic
+    }
+    
+    #[test]
+    fn test_time_unit_spec_equality() {
+        let schedule_1 = Schedule::from_str("@weekly").unwrap();
+        let schedule_2 = Schedule::from_str("0 0 0 * * 1 *").unwrap();
+        assert_ne!(schedule_1, schedule_2);
+        assert_eq!(TimeUnitSpecEq(schedule_1), TimeUnitSpecEq(schedule_2));
     }
 }

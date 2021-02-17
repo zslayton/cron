@@ -5,7 +5,7 @@ use once_cell::sync::Lazy;
 
 static ALL: Lazy<OrdinalSet> = Lazy::new(|| { Years::supported_ordinals() });
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Years{
     ordinals: Option<OrdinalSet>
 }
