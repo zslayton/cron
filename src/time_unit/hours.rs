@@ -13,7 +13,7 @@ pub struct Hours{
 }
 
 impl TimeUnitField for Hours {
-    fn from_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self {
+    fn from_optional_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self {
         Hours{
             ordinals: ordinal_set
         }

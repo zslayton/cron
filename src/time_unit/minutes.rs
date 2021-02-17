@@ -13,7 +13,7 @@ pub struct Minutes{
 }
 
 impl TimeUnitField for Minutes {
-    fn from_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self {
+    fn from_optional_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self {
         Minutes{
             ordinals: ordinal_set
         }

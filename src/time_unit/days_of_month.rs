@@ -13,7 +13,7 @@ pub struct DaysOfMonth{
 }
 
 impl TimeUnitField for DaysOfMonth {
-    fn from_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self {
+    fn from_optional_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self {
         DaysOfMonth {
             ordinals: ordinal_set
         }

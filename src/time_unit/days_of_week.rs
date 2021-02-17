@@ -14,7 +14,7 @@ pub struct DaysOfWeek{
 }
 
 impl TimeUnitField for DaysOfWeek {
-    fn from_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self {
+    fn from_optional_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self {
         DaysOfWeek{
             ordinals: ordinal_set
         }

@@ -14,7 +14,7 @@ pub struct Months{
 }
 
 impl TimeUnitField for Months {
-    fn from_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self {
+    fn from_optional_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self {
         Months{
             ordinals: ordinal_set
         }

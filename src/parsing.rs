@@ -77,7 +77,7 @@ where
     fn from_field(field: Field) -> Result<T, Error> {
         if field.specifiers.len() == 1 && 
             field.specifiers.get(0).unwrap() == &RootSpecifier::from(Specifier::All) 
-            { return Ok(T::from_ordinal_set(None)); }
+            { return Ok(T::all()); }
         let mut ordinals = OrdinalSet::new(); 
         for specifier in field.specifiers {
             let specifier_ordinals: OrdinalSet = T::ordinals_from_root_specifier(&specifier)?;
@@ -85,7 +85,7 @@ where
                 ordinals.insert(T::validate_ordinal(ordinal)?);
             }
         }
-        Ok(T::from_ordinal_set(Some(ordinals)))
+        Ok(T::from_ordinal_set(ordinals))
     }
 }
 
