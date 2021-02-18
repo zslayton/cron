@@ -156,6 +156,20 @@ pub trait TimeUnitSpec {
     /// assert_eq!(2, schedule.days_of_month().count());
     /// ```
     fn count(&self) -> u32;
+
+    /// Checks if this TimeUnitSpec is defined as all possibilities (thus created with a '*', '?' or in the case of weekdays '1-7')
+    /// # Example
+    /// ```
+    /// use cron::{Schedule,TimeUnitSpec};
+    /// use std::str::FromStr;
+    ///
+    /// let expression = "* * * 1,15 * * *";
+    /// let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
+    ///
+    /// assert_eq!(false, schedule.days_of_month().is_all());
+    /// assert_eq!(true, schedule.months().is_all());
+    /// ```
+    fn is_all(&self) -> bool;
 }
 
 impl<T> TimeUnitSpec for T
@@ -181,26 +195,39 @@ where
     fn count(&self) -> u32 {
         self.ordinals().len() as u32
     }
+
+    fn is_all(&self) -> bool {
+        let max_supported_ordinals = Self::inclusive_max() - Self::inclusive_min() + 1;
+        self.ordinals().len() == max_supported_ordinals as usize
+    }
 }
 
 pub trait TimeUnitField
 where
     Self: Sized,
 {
-    fn from_ordinal_set(ordinal_set: OrdinalSet) -> Self;
+    fn from_optional_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self;
     fn name() -> Cow<'static, str>;
     fn inclusive_min() -> Ordinal;
     fn inclusive_max() -> Ordinal;
     fn ordinals(&self) -> &OrdinalSet;
+    
     fn from_ordinal(ordinal: Ordinal) -> Self {
         Self::from_ordinal_set(iter::once(ordinal).collect())
     }
+    
     fn supported_ordinals() -> OrdinalSet {
         (Self::inclusive_min()..Self::inclusive_max() + 1).collect()
-    }
+    }    
+    
     fn all() -> Self {
-        Self::from_ordinal_set(Self::supported_ordinals())
+        Self::from_optional_ordinal_set(None)
     }
+    
+    fn from_ordinal_set(ordinal_set: OrdinalSet) -> Self {
+        Self::from_optional_ordinal_set(Some(ordinal_set))
+    }
+    
     fn ordinal_from_name(name: &str) -> Result<Ordinal, Error> {
         Err(ErrorKind::Expression(format!(
             "The '{}' field does not support using names. '{}' \

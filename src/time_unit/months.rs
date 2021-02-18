@@ -2,13 +2,20 @@ use crate::error::*;
 use crate::ordinal::{Ordinal, OrdinalSet};
 use crate::time_unit::TimeUnitField;
 use std::borrow::Cow;
+use once_cell::sync::Lazy;
+
+static ALL: Lazy<OrdinalSet> = Lazy::new(|| { Months::supported_ordinals() });
 
 #[derive(Clone, Debug)]
-pub struct Months(OrdinalSet);
+pub struct Months{
+    ordinals: Option<OrdinalSet>
+}
 
 impl TimeUnitField for Months {
-    fn from_ordinal_set(ordinal_set: OrdinalSet) -> Self {
-        Months(ordinal_set)
+    fn from_optional_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self {
+        Months{
+            ordinals: ordinal_set
+        }
     }
     fn name() -> Cow<'static, str> {
         Cow::from("Months")
@@ -43,6 +50,9 @@ impl TimeUnitField for Months {
         Ok(ordinal)
     }
     fn ordinals(&self) -> &OrdinalSet {
-        &self.0
+        match &self.ordinals {
+            Some(ordinal_set) => &ordinal_set,
+            None => &ALL
+        }
     }
 }

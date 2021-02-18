@@ -1,13 +1,20 @@
 use crate::ordinal::{Ordinal, OrdinalSet};
 use crate::time_unit::TimeUnitField;
 use std::borrow::Cow;
+use once_cell::sync::Lazy;
+
+static ALL: Lazy<OrdinalSet> = Lazy::new(|| { Hours::supported_ordinals() });
 
 #[derive(Clone, Debug)]
-pub struct Hours(OrdinalSet);
+pub struct Hours{
+    ordinals: Option<OrdinalSet>
+}
 
 impl TimeUnitField for Hours {
-    fn from_ordinal_set(ordinal_set: OrdinalSet) -> Self {
-        Hours(ordinal_set)
+    fn from_optional_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self {
+        Hours{
+            ordinals: ordinal_set
+        }
     }
     fn name() -> Cow<'static, str> {
         Cow::from("Hours")
@@ -19,6 +26,9 @@ impl TimeUnitField for Hours {
         23
     }
     fn ordinals(&self) -> &OrdinalSet {
-        &self.0
+        match &self.ordinals {
+            Some(ordinal_set) => &ordinal_set,
+            None => &ALL
+        }
     }
 }

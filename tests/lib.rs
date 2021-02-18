@@ -496,4 +496,16 @@ mod tests {
             assert_eq!(*expected_value, schedule_iter.next().unwrap());
         }
     }
+
+    #[test]
+    fn test_is_all() {
+        let schedule = Schedule::from_str("0-59 * 0-23 ?/2 1,2-4 ? *").unwrap();
+        assert!(schedule.years().is_all());
+        assert!(!schedule.days_of_month().is_all());
+        assert!(schedule.days_of_week().is_all());
+        assert!(!schedule.months().is_all());
+        assert!(schedule.hours().is_all());
+        assert!(schedule.minutes().is_all());
+        assert!(schedule.seconds().is_all());
+    }
 }
