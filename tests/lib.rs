@@ -508,4 +508,14 @@ mod tests {
         assert!(schedule.minutes().is_all());
         assert!(schedule.seconds().is_all());
     }
+
+    #[test]
+    fn test_includes() {
+        let schedule = Schedule::from_str("0 0 0 2-31/10 * ?").unwrap();
+        let schedule_tz: Tz = "Europe/London".parse().unwrap();
+        let included = schedule_tz.ymd(2020, 1, 12).and_hms(0, 0, 0);
+        let not_included = schedule_tz.ymd(2020, 1, 11).and_hms(0, 0, 0);
+        assert!(schedule.includes(included));
+        assert!(!schedule.includes(not_included));
+    }
 }
