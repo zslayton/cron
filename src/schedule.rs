@@ -275,6 +275,10 @@ impl Schedule {
     pub fn seconds(&self) -> &impl TimeUnitSpec {
         &self.fields.seconds
     }
+
+    pub fn timeunitspec_eq(&self, other: &Schedule) -> bool {
+        self.fields == other.fields
+    }
 }
 
 impl Display for Schedule {
@@ -319,25 +323,6 @@ impl ScheduleFields {
             minutes,
             seconds,
         }
-    }
-}
-
-/// Wrapper over [`Schedule`] used if equivalence of its [`TimeUnitSpec`]s needs to be tested
-/// # Example
-/// ```
-/// use cron::{Schedule, TimeUnitSpecEq};
-/// use std::str::FromStr;
-/// let schedule_1 = Schedule::from_str("@weekly").unwrap();
-/// let schedule_2 = Schedule::from_str("0 0 0 * * 1 *").unwrap();
-/// assert_ne!(schedule_1, schedule_2);
-/// assert_eq!(TimeUnitSpecEq(schedule_1), TimeUnitSpecEq(schedule_2));
-/// ```
-#[derive(Clone, Debug, Eq)]
-pub struct TimeUnitSpecEq(pub Schedule);
-
-impl PartialEq for TimeUnitSpecEq {
-    fn eq(&self, other: &TimeUnitSpecEq) -> bool{
-        self.0.fields == other.0.fields
     }
 }
 
@@ -580,7 +565,7 @@ mod test {
         let schedule_3 = Schedule::from_str("0 0 0 * * 1-7 *").unwrap();
         let schedule_4 = Schedule::from_str("0 0 0 * * * *").unwrap();
         assert_ne!(schedule_1, schedule_2);
-        assert_eq!(TimeUnitSpecEq(schedule_1), TimeUnitSpecEq(schedule_2));
-        assert_eq!(TimeUnitSpecEq(schedule_3), TimeUnitSpecEq(schedule_4));
+        assert!(schedule_1.timeunitspec_eq(&schedule_2));
+        assert!(schedule_3.timeunitspec_eq(&schedule_4));
     }
 }
