@@ -5,7 +5,7 @@ use once_cell::sync::Lazy;
 
 static ALL: Lazy<OrdinalSet> = Lazy::new(|| { DaysOfMonth::supported_ordinals() });
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq)]
 pub struct DaysOfMonth{
     ordinals: Option<OrdinalSet>
 }
@@ -30,5 +30,11 @@ impl TimeUnitField for DaysOfMonth {
             Some(ordinal_set) => &ordinal_set,
             None => &ALL
         }
+    }
+}
+
+impl PartialEq for DaysOfMonth {
+    fn eq(&self, other: &DaysOfMonth) -> bool {
+        self.ordinals() == other.ordinals()
     }
 }

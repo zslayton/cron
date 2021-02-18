@@ -14,7 +14,7 @@ impl From<Schedule> for String {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq)]
 pub struct Schedule {
     source: String,
     fields: ScheduleFields,
@@ -288,6 +288,10 @@ impl Schedule {
     pub fn seconds(&self) -> &impl TimeUnitSpec {
         &self.fields.seconds
     }
+
+    pub fn timeunitspec_eq(&self, other: &Schedule) -> bool {
+        self.fields == other.fields
+    }
 }
 
 impl Display for Schedule {
@@ -296,7 +300,13 @@ impl Display for Schedule {
     }
 }
 
-#[derive(Clone, Debug)]
+impl PartialEq for Schedule {
+    fn eq(&self, other: &Schedule) -> bool {
+        self.source == other.source
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ScheduleFields {
     years: Years,
     days_of_week: DaysOfWeek,
@@ -559,5 +569,16 @@ mod test {
         let schedule = Schedule::from_str("* * * * * Sat,Sun *").unwrap();
         let prev = schedule.after(&dt).rev().next().unwrap();
         assert!(prev < dt); // test is ensuring line above does not panic
+    }
+    
+    #[test]
+    fn test_time_unit_spec_equality() {
+        let schedule_1 = Schedule::from_str("@weekly").unwrap();
+        let schedule_2 = Schedule::from_str("0 0 0 * * 1 *").unwrap();
+        let schedule_3 = Schedule::from_str("0 0 0 * * 1-7 *").unwrap();
+        let schedule_4 = Schedule::from_str("0 0 0 * * * *").unwrap();
+        assert_ne!(schedule_1, schedule_2);
+        assert!(schedule_1.timeunitspec_eq(&schedule_2));
+        assert!(schedule_3.timeunitspec_eq(&schedule_4));
     }
 }
