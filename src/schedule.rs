@@ -1,8 +1,9 @@
 
 use chrono::offset::TimeZone;
-use chrono::{DateTime, Datelike, Timelike, Utc};
+use chrono::{DateTime, Datelike, Timelike, Utc, SubsecRound};
 use std::collections::Bound::{Included, Unbounded};
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::iter;
 
 use crate::time_unit::*;
 use crate::ordinal::*;
@@ -35,88 +36,70 @@ impl Schedule {
     where
         Z: TimeZone,
     {
-        let mut query = NextAfterQuery::from(after);
-        for year in self
-            .fields
-            .years
-            .ordinals()
-            .range((Included(query.year_lower_bound()), Unbounded))
-            .cloned()
-        {
-            let month_start = query.month_lower_bound();
-            if !self.fields.months.ordinals().contains(&month_start) {
-                query.reset_month();
-            }
-            let month_range = (Included(month_start), Included(Months::inclusive_max()));
-            for month in self.fields.months.ordinals().range(month_range).cloned() {
-                let day_of_month_start = query.day_of_month_lower_bound();
-                if !self.fields.days_of_month.ordinals().contains(&day_of_month_start) {
-                    query.reset_day_of_month();
-                }
-                let day_of_month_end = days_in_month(month, year);
-                let day_of_month_range = (Included(day_of_month_start), Included(day_of_month_end));
-
-                'day_loop: for day_of_month in self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .range(day_of_month_range)
-                    .cloned()
-                {
-                    let hour_start = query.hour_lower_bound();
-                    if !self.fields.hours.ordinals().contains(&hour_start) {
-                        query.reset_hour();
-                    }
-                    let hour_range = (Included(hour_start), Included(Hours::inclusive_max()));
-
-                    for hour in self.fields.hours.ordinals().range(hour_range).cloned() {
-                        let minute_start = query.minute_lower_bound();
-                        if !self.fields.minutes.ordinals().contains(&minute_start) {
-                            query.reset_minute();
-                        }
-                        let minute_range =
-                            (Included(minute_start), Included(Minutes::inclusive_max()));
-
-                        for minute in self.fields.minutes.ordinals().range(minute_range).cloned() {
-                            let second_start = query.second_lower_bound();
-                            if !self.fields.seconds.ordinals().contains(&second_start) {
-                                query.reset_second();
-                            }
-                            let second_range =
-                                (Included(second_start), Included(Seconds::inclusive_max()));
-
-                            for second in self.fields.seconds.ordinals().range(second_range).cloned() {
-                                let timezone = after.timezone();
-                                let candidate = if let Some(candidate) = timezone
-                                    .ymd(year as i32, month, day_of_month)
-                                    .and_hms_opt(hour, minute, second)
-                                {
-                                    candidate
-                                } else {
-                                    continue;
-                                };
-                                if !self
-                                    .fields
-                                    .days_of_week
-                                    .ordinals()
-                                    .contains(&candidate.weekday().number_from_sunday())
-                                {
-                                    continue 'day_loop;
-                                }
-                                return Some(candidate);
-                            }
-                            query.reset_minute();
-                        } // End of minutes range
-                        query.reset_hour();
-                    } // End of hours range
-                    query.reset_day_of_month();
-                } // End of Day of Month range
-                query.reset_month();
-            } // End of Month range
-        }
-
-        // We ran out of dates to try.
-        None
+        let after_rounded = &after.clone().trunc_subsecs(0);
+        self.years()
+            .iter()
+            .skip_while(|year| *year < after_rounded.year() as u32)
+            .flat_map(|year| {
+                iter::repeat(
+                    after_rounded.with_year(year as i32)
+                )
+                .zip(self.months().iter())
+            })
+            .skip_while(|(date, month)| {
+                date.as_ref() < Some(after_rounded) ||
+                (date.as_ref() == Some(after_rounded) && *month < after_rounded.month())
+            })
+            .flat_map(|(date, month)| {
+                iter::repeat(
+                    date.map(|d| d.with_month(month)).flatten()
+                )
+                .zip(self.days_of_month().iter())
+            })
+            .skip_while(|(date, day)| {
+                date.as_ref() < Some(after_rounded) ||
+                (date.as_ref() == Some(after_rounded) && *day < after_rounded.day())
+            })
+            .map(|(date, day)| {
+                date.map(|d| d.with_day(day)).flatten()
+            })
+            .filter(|date| {
+                date.as_ref()
+                    .map(|d| self.days_of_week().includes(d.weekday().number_from_sunday()))
+                    .unwrap_or(false)
+            })
+            .flat_map(|date| {
+                iter::repeat(date).zip(self.hours().iter())
+            })
+            .skip_while(|(date, hour)| {
+                date.as_ref() < Some(after_rounded) ||
+                (date.as_ref() == Some(after_rounded) && *hour < after_rounded.hour())
+            })
+            .flat_map(|(date, hour)| {
+                iter::repeat(
+                    date.map(|d| d.with_hour(hour)).flatten()
+                )
+                .zip(self.minutes().iter())
+            })
+            .skip_while(|(date, minute)| {
+                date.as_ref() < Some(after_rounded) ||
+                (date.as_ref() == Some(after_rounded) && *minute < after_rounded.minute())
+            })
+            .flat_map(|(date, minute)| {
+                iter::repeat(
+                    date.map(|d| d.with_minute(minute)).flatten()
+                )
+                .zip(self.seconds().iter())
+            })
+            .skip_while(|(date, second)| {
+                date.as_ref() < Some(after_rounded) ||
+                (date.as_ref() == Some(after_rounded) && *second <= after_rounded.second())
+            })
+            .map(|(date, second)| {
+                date.map(|d| d.with_second(second)).flatten()
+            })
+            .next()
+            .flatten()
     }
 
     fn prev_from<Z>(&self, before: &DateTime<Z>) -> Option<DateTime<Z>>
