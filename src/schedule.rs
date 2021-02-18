@@ -1,6 +1,6 @@
 
 use chrono::offset::TimeZone;
-use chrono::{DateTime, Datelike, Utc};
+use chrono::{DateTime, Datelike, Timelike, Utc};
 use std::collections::Bound::{Included, Unbounded};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
@@ -232,6 +232,19 @@ impl Schedule {
         Z: TimeZone,
     {
         ScheduleIterator::new(self, after)
+    }
+
+    pub fn includes<Z>(&self, date_time: DateTime<Z>) -> bool
+    where
+        Z: TimeZone,
+    {
+        self.fields.years.includes(date_time.year() as Ordinal)  &&
+        self.fields.months.includes(date_time.month() as Ordinal) &&
+        self.fields.days_of_week.includes(date_time.weekday().number_from_sunday()) &&
+        self.fields.days_of_month.includes(date_time.day() as Ordinal) &&
+        self.fields.hours.includes(date_time.hour() as Ordinal) &&
+        self.fields.minutes.includes(date_time.minute() as Ordinal) &&
+        self.fields.minutes.includes(date_time.second() as Ordinal)
     }
 
     /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the years included
