@@ -157,7 +157,7 @@ pub trait TimeUnitSpec {
     /// ```
     fn count(&self) -> u32;
 
-    /// Checks if this TimeUnitSpec defined as all possibilities (thus created with a '*', '?' or in the case of weekdays '1-7')
+    /// Checks if this TimeUnitSpec is defined as all possibilities (thus created with a '*', '?' or in the case of weekdays '1-7')
     /// # Example
     /// ```
     /// use cron::{Schedule,TimeUnitSpec};
