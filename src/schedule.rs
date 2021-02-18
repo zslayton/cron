@@ -34,19 +34,18 @@ impl Schedule {
     where
         Z: TimeZone,
     {
-        let after_rounded = &after.clone().trunc_subsecs(0);
         self.years()
             .iter()
-            .skip_while(|year| *year < after_rounded.year() as u32)
+            .skip_while(|year| *year < after.year() as u32)
             .flat_map(|year| {
                 iter::repeat(
-                    after_rounded.with_year(year as i32)
+                    after.with_year(year as i32).map(|d| d.trunc_subsecs(0))
                 )
                 .zip(self.months().iter())
             })
             .skip_while(|(date, month)| {
-                date.as_ref() < Some(after_rounded) ||
-                (date.as_ref() == Some(after_rounded) && *month < after_rounded.month())
+                date.as_ref() < Some(after) ||
+                (date.as_ref() == Some(after) && *month < after.month())
             })
             .flat_map(|(date, month)| {
                 let date_with_month = date.clone().map(|d| d.with_month(month)).flatten();
@@ -59,8 +58,8 @@ impl Schedule {
                 }
             })
             .skip_while(|(date, day)| {
-                date.as_ref() < Some(after_rounded) ||
-                (date.as_ref() == Some(after_rounded) && *day < after_rounded.day())
+                date.as_ref() < Some(after) ||
+                (date.as_ref() == Some(after) && *day < after.day())
             })
             .map(|(date, day)| {
                 date.map(|d| d.with_day(day)).flatten()
@@ -74,8 +73,8 @@ impl Schedule {
                 iter::repeat(date).zip(self.hours().iter())
             })
             .skip_while(|(date, hour)| {
-                date.as_ref() < Some(after_rounded) ||
-                (date.as_ref() == Some(after_rounded) && *hour < after_rounded.hour())
+                date.as_ref() < Some(after) ||
+                (date.as_ref() == Some(after) && *hour < after.hour())
             })
             .flat_map(|(date, hour)| {
                 iter::repeat(
@@ -84,8 +83,8 @@ impl Schedule {
                 .zip(self.minutes().iter())
             })
             .skip_while(|(date, minute)| {
-                date.as_ref() < Some(after_rounded) ||
-                (date.as_ref() == Some(after_rounded) && *minute < after_rounded.minute())
+                date.as_ref() < Some(after) ||
+                (date.as_ref() == Some(after) && *minute < after.minute())
             })
             .flat_map(|(date, minute)| {
                 iter::repeat(
@@ -94,8 +93,8 @@ impl Schedule {
                 .zip(self.seconds().iter())
             })
             .skip_while(|(date, second)| {
-                date.as_ref() < Some(after_rounded) ||
-                (date.as_ref() == Some(after_rounded) && *second <= after_rounded.second())
+                date.as_ref() < Some(after) ||
+                (date.as_ref() == Some(after) && *second <= after.second())
             })
             .map(|(date, second)| {
                 date.map(|d| d.with_second(second)).flatten()
@@ -108,40 +107,35 @@ impl Schedule {
     where
         Z: TimeZone,
     {
-        let before_rounded = &before.clone().trunc_subsecs(0);
         self.years()
             .iter()
             .rev()
-            .skip_while(|year| *year < before_rounded.year() as u32)
+            .skip_while(|year| *year < before.year() as u32)
             .flat_map(|year| {
                 iter::repeat(
-                    before_rounded.with_year(year as i32)
+                    before.with_year(year as i32).map(|d| d.trunc_subsecs(0))
                 )
                 .zip(self.months().iter().rev())
             })
             .skip_while(|(date, month)| {
-                date.as_ref() > Some(before_rounded) ||
-                (date.as_ref() == Some(before_rounded) && *month > before_rounded.month())
+                date.as_ref() > Some(before) ||
+                (date.as_ref() == Some(before) && *month > before.month())
             })
             .flat_map(|(date, month)| {
                 // If after is XXXX-03-31 turning it to the next month would create XXX-02-31 which doesn't exist
                 // So if it fails, we try to make a datetime again
                 // It tries again 4 times. for 31, 30, 29 and 28
-                // Honestly this should be cleaner. Maybe I should return the last_day_of_month function
-                let mut decr_day = 0;
-                loop {
-                    if decr_day > 4 { break; }
+                for decr_day in 0..4 {
                     let date_with_month = date.clone().map(|d| d.with_day(d.day()-decr_day).map(|m| m.with_month(month))).flatten().flatten();
                     if date_with_month != None {
                         return iter::repeat(date_with_month).zip(self.days_of_month().iter().rev())
                     }
-                    decr_day += 1;
                 }
-                iter::repeat(None).zip(self.days_of_month().iter().rev())
+                iter::repeat(None).zip(self.days_of_month().iter().rev()) // Rust wants Zip<Repeat<_>>
             })
             .skip_while(|(date, day)| {
-                date.as_ref() > Some(before_rounded) ||
-                (date.as_ref() == Some(before_rounded) && *day > before_rounded.day())
+                date.as_ref() > Some(before) ||
+                (date.as_ref() == Some(before) && *day > before.day())
             })
             .map(|(date, day)| {
                 date.map(|d| d.with_day(day)).flatten()
@@ -156,8 +150,8 @@ impl Schedule {
                 .zip(self.hours().iter().rev())
             })
             .skip_while(|(date, hour)| {
-                date.as_ref() > Some(before_rounded) ||
-                (date.as_ref() == Some(before_rounded) && *hour > before_rounded.hour())
+                date.as_ref() > Some(before) ||
+                (date.as_ref() == Some(before) && *hour > before.hour())
             })
             .flat_map(|(date, hour)| {
                 iter::repeat(
@@ -166,8 +160,8 @@ impl Schedule {
                 .zip(self.minutes().iter().rev())
             })
             .skip_while(|(date, minute)| {
-                date.as_ref() > Some(before_rounded) ||
-                (date.as_ref() == Some(before_rounded) && *minute > before_rounded.minute())
+                date.as_ref() > Some(before) ||
+                (date.as_ref() == Some(before) && *minute > before.minute())
             })
             .flat_map(|(date, minute)| {
                 iter::repeat(
@@ -176,8 +170,8 @@ impl Schedule {
                 .zip(self.seconds().iter().rev())
             })
             .skip_while(|(date, second)| {
-                date.as_ref() > Some(before_rounded) ||
-                (date.as_ref() == Some(before_rounded) && *second >= before_rounded.second())
+                date.as_ref() > Some(before) ||
+                (date.as_ref() == Some(before) && *second >= before.second())
             })
             .map(|(date, second)| {
                 date.map(|d| d.with_second(second)).flatten()
