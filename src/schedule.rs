@@ -49,10 +49,14 @@ impl Schedule {
                 (date.as_ref() == Some(after_rounded) && *month < after_rounded.month())
             })
             .flat_map(|(date, month)| {
-                iter::repeat(
-                    date.map(|d| d.with_month(month)).flatten()
-                )
-                .zip(self.days_of_month().iter())
+                let date_with_month = date.clone().map(|d| d.with_month(month)).flatten();
+                if date_with_month == None { // If after is XXXX-01-31 turning it to the next month would create XXX-02-31 which doesn't exist
+                    iter::repeat(date.map(|d| d.with_day(1).map(|m| m.with_month(month))).flatten().flatten())
+                    .zip(self.days_of_month().iter())
+                } else {
+                    iter::repeat(date_with_month)
+                    .zip(self.days_of_month().iter())
+                }
             })
             .skip_while(|(date, day)| {
                 date.as_ref() < Some(after_rounded) ||
@@ -120,10 +124,20 @@ impl Schedule {
                 (date.as_ref() == Some(before_rounded) && *month > before_rounded.month())
             })
             .flat_map(|(date, month)| {
-                iter::repeat(
-                    date.map(|d| d.with_month(month)).flatten()
-                )
-                .zip(self.days_of_month().iter().rev())
+                // If after is XXXX-03-31 turning it to the next month would create XXX-02-31 which doesn't exist
+                // So if it fails, we try to make a datetime again
+                // It tries again 4 times. for 31, 30, 29 and 28
+                // Honestly this should be cleaner. Maybe I should return the last_day_of_month function
+                let mut decr_day = 0;
+                loop {
+                    if decr_day > 4 { break; }
+                    let date_with_month = date.clone().map(|d| d.with_day(d.day()-decr_day).map(|m| m.with_month(month))).flatten().flatten();
+                    if date_with_month != None {
+                        return iter::repeat(date_with_month).zip(self.days_of_month().iter().rev())
+                    }
+                    decr_day += 1;
+                }
+                iter::repeat(None).zip(self.days_of_month().iter().rev())
             })
             .skip_while(|(date, day)| {
                 date.as_ref() > Some(before_rounded) ||
