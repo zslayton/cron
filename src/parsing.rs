@@ -5,6 +5,7 @@ use crate::field::Field;
 use crate::specifier::{RootSpecifier, Specifier};
 use crate::time_unit::*;
 
+// TODO create ParserBuilder
 pub fn parse(expression: &str) -> Result<(Input, ScheduleFields), Err<Input>> {
     schedule(Input(expression))
 }

@@ -17,6 +17,8 @@ pub use self::years::Years;
 use crate::error::*;
 use crate::ordinal::{Ordinal, OrdinalSet};
 use crate::specifier::{RootSpecifier, Specifier};
+use crate::field::{Field, FromField};
+
 use std::borrow::Cow;
 use std::collections::btree_set;
 use std::iter;
@@ -315,5 +317,24 @@ where
                 .collect::<OrdinalSet>(),
         };
         Ok(ordinals)
+    }
+}
+
+impl<T> FromField for T
+where
+    T: TimeUnitField,
+{
+    fn from_field(field: Field) -> Result<T, Error> {
+        if field.specifiers.len() == 1 && 
+            field.specifiers.get(0).unwrap() == &RootSpecifier::from(Specifier::All) 
+            { return Ok(T::all()); }
+        let mut ordinals = OrdinalSet::new(); 
+        for specifier in field.specifiers {
+            let specifier_ordinals: OrdinalSet = T::ordinals_from_root_specifier(&specifier)?;
+            for ordinal in specifier_ordinals {
+                ordinals.insert(T::validate_ordinal(ordinal)?);
+            }
+        }
+        Ok(T::from_ordinal_set(ordinals))
     }
 }
