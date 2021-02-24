@@ -244,7 +244,7 @@ impl Schedule {
         self.fields.days_of_month.includes(date_time.day() as Ordinal) &&
         self.fields.hours.includes(date_time.hour() as Ordinal) &&
         self.fields.minutes.includes(date_time.minute() as Ordinal) &&
-        self.fields.minutes.includes(date_time.second() as Ordinal)
+        self.fields.seconds.includes(date_time.second() as Ordinal)
     }
 
     /// Returns a [TimeUnitSpec](trait.TimeUnitSpec.html) describing the years included
