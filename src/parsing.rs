@@ -1,60 +1,12 @@
 use nom::{types::CompleteStr as Input, *};
-use std::iter::{Iterator};
-use std::str::{self, FromStr};
 
-use crate::error::{Error, ErrorKind};
-use crate::schedule::{ScheduleFields, Schedule};
-use crate::field::{Field, FromField};
+use crate::schedulefields::ScheduleFields;
+use crate::field::Field;
 use crate::specifier::{RootSpecifier, Specifier};
 use crate::time_unit::*;
 
-impl FromStr for Schedule {
-    type Err = Error;
-    fn from_str(expression: &str) -> Result<Self, Self::Err> {
-        match schedule(Input(expression)) {
-            Ok((_, schedule_fields)) => {
-                Ok(Schedule::new(String::from(expression), schedule_fields))
-            } // Extract from nom tuple
-            Err(_) => Err(ErrorKind::Expression("Invalid cron expression.".to_owned()).into()), //TODO: Details
-        }
-    }
-}
-
-impl ScheduleFields {
-    fn from_field_list(fields: Vec<Field>) -> Result<ScheduleFields, Error> {
-        let number_of_fields = fields.len();
-        if number_of_fields != 6 && number_of_fields != 7 {
-            return Err(ErrorKind::Expression(format!(
-                "Expression has {} fields. Valid cron \
-                 expressions have 6 or 7.",
-                number_of_fields
-            ))
-            .into());
-        }
-
-        let mut iter = fields.into_iter();
-
-        let seconds = Seconds::from_field(iter.next().unwrap())?;
-        let minutes = Minutes::from_field(iter.next().unwrap())?;
-        let hours = Hours::from_field(iter.next().unwrap())?;
-        let days_of_month = DaysOfMonth::from_field(iter.next().unwrap())?;
-        let months = Months::from_field(iter.next().unwrap())?;
-        let days_of_week = DaysOfWeek::from_field(iter.next().unwrap())?;
-        let years: Years = iter
-            .next()
-            .map(Years::from_field)
-            .unwrap_or_else(|| Ok(Years::all()))?;
-
-        Ok(ScheduleFields::new(
-            seconds,
-            minutes,
-            hours,
-            days_of_month,
-            months,
-            days_of_week,
-            years,
-        ))
-    }
+pub fn parse(expression: &str) -> Result<(Input, ScheduleFields), Err<Input>> {
+    schedule(Input(expression))
 }
 
 named!(
