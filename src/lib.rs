@@ -47,6 +47,7 @@ mod specifier;
 mod queries;
 mod parsing;
 mod field;
+mod schedulefields;
 
 pub use crate::schedule::Schedule;
 pub use crate::time_unit::TimeUnitSpec;
