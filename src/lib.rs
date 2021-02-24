@@ -46,6 +46,7 @@ mod ordinal;
 mod specifier;
 mod queries;
 mod parsing;
+mod field;
 
 pub use crate::schedule::Schedule;
 pub use crate::time_unit::TimeUnitSpec;
