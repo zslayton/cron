@@ -147,13 +147,13 @@ where
         self.ordinals().contains(&ordinal)
     }
     fn iter(&self) -> OrdinalIter {
-        TimeUnitField::ordinals(self).iter()
+        TimeUnitField::ordinals(self).iter().cloned()
     }
     fn range<R>(&'_ self, range: R) -> OrdinalRangeIter<'_>
     where
         R: RangeBounds<Ordinal>,
     {
-        TimeUnitField::ordinals(self).range(range)
+        TimeUnitField::ordinals(self).range(range).cloned()
     }
     fn count(&self) -> u32 {
         self.ordinals().len() as u32
