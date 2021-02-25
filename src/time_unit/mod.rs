@@ -41,13 +41,13 @@ use std::ops::RangeBounds;
 /// assert_eq!(30, schedule.years().count());
 ///
 /// // Iterator
-/// let mut years_iter = schedule.years().iter().cloned();
+/// let mut years_iter = schedule.years().iter();
 /// assert_eq!(Some(2015), years_iter.next());
 /// assert_eq!(Some(2016), years_iter.next());
 /// // ...
 ///
 /// // Range Iterator
-/// let mut five_year_plan = schedule.years().range((Included(2017), Excluded(2017 + 5))).cloned();
+/// let mut five_year_plan = schedule.years().range((Included(2017), Excluded(2017 + 5)));
 /// assert_eq!(Some(2017), five_year_plan.next());
 /// assert_eq!(Some(2018), five_year_plan.next());
 /// assert_eq!(Some(2019), five_year_plan.next());
@@ -83,7 +83,7 @@ pub trait TimeUnitSpec {
     /// let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
     ///
     /// // Iterator
-    /// let mut summer = schedule.months().iter().cloned();
+    /// let mut summer = schedule.months().iter();
     /// assert_eq!(Some(5), summer.next());
     /// assert_eq!(Some(6), summer.next());
     /// assert_eq!(Some(7), summer.next());
@@ -103,7 +103,7 @@ pub trait TimeUnitSpec {
     /// let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
     ///
     /// // Range Iterator
-    /// let mut mid_month_paydays = schedule.days_of_month().range((Included(10), Included(20))).cloned();
+    /// let mut mid_month_paydays = schedule.days_of_month().range((Included(10), Included(20)));
     /// assert_eq!(Some(15), mid_month_paydays.next());
     /// assert_eq!(None, mid_month_paydays.next());
     /// ```
