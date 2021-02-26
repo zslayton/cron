@@ -1,12 +1,11 @@
 
 use chrono::offset::TimeZone;
-use chrono::{DateTime, Datelike, Timelike, Utc};
-use std::collections::Bound::{Included, Unbounded};
+use chrono::{DateTime, Datelike, Timelike, Utc, SubsecRound};
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::iter;
 
 use crate::time_unit::*;
 use crate::ordinal::*;
-use crate::queries::*;
 
 impl From<Schedule> for String {
     fn from(schedule: Schedule) -> String {
@@ -35,186 +34,148 @@ impl Schedule {
     where
         Z: TimeZone,
     {
-        let mut query = NextAfterQuery::from(after);
-        for year in self
-            .fields
-            .years
-            .ordinals()
-            .range((Included(query.year_lower_bound()), Unbounded))
-            .cloned()
-        {
-            let month_start = query.month_lower_bound();
-            if !self.fields.months.ordinals().contains(&month_start) {
-                query.reset_month();
-            }
-            let month_range = (Included(month_start), Included(Months::inclusive_max()));
-            for month in self.fields.months.ordinals().range(month_range).cloned() {
-                let day_of_month_start = query.day_of_month_lower_bound();
-                if !self.fields.days_of_month.ordinals().contains(&day_of_month_start) {
-                    query.reset_day_of_month();
+        self.years()
+            .iter()
+            .skip_while(|year| *year < after.year() as u32)
+            .flat_map(|year| {
+                iter::repeat(
+                    after.with_year(year as i32).map(|d| d.trunc_subsecs(0))
+                )
+                .zip(self.months().iter())
+            })
+            .skip_while(|(date, month)| {
+                date.as_ref() < Some(after) ||
+                (date.as_ref() == Some(after) && *month < after.month())
+            })
+            .flat_map(|(date, month)| {
+                let date_with_month = date.clone().and_then(|d| d.with_month(month));
+                if date_with_month == None { // If after is XXXX-01-31 turning it to the next month would create XXX-02-31 which doesn't exist
+                    iter::repeat(date.and_then(|d| d.with_day(1)).and_then(|m| m.with_month(month)))
+                    .zip(self.days_of_month().iter())
+                } else {
+                    iter::repeat(date_with_month)
+                    .zip(self.days_of_month().iter())
                 }
-                let day_of_month_end = days_in_month(month, year);
-                let day_of_month_range = (Included(day_of_month_start), Included(day_of_month_end));
-
-                'day_loop: for day_of_month in self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .range(day_of_month_range)
-                    .cloned()
-                {
-                    let hour_start = query.hour_lower_bound();
-                    if !self.fields.hours.ordinals().contains(&hour_start) {
-                        query.reset_hour();
-                    }
-                    let hour_range = (Included(hour_start), Included(Hours::inclusive_max()));
-
-                    for hour in self.fields.hours.ordinals().range(hour_range).cloned() {
-                        let minute_start = query.minute_lower_bound();
-                        if !self.fields.minutes.ordinals().contains(&minute_start) {
-                            query.reset_minute();
-                        }
-                        let minute_range =
-                            (Included(minute_start), Included(Minutes::inclusive_max()));
-
-                        for minute in self.fields.minutes.ordinals().range(minute_range).cloned() {
-                            let second_start = query.second_lower_bound();
-                            if !self.fields.seconds.ordinals().contains(&second_start) {
-                                query.reset_second();
-                            }
-                            let second_range =
-                                (Included(second_start), Included(Seconds::inclusive_max()));
-
-                            for second in self.fields.seconds.ordinals().range(second_range).cloned() {
-                                let timezone = after.timezone();
-                                let candidate = if let Some(candidate) = timezone
-                                    .ymd(year as i32, month, day_of_month)
-                                    .and_hms_opt(hour, minute, second)
-                                {
-                                    candidate
-                                } else {
-                                    continue;
-                                };
-                                if !self
-                                    .fields
-                                    .days_of_week
-                                    .ordinals()
-                                    .contains(&candidate.weekday().number_from_sunday())
-                                {
-                                    continue 'day_loop;
-                                }
-                                return Some(candidate);
-                            }
-                            query.reset_minute();
-                        } // End of minutes range
-                        query.reset_hour();
-                    } // End of hours range
-                    query.reset_day_of_month();
-                } // End of Day of Month range
-                query.reset_month();
-            } // End of Month range
-        }
-
-        // We ran out of dates to try.
-        None
+            })
+            .skip_while(|(date, day)| {
+                date.as_ref() < Some(after) ||
+                (date.as_ref() == Some(after) && *day < after.day())
+            })
+            .map(|(date, day)| {
+                date.and_then(|d| d.with_day(day))
+            })
+            .filter(|date| {
+                date.as_ref()
+                    .map_or(false,|d| self.days_of_week().includes(d.weekday().number_from_sunday()))
+            })
+            .flat_map(|date| {
+                iter::repeat(date).zip(self.hours().iter())
+            })
+            .skip_while(|(date, hour)| {
+                date.as_ref() < Some(after) ||
+                (date.as_ref() == Some(after) && *hour < after.hour())
+            })
+            .flat_map(|(date, hour)| {
+                iter::repeat(
+                    date.and_then(|d| d.with_hour(hour))
+                )
+                .zip(self.minutes().iter())
+            })
+            .skip_while(|(date, minute)| {
+                date.as_ref() < Some(after) ||
+                (date.as_ref() == Some(after) && *minute < after.minute())
+            })
+            .flat_map(|(date, minute)| {
+                iter::repeat(
+                    date.and_then(|d| d.with_minute(minute))
+                )
+                .zip(self.seconds().iter())
+            })
+            .skip_while(|(date, second)| {
+                date.as_ref() < Some(after) ||
+                (date.as_ref() == Some(after) && *second <= after.second())
+            })
+            .map(|(date, second)| {
+                date.and_then(|d| d.with_second(second))
+            })
+            .next()
+            .flatten()
     }
 
     fn prev_from<Z>(&self, before: &DateTime<Z>) -> Option<DateTime<Z>>
     where
         Z: TimeZone,
     {
-        let mut query = PrevFromQuery::from(before);
-        for year in self
-            .fields
-            .years
-            .ordinals()
-            .range((Unbounded, Included(query.year_upper_bound())))
+        self.years()
+            .iter()
             .rev()
-            .cloned()
-        {
-            let month_start = query.month_upper_bound();
-
-            if !self.fields.months.ordinals().contains(&month_start) {
-                query.reset_month();
-            }
-            let month_range = (Included(Months::inclusive_min()), Included(month_start));
-
-            for month in self.fields.months.ordinals().range(month_range).rev().cloned() {
-                let day_of_month_end = query.day_of_month_upper_bound();
-                if !self.fields.days_of_month.ordinals().contains(&day_of_month_end) {
-                    query.reset_day_of_month();
-                }
-
-                let day_of_month_end = days_in_month(month, year).min(day_of_month_end);
-
-                let day_of_month_range = (
-                    Included(DaysOfMonth::inclusive_min()),
-                    Included(day_of_month_end),
-                );
-
-                'day_loop: for day_of_month in self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .range(day_of_month_range)
-                    .rev()
-                    .cloned()
-                {
-                    let hour_start = query.hour_upper_bound();
-                    if !self.fields.hours.ordinals().contains(&hour_start) {
-                        query.reset_hour();
+            .skip_while(|year| *year < before.year() as u32)
+            .flat_map(|year| {
+                iter::repeat(
+                    before.with_year(year as i32).map(|d| d.trunc_subsecs(0))
+                )
+                .zip(self.months().iter().rev())
+            })
+            .skip_while(|(date, month)| {
+                date.as_ref() > Some(before) ||
+                (date.as_ref() == Some(before) && *month > before.month())
+            })
+            .flat_map(|(date, month)| {
+                // If after is XXXX-03-31 turning it to the next month would create XXX-02-31 which doesn't exist
+                // So if it fails, we try to make a datetime again
+                // It tries again 4 times. for 31, 30, 29 and 28
+                for decr_day in 0..4 {
+                    let date_with_month = date.clone().and_then(|d| d.with_day(d.day()-decr_day)).and_then(|m| m.with_month(month));
+                    if date_with_month != None {
+                        return iter::repeat(date_with_month).zip(self.days_of_month().iter().rev())
                     }
-                    let hour_range = (Included(Hours::inclusive_min()), Included(hour_start));
-
-                    for hour in self.fields.hours.ordinals().range(hour_range).rev().cloned() {
-                        let minute_start = query.minute_upper_bound();
-                        if !self.fields.minutes.ordinals().contains(&minute_start) {
-                            query.reset_minute();
-                        }
-                        let minute_range =
-                            (Included(Minutes::inclusive_min()), Included(minute_start));
-
-                        for minute in self.fields.minutes.ordinals().range(minute_range).rev().cloned() {
-                            let second_start = query.second_upper_bound();
-                            if !self.fields.seconds.ordinals().contains(&second_start) {
-                                query.reset_second();
-                            }
-                            let second_range =
-                                (Included(Seconds::inclusive_min()), Included(second_start));
-
-                            for second in self.fields.seconds.ordinals().range(second_range).rev().cloned()
-                            {
-                                let timezone = before.timezone();
-                                let candidate = if let Some(candidate) = timezone
-                                    .ymd(year as i32, month, day_of_month)
-                                    .and_hms_opt(hour, minute, second)
-                                {
-                                    candidate
-                                } else {
-                                    continue;
-                                };
-                                if !self
-                                    .fields
-                                    .days_of_week
-                                    .ordinals()
-                                    .contains(&candidate.weekday().number_from_sunday())
-                                {
-                                    continue 'day_loop;
-                                }
-                                return Some(candidate);
-                            }
-                            query.reset_minute();
-                        } // End of minutes range
-                        query.reset_hour();
-                    } // End of hours range
-                    query.reset_day_of_month();
-                } // End of Day of Month range
-                query.reset_month();
-            } // End of Month range
-        }
-
-        // We ran out of dates to try.
-        None
+                }
+                iter::repeat(None).zip(self.days_of_month().iter().rev()) // Rust wants Zip<Repeat<_>>
+            })
+            .skip_while(|(date, day)| {
+                date.as_ref() > Some(before) ||
+                (date.as_ref() == Some(before) && *day > before.day())
+            })
+            .map(|(date, day)| {
+                date.and_then(|d| d.with_day(day))
+            })
+            .filter(|date| {
+                date.as_ref()
+                    .map_or(false, |d| self.days_of_week().includes(d.weekday().number_from_sunday()))
+            })
+            .flat_map(|date| {
+                iter::repeat(date)
+                .zip(self.hours().iter().rev())
+            })
+            .skip_while(|(date, hour)| {
+                date.as_ref() > Some(before) ||
+                (date.as_ref() == Some(before) && *hour > before.hour())
+            })
+            .flat_map(|(date, hour)| {
+                iter::repeat(
+                    date.and_then(|d| d.with_hour(hour))
+                )
+                .zip(self.minutes().iter().rev())
+            })
+            .skip_while(|(date, minute)| {
+                date.as_ref() > Some(before) ||
+                (date.as_ref() == Some(before) && *minute > before.minute())
+            })
+            .flat_map(|(date, minute)| {
+                iter::repeat(
+                    date.and_then(|d| d.with_minute(minute))
+                )
+                .zip(self.seconds().iter().rev())
+            })
+            .skip_while(|(date, second)| {
+                date.as_ref() > Some(before) ||
+                (date.as_ref() == Some(before) && *second >= before.second())
+            })
+            .map(|(date, second)| {
+                date.and_then(|d| d.with_second(second))
+            })
+            .next()
+            .flatten()
     }
 
     /// Provides an iterator which will return each DateTime that matches the schedule starting with
@@ -398,23 +359,6 @@ where
             self.is_done = true;
             None
         }
-    }
-}
-
-fn is_leap_year(year: Ordinal) -> bool {
-    let by_four = year % 4 == 0;
-    let by_hundred = year % 100 == 0;
-    let by_four_hundred = year % 400 == 0;
-    by_four && ((!by_hundred) || by_four_hundred)
-}
-
-fn days_in_month(month: Ordinal, year: Ordinal) -> u32 {
-    let is_leap_year = is_leap_year(year);
-    match month {
-        9 | 4 | 6 | 11 => 30,
-        2 if is_leap_year => 29,
-        2 => 28,
-        _ => 31,
     }
 }
 

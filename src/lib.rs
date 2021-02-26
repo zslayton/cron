@@ -44,7 +44,6 @@ mod schedule;
 mod time_unit;
 mod ordinal;
 mod specifier;
-mod queries;
 mod parsing;
 
 pub use crate::schedule::Schedule;
