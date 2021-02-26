@@ -42,12 +42,12 @@ extern crate chrono_tz;
 pub mod error;
 mod schedule;
 mod time_unit;
-mod ordinal;
+pub mod ordinal;
 mod specifier;
 mod queries;
 mod parsing;
 mod field;
 mod schedulefields;
 
-pub use crate::schedule::Schedule;
+pub use crate::schedule::{Schedule, ScheduleIterator};
 pub use crate::time_unit::TimeUnitSpec;

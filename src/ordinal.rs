@@ -5,4 +5,4 @@ use std::iter::Cloned;
 pub type Ordinal = u32;
 pub type OrdinalSet = BTreeSet<Ordinal>;
 pub type OrdinalIter<'a> = Cloned<btree_set::Iter<'a, Ordinal>>;
-pub type OrdinalRangeIter<'a> = Cloned<btree_set::Range<'a, Ordinal>>;
+pub type OrdinalRange<'a> = Cloned<btree_set::Range<'a, Ordinal>>;

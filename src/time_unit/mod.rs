@@ -15,7 +15,7 @@ pub use self::seconds::Seconds;
 pub use self::years::Years;
 
 use crate::error::*;
-use crate::ordinal::{Ordinal, OrdinalSet, OrdinalIter, OrdinalRangeIter};
+use crate::ordinal::{Ordinal, OrdinalSet, OrdinalIter, OrdinalRange};
 use crate::specifier::{RootSpecifier, Specifier};
 use crate::field::{Field, FromField};
 
@@ -107,7 +107,7 @@ pub trait TimeUnitSpec {
     /// assert_eq!(Some(15), mid_month_paydays.next());
     /// assert_eq!(None, mid_month_paydays.next());
     /// ```
-    fn range<R>(&self, range: R) -> OrdinalRangeIter
+    fn range<R>(&self, range: R) -> OrdinalRange
     where
         R: RangeBounds<Ordinal>;
 
@@ -149,7 +149,7 @@ where
     fn iter(&self) -> OrdinalIter {
         TimeUnitField::ordinals(self).iter().cloned()
     }
-    fn range<R>(&'_ self, range: R) -> OrdinalRangeIter<'_>
+    fn range<R>(&'_ self, range: R) -> OrdinalRange<'_>
     where
         R: RangeBounds<Ordinal>,
     {
