@@ -7,7 +7,7 @@ mod tests {
     use chrono::*;
     use chrono_tz::Tz;
     use cron::{Schedule, TimeUnitSpec};
-    use std::collections::Bound::{Excluded, Included};
+    use std::ops::Bound::{Excluded, Included};
     use std::str::FromStr;
 
     #[test]
