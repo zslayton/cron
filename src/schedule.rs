@@ -1,7 +1,7 @@
 
 use chrono::offset::TimeZone;
 use chrono::{DateTime, Datelike, Timelike, Utc};
-use std::collections::Bound::{Included, Unbounded};
+use std::ops::Bound::{Included, Unbounded};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use crate::time_unit::*;
