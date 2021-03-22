@@ -1,13 +1,13 @@
 [package]
 name = "cron"
-version = "0.8.0"
+version = "0.9.0"
 authors = ["Zack Slayton <zack.slayton@gmail.com>"]
 repository = "https://github.com/zslayton/cron"
 documentation = "https://docs.rs/cron"
 readme = "README.md"
 description = "A cron expression parser and schedule explorer."
 keywords = [ "cron", "schedule", "repeat", "periodic", "time" ]
-license = "MIT"
+license = "MIT OR Apache-2.0"
 edition = "2018"
 
 [lib]

@@ -27,7 +27,7 @@ use std::ops::RangeBounds;
 /// # Example
 /// ```
 /// use cron::{Schedule,TimeUnitSpec};
-/// use std::collections::Bound::{Included,Excluded};
+/// use std::ops::Bound::{Included,Excluded};
 /// use std::str::FromStr;
 ///
 /// let expression = "* * * * * * 2015-2044";
@@ -96,7 +96,7 @@ pub trait TimeUnitSpec {
     /// # Example
     /// ```
     /// use cron::{Schedule,TimeUnitSpec};
-    /// use std::collections::Bound::{Included,Excluded};
+    /// use std::ops::Bound::{Included,Excluded};
     /// use std::str::FromStr;
     ///
     /// let expression = "* * * 1,15 * * *";
