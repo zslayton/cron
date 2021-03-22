@@ -1,92 +1,13 @@
 use nom::{types::CompleteStr as Input, *};
-use std::iter::{Iterator};
-use std::str::{self, FromStr};
 
-use crate::error::{Error, ErrorKind};
-use crate::schedule::{ScheduleFields, Schedule};
-use crate::specifier::*;
+use crate::schedulefields::ScheduleFields;
+use crate::field::Field;
+use crate::specifier::{RootSpecifier, Specifier};
 use crate::time_unit::*;
-use crate::ordinal::*;
 
-impl FromStr for Schedule {
-    type Err = Error;
-    fn from_str(expression: &str) -> Result<Self, Self::Err> {
-        match schedule(Input(expression)) {
-            Ok((_, schedule_fields)) => {
-                Ok(Schedule::new(String::from(expression), schedule_fields))
-            } // Extract from nom tuple
-            Err(_) => Err(ErrorKind::Expression("Invalid cron expression.".to_owned()).into()), //TODO: Details
-        }
-    }
-}
-
-impl ScheduleFields {
-    fn from_field_list(fields: Vec<Field>) -> Result<ScheduleFields, Error> {
-        let number_of_fields = fields.len();
-        if number_of_fields != 6 && number_of_fields != 7 {
-            return Err(ErrorKind::Expression(format!(
-                "Expression has {} fields. Valid cron \
-                 expressions have 6 or 7.",
-                number_of_fields
-            ))
-            .into());
-        }
-
-        let mut iter = fields.into_iter();
-
-        let seconds = Seconds::from_field(iter.next().unwrap())?;
-        let minutes = Minutes::from_field(iter.next().unwrap())?;
-        let hours = Hours::from_field(iter.next().unwrap())?;
-        let days_of_month = DaysOfMonth::from_field(iter.next().unwrap())?;
-        let months = Months::from_field(iter.next().unwrap())?;
-        let days_of_week = DaysOfWeek::from_field(iter.next().unwrap())?;
-        let years: Years = iter
-            .next()
-            .map(Years::from_field)
-            .unwrap_or_else(|| Ok(Years::all()))?;
-
-        Ok(ScheduleFields::new(
-            seconds,
-            minutes,
-            hours,
-            days_of_month,
-            months,
-            days_of_week,
-            years,
-        ))
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Field {
-    pub specifiers: Vec<RootSpecifier>, // TODO: expose iterator?
-}
-
-trait FromField
-where
-    Self: Sized,
-{
-    //TODO: Replace with std::convert::TryFrom when stable
-    fn from_field(field: Field) -> Result<Self, Error>;
-}
-
-impl<T> FromField for T
-where
-    T: TimeUnitField,
-{
-    fn from_field(field: Field) -> Result<T, Error> {
-        if field.specifiers.len() == 1 && 
-            field.specifiers.get(0).unwrap() == &RootSpecifier::from(Specifier::All) 
-            { return Ok(T::all()); }
-        let mut ordinals = OrdinalSet::new(); 
-        for specifier in field.specifiers {
-            let specifier_ordinals: OrdinalSet = T::ordinals_from_root_specifier(&specifier)?;
-            for ordinal in specifier_ordinals {
-                ordinals.insert(T::validate_ordinal(ordinal)?);
-            }
-        }
-        Ok(T::from_ordinal_set(ordinals))
-    }
+// TODO create ParserBuilder
+pub fn parse(expression: &str) -> Result<(Input, ScheduleFields), Err<Input>> {
+    schedule(Input(expression))
 }
 
 named!(

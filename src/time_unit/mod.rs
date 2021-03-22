@@ -15,46 +15,13 @@ pub use self::seconds::Seconds;
 pub use self::years::Years;
 
 use crate::error::*;
-use crate::ordinal::{Ordinal, OrdinalSet};
+use crate::ordinal::{Ordinal, OrdinalSet, OrdinalIter, OrdinalRange};
 use crate::specifier::{RootSpecifier, Specifier};
+use crate::field::{Field, FromField};
+
 use std::borrow::Cow;
-use std::collections::btree_set;
 use std::iter;
 use std::ops::RangeBounds;
-
-pub struct OrdinalIter<'a> {
-    set_iter: btree_set::Iter<'a, Ordinal>,
-}
-
-impl<'a> Iterator for OrdinalIter<'a> {
-    type Item = Ordinal;
-    fn next(&mut self) -> Option<Ordinal> {
-        self.set_iter.next().copied()
-    }
-}
-
-impl<'a> DoubleEndedIterator for OrdinalIter<'a> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.set_iter.next_back().copied()
-    }
-}
-
-pub struct OrdinalRangeIter<'a> {
-    range_iter: btree_set::Range<'a, Ordinal>,
-}
-
-impl<'a> Iterator for OrdinalRangeIter<'a> {
-    type Item = Ordinal;
-    fn next(&mut self) -> Option<Ordinal> {
-        self.range_iter.next().copied()
-    }
-}
-
-impl<'a> DoubleEndedIterator for OrdinalRangeIter<'a> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.range_iter.next_back().copied()
-    }
-}
 
 /// Methods exposing a schedule's configured ordinals for each individual unit of time.
 /// # Example
@@ -140,7 +107,7 @@ pub trait TimeUnitSpec {
     /// assert_eq!(Some(15), mid_month_paydays.next());
     /// assert_eq!(None, mid_month_paydays.next());
     /// ```
-    fn range<R>(&self, range: R) -> OrdinalRangeIter
+    fn range<R>(&self, range: R) -> OrdinalRange
     where
         R: RangeBounds<Ordinal>;
 
@@ -180,17 +147,13 @@ where
         self.ordinals().contains(&ordinal)
     }
     fn iter(&self) -> OrdinalIter {
-        OrdinalIter {
-            set_iter: TimeUnitField::ordinals(self).iter(),
-        }
+        OrdinalIter { set_iter: TimeUnitField::ordinals(self).iter() }
     }
-    fn range<R>(&'_ self, range: R) -> OrdinalRangeIter<'_>
+    fn range<R>(&'_ self, range: R) -> OrdinalRange<'_>
     where
         R: RangeBounds<Ordinal>,
     {
-        OrdinalRangeIter {
-            range_iter: TimeUnitField::ordinals(self).range(range),
-        }
+        OrdinalRange { set_range: TimeUnitField::ordinals(self).range(range) }
     }
     fn count(&self) -> u32 {
         self.ordinals().len() as u32
@@ -315,5 +278,24 @@ where
                 .collect::<OrdinalSet>(),
         };
         Ok(ordinals)
+    }
+}
+
+impl<T> FromField for T
+where
+    T: TimeUnitField,
+{
+    fn from_field(field: Field) -> Result<T, Error> {
+        if field.specifiers.len() == 1 && 
+            field.specifiers.get(0).unwrap() == &RootSpecifier::from(Specifier::All) 
+            { return Ok(T::all()); }
+        let mut ordinals = OrdinalSet::new(); 
+        for specifier in field.specifiers {
+            let specifier_ordinals: OrdinalSet = T::ordinals_from_root_specifier(&specifier)?;
+            for ordinal in specifier_ordinals {
+                ordinals.insert(T::validate_ordinal(ordinal)?);
+            }
+        }
+        Ok(T::from_ordinal_set(ordinals))
     }
 }
