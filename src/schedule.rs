@@ -225,6 +225,14 @@ impl Schedule {
     {
         self.after(&timezone.from_utc_datetime(&Utc::now().naive_utc()))
     }
+    /// Provides an iterator which will return each DateTime that matches the schedule starting with
+    /// the current time if applicable.
+    pub fn upcoming_owned<'b, Z>(self, timezone: Z) -> ScheduleIterator<'b, Z>
+    where
+        Z: TimeZone,
+    {
+        self.after_owned(timezone.from_utc_datetime(&Utc::now().naive_utc()))
+    }
 
     /// Like the `upcoming` method, but allows you to specify a start time other than the present.
     pub fn after<Z>(&self, after: &DateTime<Z>) -> ScheduleIterator<Z>
@@ -232,6 +240,13 @@ impl Schedule {
         Z: TimeZone,
     {
         ScheduleIterator::new(self, after)
+    }
+    /// Like the `upcoming` method, but allows you to specify a start time other than the present.
+    pub fn after_owned<'b, Z>(self, after: DateTime<Z>) -> ScheduleIterator<'b, Z>
+    where
+        Z: TimeZone,
+    {
+        ScheduleIterator::owned(self, after)
     }
 
     pub fn includes<Z>(&self, date_time: DateTime<Z>) -> bool
@@ -339,12 +354,13 @@ impl ScheduleFields {
     }
 }
 
+use std::borrow::Cow;
 pub struct ScheduleIterator<'a, Z>
 where
     Z: TimeZone,
 {
     is_done: bool,
-    schedule: &'a Schedule,
+    schedule: Cow<'a, Schedule>,
     previous_datetime: DateTime<Z>,
 }
 //TODO: Cutoff datetime?
@@ -356,8 +372,15 @@ where
     fn new(schedule: &'a Schedule, starting_datetime: &DateTime<Z>) -> ScheduleIterator<'a, Z> {
         ScheduleIterator {
             is_done: false,
-            schedule,
+            schedule: Cow::Borrowed(schedule),
             previous_datetime: starting_datetime.clone(),
+        }
+    }
+    fn owned(schedule: Schedule, starting_datetime: DateTime<Z>) -> ScheduleIterator<'a, Z> {
+        ScheduleIterator {
+            is_done: false,
+            schedule: Cow::Owned(schedule),
+            previous_datetime: starting_datetime,
         }
     }
 }
@@ -581,4 +604,26 @@ mod test {
         assert!(schedule_1.timeunitspec_eq(&schedule_2));
         assert!(schedule_3.timeunitspec_eq(&schedule_4));
     }
+
+    use chrono::prelude::*;
+    #[test]
+    fn test_owned_box() {
+        let mut boxed = box_helper_upcoming();
+        assert!(boxed.next().is_some());
+        let mut boxed = box_helper_after();
+        assert!(boxed.next().is_some());
+    }
+
+    fn box_helper_upcoming() -> Box<dyn Iterator<Item = DateTime<Local>>> {
+        let schedule = Schedule::from_str("0 0 0 * * 1 *").unwrap();
+        let upcoming = schedule.upcoming_owned(Local);
+        Box::new(upcoming)
+    }
+
+    fn box_helper_after() -> Box<dyn Iterator<Item = DateTime<Local>>> {
+        let schedule = Schedule::from_str("0 0 0 * * 1 *").unwrap();
+        let upcoming = schedule.after_owned(Local);
+        Box::new(upcoming)
+    }
+
 }
