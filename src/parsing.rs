@@ -1,5 +1,11 @@
-use nom::*;
-use nom::character::complete::{alpha1, digit1};
+use nom::branch::alt;
+use nom::bytes::complete::tag;
+use nom::character::complete::{alpha1, digit1, multispace0};
+use nom::combinator::{map, map_res, opt};
+use nom::multi::separated_nonempty_list;
+use nom::sequence::{delimited, separated_pair, terminated, tuple};
+use nom::IResult;
+
 use std::iter::{Iterator};
 use std::str::{self, FromStr};
 
@@ -90,232 +96,228 @@ where
     }
 }
 
-named!(
-    ordinal<&str, u32>,
-    map_res!(ws!(digit1), |x: &str| x.parse())
-);
+fn ordinal(i: &str) -> IResult<&str, u32> {
+    map_res(delimited(multispace0, digit1, multispace0), u32::from_str)(i)
+}
 
-named!(
-    name<&str, String>,
-    map!(ws!(alpha1), |x| x.to_owned())
-);
+fn name(i: &str) -> IResult<&str, String> {
+    map(
+        delimited(multispace0, alpha1, multispace0),
+        ToOwned::to_owned,
+    )(i)
+}
 
-named!(
-    point<&str, Specifier>,
-    do_parse!(o: ordinal >> (Specifier::Point(o)))
-);
+fn point(i: &str) -> IResult<&str, Specifier> {
+    let (i, o) = ordinal(i)?;
+    Ok((i, Specifier::Point(o)))
+}
 
-named!(
-    named_point<&str, RootSpecifier>,
-    do_parse!(n: name >> (RootSpecifier::NamedPoint(n)))
-);
+fn named_point(i: &str) -> IResult<&str, RootSpecifier> {
+    let (i, n) = name(i)?;
+    Ok((i, RootSpecifier::NamedPoint(n)))
+}
 
-named!(
-    period<&str, RootSpecifier>,
-    complete!(do_parse!(
-        start: specifier >> tag!("/") >> step: ordinal >> (RootSpecifier::Period(start, step))
-    ))
-);
+fn period(i: &str) -> IResult<&str, RootSpecifier> {
+    map(
+        separated_pair(specifier, tag("/"), ordinal),
+        |(start, step)| RootSpecifier::Period(start, step),
+    )(i)
+}
 
-named!(
-    period_with_any<&str, RootSpecifier>,
-    complete!(do_parse!(
-        start: specifier_with_any >> tag!("/") >> step: ordinal >> (RootSpecifier::Period(start, step))
-    ))
-);
+fn period_with_any(i: &str) -> IResult<&str, RootSpecifier> {
+    map(
+        separated_pair(specifier_with_any, tag("/"), ordinal),
+        |(start, step)| RootSpecifier::Period(start, step),
+    )(i)
+}
 
-named!(
-    range<&str, Specifier>,
-    complete!(do_parse!(
-        start: ordinal >> tag!("-") >> end: ordinal >> (Specifier::Range(start, end))
-    ))
-);
+fn range(i: &str) -> IResult<&str, Specifier> {
+    map(
+        separated_pair(ordinal, tag("-"), ordinal),
+        |(start, end)| Specifier::Range(start, end),
+    )(i)
+}
 
-named!(
-    named_range<&str, Specifier>,
-    complete!(do_parse!(
-        start: name >> tag!("-") >> end: name >> (Specifier::NamedRange(start, end))
-    ))
-);
+fn named_range(i: &str) -> IResult<&str, Specifier> {
+    map(separated_pair(name, tag("-"), name), |(start, end)| {
+        Specifier::NamedRange(start, end)
+    })(i)
+}
 
-named!(all<&str, Specifier>, do_parse!(tag!("*") >> (Specifier::All)));
+fn all(i: &str) -> IResult<&str, Specifier> {
+    let (i, _) = tag("*")(i)?;
+    Ok((i, Specifier::All))
+}
 
-named!(any<&str, Specifier>, do_parse!(tag!("?") >> (Specifier::All)));
+fn any(i: &str) -> IResult<&str, Specifier> {
+    let (i, _) = tag("?")(i)?;
+    Ok((i, Specifier::All))
+}
 
-named!(
-    specifier<&str, Specifier>,
-    alt!(all | range | point | named_range)
-);
+fn specifier(i: &str) -> IResult<&str, Specifier> {
+    alt((all, range, point, named_range))(i)
+}
 
-named!(
-    specifier_with_any<&str, Specifier>,
-    alt!(
-        any |
-        specifier
-    )
-);
+fn specifier_with_any(i: &str) -> IResult<&str, Specifier> {
+    alt((any, specifier))(i)
+}
 
-named!(
-    root_specifier<&str, RootSpecifier>,
-    alt!(period | map!(specifier, RootSpecifier::from) | named_point)
-);
+fn root_specifier(i: &str) -> IResult<&str, RootSpecifier> {
+    alt((period, map(specifier, RootSpecifier::from), named_point))(i)
+}
 
-named!(
-    root_specifier_with_any<&str, RootSpecifier>,
-    alt!(period_with_any | map!(specifier_with_any, RootSpecifier::from) | named_point)
-);
+fn root_specifier_with_any(i: &str) -> IResult<&str, RootSpecifier> {
+    alt((
+        period_with_any,
+        map(specifier_with_any, RootSpecifier::from),
+        named_point,
+    ))(i)
+}
 
-named!(
-    root_specifier_list<&str, Vec<RootSpecifier>>,
-    ws!(alt!(
-        do_parse!(list: separated_nonempty_list!(tag!(","), root_specifier) >> (list))
-            | do_parse!(spec: root_specifier >> (vec![spec]))
-    ))
-);
+fn root_specifier_list(i: &str) -> IResult<&str, Vec<RootSpecifier>> {
+    let list = separated_nonempty_list(tag(","), root_specifier);
+    let single_item = map(root_specifier, |spec| vec![spec]);
+    delimited(multispace0, alt((list, single_item)), multispace0)(i)
+}
 
-named!(
-    root_specifier_list_with_any<&str, Vec<RootSpecifier>>,
-    ws!(alt!(
-        do_parse!(list: separated_nonempty_list!(tag!(","), root_specifier_with_any) >> (list))
-            | do_parse!(spec: root_specifier_with_any >> (vec![spec]))
-    ))
-);
+fn root_specifier_list_with_any(i: &str) -> IResult<&str, Vec<RootSpecifier>> {
+    let list = separated_nonempty_list(tag(","), root_specifier_with_any);
+    let single_item = map(root_specifier_with_any, |spec| vec![spec]);
+    delimited(multispace0, alt((list, single_item)), multispace0)(i)
+}
 
-named!(
-    field<&str, Field>,
-    do_parse!(specifiers: root_specifier_list >> (Field { specifiers }))
-);
+fn field(i: &str) -> IResult<&str, Field> {
+    let (i, specifiers) = root_specifier_list(i)?;
+    Ok((i, Field { specifiers }))
+}
 
-named!(
-    field_with_any<&str, Field>,
-    alt!(
-        do_parse!(specifiers: root_specifier_list_with_any >> (Field { specifiers }))
-    )
-);
+fn field_with_any(i: &str) -> IResult<&str, Field> {
+    let (i, specifiers) = root_specifier_list_with_any(i)?;
+    Ok((i, Field { specifiers }))
+}
 
-named!(
-    shorthand_yearly<&str, ScheduleFields>,
-    do_parse!(
-        tag!("@yearly")
-            >> (ScheduleFields::new(
-                Seconds::from_ordinal(0),
-                Minutes::from_ordinal(0),
-                Hours::from_ordinal(0),
-                DaysOfMonth::from_ordinal(1),
-                Months::from_ordinal(1),
-                DaysOfWeek::all(),
-                Years::all()
-            ))
-    )
-);
+fn shorthand_yearly(i: &str) -> IResult<&str, ScheduleFields> {
+    let (i, _) = tag("@yearly")(i)?;
+    let fields = ScheduleFields::new(
+        Seconds::from_ordinal(0),
+        Minutes::from_ordinal(0),
+        Hours::from_ordinal(0),
+        DaysOfMonth::from_ordinal(1),
+        Months::from_ordinal(1),
+        DaysOfWeek::all(),
+        Years::all(),
+    );
+    Ok((i, fields))
+}
 
-named!(
-    shorthand_monthly<&str, ScheduleFields>,
-    do_parse!(
-        tag!("@monthly")
-            >> (ScheduleFields::new(
-                Seconds::from_ordinal(0),
-                Minutes::from_ordinal(0),
-                Hours::from_ordinal(0),
-                DaysOfMonth::from_ordinal(1),
-                Months::all(),
-                DaysOfWeek::all(),
-                Years::all()
-            ))
-    )
-);
+fn shorthand_monthly(i: &str) -> IResult<&str, ScheduleFields> {
+    let (i, _) = tag("@monthly")(i)?;
+    let fields = ScheduleFields::new(
+        Seconds::from_ordinal(0),
+        Minutes::from_ordinal(0),
+        Hours::from_ordinal(0),
+        DaysOfMonth::from_ordinal(1),
+        Months::all(),
+        DaysOfWeek::all(),
+        Years::all(),
+    );
+    Ok((i, fields))
+}
 
-named!(
-    shorthand_weekly<&str, ScheduleFields>,
-    do_parse!(
-        tag!("@weekly")
-            >> (ScheduleFields::new(
-                Seconds::from_ordinal(0),
-                Minutes::from_ordinal(0),
-                Hours::from_ordinal(0),
-                DaysOfMonth::all(),
-                Months::all(),
-                DaysOfWeek::from_ordinal(1),
-                Years::all()
-            ))
-    )
-);
+fn shorthand_weekly(i: &str) -> IResult<&str, ScheduleFields> {
+    let (i, _) = tag("@weekly")(i)?;
+    let fields = ScheduleFields::new(
+        Seconds::from_ordinal(0),
+        Minutes::from_ordinal(0),
+        Hours::from_ordinal(0),
+        DaysOfMonth::all(),
+        Months::all(),
+        DaysOfWeek::from_ordinal(1),
+        Years::all(),
+    );
+    Ok((i, fields))
+}
 
-named!(
-    shorthand_daily<&str, ScheduleFields>,
-    do_parse!(
-        tag!("@daily")
-            >> (ScheduleFields::new(
-                Seconds::from_ordinal(0),
-                Minutes::from_ordinal(0),
-                Hours::from_ordinal(0),
-                DaysOfMonth::all(),
-                Months::all(),
-                DaysOfWeek::all(),
-                Years::all()
-            ))
-    )
-);
+fn shorthand_daily(i: &str) -> IResult<&str, ScheduleFields> {
+    let (i, _) = tag("@daily")(i)?;
+    let fields = ScheduleFields::new(
+        Seconds::from_ordinal(0),
+        Minutes::from_ordinal(0),
+        Hours::from_ordinal(0),
+        DaysOfMonth::all(),
+        Months::all(),
+        DaysOfWeek::all(),
+        Years::all(),
+    );
+    Ok((i, fields))
+}
 
-named!(
-    shorthand_hourly<&str, ScheduleFields>,
-    do_parse!(
-        tag!("@hourly")
-            >> (ScheduleFields::new(
-                Seconds::from_ordinal(0),
-                Minutes::from_ordinal(0),
-                Hours::all(),
-                DaysOfMonth::all(),
-                Months::all(),
-                DaysOfWeek::all(),
-                Years::all()
-            ))
-    )
-);
+fn shorthand_hourly(i: &str) -> IResult<&str, ScheduleFields> {
+    let (i, _) = tag("@hourly")(i)?;
+    let fields = ScheduleFields::new(
+        Seconds::from_ordinal(0),
+        Minutes::from_ordinal(0),
+        Hours::all(),
+        DaysOfMonth::all(),
+        Months::all(),
+        DaysOfWeek::all(),
+        Years::all(),
+    );
+    Ok((i, fields))
+}
 
-named!(
-    shorthand<&str, ScheduleFields>,
-    alt!(
-        shorthand_yearly
-            | shorthand_monthly
-            | shorthand_weekly
-            | shorthand_daily
-            | shorthand_hourly
-    )
-);
+fn shorthand(i: &str) -> IResult<&str, ScheduleFields> {
+    alt((
+        shorthand_yearly,
+        shorthand_monthly,
+        shorthand_weekly,
+        shorthand_daily,
+        shorthand_hourly,
+    ))(i)
+}
 
-named!(
-    longhand<&str, ScheduleFields>,
-    map_res!(
-        complete!(do_parse!(
-            seconds: field >>
-            minutes: field >>
-            hours: field >>
-            days_of_month: field_with_any >>
-            months: field >>
-            days_of_week: field_with_any >>
-            years: opt!(field) >>
-            eof!() >>
-            ({
-                let mut fields = vec![
-                    seconds,
-                    minutes,
-                    hours,
-                    days_of_month,
-                    months,
-                    days_of_week,
-                ];
-                if let Some(years) = years {
-                    fields.push(years);
-                }
-                fields
-            })
-        )),
-        ScheduleFields::from_field_list
-    )
-);
+use nom::error::ParseError;
+use nom::{Err, InputLength};
 
-named!(schedule<&str, ScheduleFields>, alt!(shorthand | longhand));
+fn eof<I: InputLength + Clone, E: ParseError<I>>(input: I) -> IResult<I, I, E> {
+    if input.input_len() == 0 {
+        let clone = input.clone();
+        Ok((input, clone))
+    } else {
+        Err(Err::Error(E::from_error_kind(
+            input,
+            nom::error::ErrorKind::Eof,
+        )))
+    }
+}
+
+fn longhand(i: &str) -> IResult<&str, ScheduleFields> {
+    let fields = tuple((
+        field,
+        field,
+        field,
+        field_with_any,
+        field,
+        field_with_any,
+        opt(field),
+    ));
+    let fields = map(
+        terminated(fields, eof),
+        |(seconds, minutes, hours, days_of_month, months, days_of_week, years)| {
+            let mut fields = vec![seconds, minutes, hours, days_of_month, months, days_of_week];
+            if let Some(years) = years {
+                fields.push(years);
+            }
+            fields
+        },
+    );
+    map_res(fields, ScheduleFields::from_field_list)(i)
+}
+
+fn schedule(i: &str) -> IResult<&str, ScheduleFields> {
+    alt((shorthand, longhand))(i)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
