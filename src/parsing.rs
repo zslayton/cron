@@ -1,8 +1,8 @@
 use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::{alpha1, digit1, multispace0};
-use nom::combinator::{map, map_res, opt};
-use nom::multi::separated_nonempty_list;
+use nom::combinator::{eof, map, map_res, opt};
+use nom::multi::separated_list1;
 use nom::sequence::{delimited, separated_pair, terminated, tuple};
 use nom::IResult;
 
@@ -175,13 +175,13 @@ fn root_specifier_with_any(i: &str) -> IResult<&str, RootSpecifier> {
 }
 
 fn root_specifier_list(i: &str) -> IResult<&str, Vec<RootSpecifier>> {
-    let list = separated_nonempty_list(tag(","), root_specifier);
+    let list = separated_list1(tag(","), root_specifier);
     let single_item = map(root_specifier, |spec| vec![spec]);
     delimited(multispace0, alt((list, single_item)), multispace0)(i)
 }
 
 fn root_specifier_list_with_any(i: &str) -> IResult<&str, Vec<RootSpecifier>> {
-    let list = separated_nonempty_list(tag(","), root_specifier_with_any);
+    let list = separated_list1(tag(","), root_specifier_with_any);
     let single_item = map(root_specifier_with_any, |spec| vec![spec]);
     delimited(multispace0, alt((list, single_item)), multispace0)(i)
 }
@@ -274,21 +274,6 @@ fn shorthand(i: &str) -> IResult<&str, ScheduleFields> {
         shorthand_daily,
         shorthand_hourly,
     ))(i)
-}
-
-use nom::error::ParseError;
-use nom::{Err, InputLength};
-
-fn eof<I: InputLength + Clone, E: ParseError<I>>(input: I) -> IResult<I, I, E> {
-    if input.input_len() == 0 {
-        let clone = input.clone();
-        Ok((input, clone))
-    } else {
-        Err(Err::Error(E::from_error_kind(
-            input,
-            nom::error::ErrorKind::Eof,
-        )))
-    }
 }
 
 fn longhand(i: &str) -> IResult<&str, ScheduleFields> {
