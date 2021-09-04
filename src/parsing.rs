@@ -6,7 +6,6 @@ use nom::multi::separated_list1;
 use nom::sequence::{delimited, separated_pair, terminated, tuple};
 use nom::IResult;
 
-use std::iter::{Iterator};
 use std::str::{self, FromStr};
 
 use crate::error::{Error, ErrorKind};
@@ -24,43 +23,6 @@ impl FromStr for Schedule {
             } // Extract from nom tuple
             Err(_) => Err(ErrorKind::Expression("Invalid cron expression.".to_owned()).into()), //TODO: Details
         }
-    }
-}
-
-impl ScheduleFields {
-    fn from_field_list(fields: Vec<Field>) -> Result<ScheduleFields, Error> {
-        let number_of_fields = fields.len();
-        if number_of_fields != 6 && number_of_fields != 7 {
-            return Err(ErrorKind::Expression(format!(
-                "Expression has {} fields. Valid cron \
-                 expressions have 6 or 7.",
-                number_of_fields
-            ))
-            .into());
-        }
-
-        let mut iter = fields.into_iter();
-
-        let seconds = Seconds::from_field(iter.next().unwrap())?;
-        let minutes = Minutes::from_field(iter.next().unwrap())?;
-        let hours = Hours::from_field(iter.next().unwrap())?;
-        let days_of_month = DaysOfMonth::from_field(iter.next().unwrap())?;
-        let months = Months::from_field(iter.next().unwrap())?;
-        let days_of_week = DaysOfWeek::from_field(iter.next().unwrap())?;
-        let years: Years = iter
-            .next()
-            .map(Years::from_field)
-            .unwrap_or_else(|| Ok(Years::all()))?;
-
-        Ok(ScheduleFields::new(
-            seconds,
-            minutes,
-            hours,
-            days_of_month,
-            months,
-            days_of_week,
-            years,
-        ))
     }
 }
 
@@ -277,26 +239,30 @@ fn shorthand(i: &str) -> IResult<&str, ScheduleFields> {
 }
 
 fn longhand(i: &str) -> IResult<&str, ScheduleFields> {
-    let fields = tuple((
-        field,
-        field,
-        field,
-        field_with_any,
-        field,
-        field_with_any,
-        opt(field),
-    ));
-    let fields = map(
+    let seconds = map_res(field, Seconds::from_field);
+    let minutes = map_res(field, Minutes::from_field);
+    let hours = map_res(field, Hours::from_field);
+    let days_of_month = map_res(field_with_any, DaysOfMonth::from_field);
+    let months = map_res(field, Months::from_field);
+    let days_of_week = map_res(field_with_any, DaysOfWeek::from_field);
+    let years = opt(map_res(field, Years::from_field));
+    let fields = tuple((seconds, minutes, hours, days_of_month, months, days_of_week, years));
+
+    map(
         terminated(fields, eof),
         |(seconds, minutes, hours, days_of_month, months, days_of_week, years)| {
-            let mut fields = vec![seconds, minutes, hours, days_of_month, months, days_of_week];
-            if let Some(years) = years {
-                fields.push(years);
-            }
-            fields
+            let years = years.unwrap_or_else(Years::all);
+            ScheduleFields::new(
+                seconds,
+                minutes,
+                hours,
+                days_of_month,
+                months,
+                days_of_week,
+                years,
+            )
         },
-    );
-    map_res(fields, ScheduleFields::from_field_list)(i)
+    )(i)
 }
 
 fn schedule(i: &str) -> IResult<&str, ScheduleFields> {
