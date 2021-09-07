@@ -15,7 +15,7 @@ name = "cron"
 
 [dependencies]
 chrono = "~0.4"
-nom = "~4.1"
+nom = "~7"
 once_cell = "1.5.2"
 
 [dev-dependencies]
