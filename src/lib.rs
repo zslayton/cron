@@ -1,5 +1,3 @@
-#![cfg_attr(feature = "clippy", feature(plugin))]
-#![cfg_attr(feature = "clippy", plugin(clippy))]
 #![deny(rust_2018_idioms)]
 
 //! A cron expression parser and schedule explorer
