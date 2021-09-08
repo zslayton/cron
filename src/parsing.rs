@@ -587,4 +587,13 @@ mod test {
         let expression = "* * * * * * * foo";
         assert!(schedule(expression).is_err());
     }
+
+    /// Issue #86
+    #[test]
+    fn shorthand_must_match_whole_input() {
+        let expression = "@dailyBla";
+        assert!(schedule(expression).is_err());
+        let expression = " @dailyBla ";
+        assert!(schedule(expression).is_err());
+    }
 }
