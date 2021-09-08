@@ -1,4 +1,4 @@
-# cron ![Rust](https://github.com/zslayton/cron/workflows/Rust/badge.svg) [![](http://meritbadge.herokuapp.com/cron)](https://crates.io/crates/cron) [![](https://docs.rs/cron/badge.svg)](https://docs.rs/cron)
+# cron [![Rust](https://github.com/zslayton/cron/workflows/Rust/badge.svg)](https://github.com/zslayton/cron/actions) [![](https://img.shields.io/crates/v/cron.svg)](https://crates.io/crates/cron) [![](https://docs.rs/cron/badge.svg)](https://docs.rs/cron)
 A cron expression parser. Works with stable Rust v1.28.0.
 
 ```rust
@@ -34,8 +34,8 @@ Upcoming fire times:
 ## License
 
 Licensed under either of
- * Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
- * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+ * Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or https://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license ([LICENSE-MIT](LICENSE-MIT) or https://opensource.org/licenses/MIT)
 at your option.
 
 ### Contribution
