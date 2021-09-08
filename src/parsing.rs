@@ -1,7 +1,7 @@
 use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::{alpha1, digit1, multispace0};
-use nom::combinator::{eof, map, map_res, opt};
+use nom::combinator::{all_consuming, eof, map, map_res, opt};
 use nom::multi::separated_list1;
 use nom::sequence::{delimited, separated_pair, terminated, tuple};
 use nom::IResult;
@@ -229,13 +229,14 @@ fn shorthand_hourly(i: &str) -> IResult<&str, ScheduleFields> {
 }
 
 fn shorthand(i: &str) -> IResult<&str, ScheduleFields> {
-    alt((
+    let keywords = alt((
         shorthand_yearly,
         shorthand_monthly,
         shorthand_weekly,
         shorthand_daily,
         shorthand_hourly,
-    ))(i)
+    ));
+    delimited(multispace0, keywords, multispace0)(i)
 }
 
 fn longhand(i: &str) -> IResult<&str, ScheduleFields> {
@@ -266,7 +267,7 @@ fn longhand(i: &str) -> IResult<&str, ScheduleFields> {
 }
 
 fn schedule(i: &str) -> IResult<&str, ScheduleFields> {
-    alt((shorthand, longhand))(i)
+    all_consuming(alt((shorthand, longhand)))(i)
 }
 
 #[cfg(test)]
@@ -584,6 +585,15 @@ mod test {
         assert!(schedule(expression).is_err());
 
         let expression = "* * * * * * * foo";
+        assert!(schedule(expression).is_err());
+    }
+
+    /// Issue #86
+    #[test]
+    fn shorthand_must_match_whole_input() {
+        let expression = "@dailyBla";
+        assert!(schedule(expression).is_err());
+        let expression = " @dailyBla ";
         assert!(schedule(expression).is_err());
     }
 }
