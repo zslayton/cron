@@ -296,7 +296,7 @@ where
 
     fn ordinals_from_root_specifier(root_specifier: &RootSpecifier) -> Result<OrdinalSet, Error> {
         let ordinals = match root_specifier {
-            RootSpecifier::Specifier(specifier) => Self::ordinals_from_specifier(&specifier)?,
+            RootSpecifier::Specifier(specifier) => Self::ordinals_from_specifier(specifier)?,
             RootSpecifier::Period(start, step) => {
                 let base_set = match start {
                     // A point prior to a period implies a range whose start is the specified
@@ -305,7 +305,7 @@ where
                         let start = Self::validate_ordinal(*start)?;
                         (start..=Self::inclusive_max()).collect()
                     }
-                    specifier => Self::ordinals_from_specifier(&specifier)?,
+                    specifier => Self::ordinals_from_specifier(specifier)?,
                 };
                 base_set.into_iter().step_by(*step as usize).collect()
             }
