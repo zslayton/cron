@@ -123,7 +123,7 @@ pub trait TimeUnitSpec {
     /// assert_eq!(Some(8), summer.next());
     /// assert_eq!(None, summer.next());
     /// ```
-    fn iter(&self) -> OrdinalIter;
+    fn iter(&self) -> OrdinalIter<'_>;
 
     /// Provides an iterator which will return each included ordinal within the specified range.
     /// # Example
@@ -140,7 +140,7 @@ pub trait TimeUnitSpec {
     /// assert_eq!(Some(15), mid_month_paydays.next());
     /// assert_eq!(None, mid_month_paydays.next());
     /// ```
-    fn range<R>(&self, range: R) -> OrdinalRangeIter
+    fn range<R>(&self, range: R) -> OrdinalRangeIter<'_>
     where
         R: RangeBounds<Ordinal>;
 
@@ -179,7 +179,7 @@ where
     fn includes(&self, ordinal: Ordinal) -> bool {
         self.ordinals().contains(&ordinal)
     }
-    fn iter(&self) -> OrdinalIter {
+    fn iter(&self) -> OrdinalIter<'_> {
         OrdinalIter {
             set_iter: TimeUnitField::ordinals(self).iter(),
         }

@@ -1,12 +1,8 @@
-#![cfg_attr(feature = "clippy", feature(plugin))]
-#![cfg_attr(feature = "clippy", plugin(clippy))]
+#![deny(rust_2018_idioms)]
 
 //! A cron expression parser and schedule explorer
 //! # Example
 //! ```
-//! extern crate chrono;
-//! extern crate cron;
-//!
 //! use cron::Schedule;
 //! use chrono::Utc;
 //! use std::str::FromStr;
@@ -35,9 +31,6 @@
 //! -> 2018-08-15 09:30:00 UTC
 //! */
 //! ```
-
-#[cfg(test)]
-extern crate chrono_tz;
 
 pub mod error;
 mod schedule;
