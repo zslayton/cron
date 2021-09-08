@@ -2,9 +2,6 @@
 A cron expression parser. Works with stable Rust v1.28.0.
 
 ```rust
-extern crate cron;
-extern crate chrono;
-
 use cron::Schedule;
 use chrono::Utc;
 use std::str::FromStr;

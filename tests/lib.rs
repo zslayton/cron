@@ -1,7 +1,3 @@
-extern crate chrono;
-extern crate chrono_tz;
-extern crate cron;
-
 #[cfg(test)]
 mod tests {
     use chrono::*;

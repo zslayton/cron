@@ -219,7 +219,7 @@ impl Schedule {
 
     /// Provides an iterator which will return each DateTime that matches the schedule starting with
     /// the current time if applicable.
-    pub fn upcoming<Z>(&self, timezone: Z) -> ScheduleIterator<Z>
+    pub fn upcoming<Z>(&self, timezone: Z) -> ScheduleIterator<'_, Z>
     where
         Z: TimeZone,
     {
@@ -227,7 +227,7 @@ impl Schedule {
     }
 
     /// Like the `upcoming` method, but allows you to specify a start time other than the present.
-    pub fn after<Z>(&self, after: &DateTime<Z>) -> ScheduleIterator<Z>
+    pub fn after<Z>(&self, after: &DateTime<Z>) -> ScheduleIterator<'_, Z>
     where
         Z: TimeZone,
     {
@@ -295,7 +295,7 @@ impl Schedule {
 }
 
 impl Display for Schedule {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "{}", self.source)
     }
 }
