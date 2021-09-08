@@ -51,7 +51,7 @@ impl TimeUnitField for Months {
     }
     fn ordinals(&self) -> &OrdinalSet {
         match &self.ordinals {
-            Some(ordinal_set) => &ordinal_set,
+            Some(ordinal_set) => ordinal_set,
             None => &ALL
         }
     }
