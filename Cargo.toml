@@ -14,7 +14,7 @@ edition = "2018"
 name = "cron"
 
 [dependencies]
-chrono = "~0.4"
+chrono = { version = "~0.4", default-features = false, features = ["clock"] }
 nom = "~7"
 once_cell = "1.5.2"
 
