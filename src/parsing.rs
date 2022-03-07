@@ -6,6 +6,7 @@ use nom::multi::separated_list1;
 use nom::sequence::{delimited, separated_pair, terminated, tuple};
 use nom::IResult;
 
+use std::convert::TryFrom;
 use std::str::{self, FromStr};
 
 use crate::error::{Error, ErrorKind};
@@ -23,6 +24,13 @@ impl FromStr for Schedule {
             } // Extract from nom tuple
             Err(_) => Err(ErrorKind::Expression("Invalid cron expression.".to_owned()).into()), //TODO: Details
         }
+    }
+}
+impl TryFrom<&str> for Schedule {
+    type Error = Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::from_str(value)
     }
 }
 
