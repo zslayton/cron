@@ -1,6 +1,6 @@
 [package]
 name = "cron"
-version = "0.9.0"
+version = "0.10.0"
 authors = ["Zack Slayton <zack.slayton@gmail.com>"]
 repository = "https://github.com/zslayton/cron"
 documentation = "https://docs.rs/cron"
@@ -14,10 +14,7 @@ edition = "2021"
 name = "cron"
 
 [dependencies]
-# Disabling default features eliminates a superfluous transitive
-# dependency on the `time` crate, which is susceptible to segfaults.
-# https://rustsec.org/advisories/RUSTSEC-2020-0071
-chrono = { version = "~0.4", default-features = false, features = [] }
+chrono = "~0.4"
 nom = "~7"
 once_cell = "1.5.2"
 
