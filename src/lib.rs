@@ -34,7 +34,9 @@
 //! */
 //! ```
 
+/// Error types used by this crate.
 pub mod error;
+
 mod schedule;
 mod time_unit;
 mod ordinal;
@@ -42,5 +44,5 @@ mod specifier;
 mod queries;
 mod parsing;
 
-pub use crate::schedule::Schedule;
+pub use crate::schedule::{Schedule, ScheduleIterator};
 pub use crate::time_unit::TimeUnitSpec;
