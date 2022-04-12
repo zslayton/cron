@@ -44,5 +44,5 @@ mod specifier;
 mod queries;
 mod parsing;
 
-pub use crate::schedule::{Schedule, ScheduleIterator};
+pub use crate::schedule::{Schedule, ScheduleIterator, ScheduleIteratorBuf};
 pub use crate::time_unit::TimeUnitSpec;
