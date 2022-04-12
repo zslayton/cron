@@ -346,9 +346,8 @@ pub struct ScheduleIterator<'a, Z>
 where
     Z: TimeZone,
 {
-    is_done: bool,
     schedule: &'a Schedule,
-    previous_datetime: DateTime<Z>,
+    previous_datetime: Option<DateTime<Z>>,
 }
 //TODO: Cutoff datetime?
 
@@ -358,9 +357,8 @@ where
 {
     fn new(schedule: &'a Schedule, starting_datetime: &DateTime<Z>) -> Self {
         ScheduleIterator {
-            is_done: false,
             schedule,
-            previous_datetime: starting_datetime.clone(),
+            previous_datetime: Some(starting_datetime.clone()),
         }
     }
 }
@@ -372,14 +370,12 @@ where
     type Item = DateTime<Z>;
 
     fn next(&mut self) -> Option<DateTime<Z>> {
-        if self.is_done {
-            return None;
-        }
-        if let Some(next_datetime) = self.schedule.next_after(&self.previous_datetime) {
-            self.previous_datetime = next_datetime.clone();
-            Some(next_datetime)
+        let previous = self.previous_datetime.take()?;
+
+        if let Some(next) = self.schedule.next_after(&previous) {
+            self.previous_datetime = Some(next.clone());
+            Some(next)
         } else {
-            self.is_done = true;
             None
         }
     }
@@ -390,15 +386,12 @@ where
     Z: TimeZone,
 {
     fn next_back(&mut self) -> Option<Self::Item> {
-        if self.is_done {
-            return None;
-        }
+        let previous = self.previous_datetime.take()?;
 
-        if let Some(prev_datetime) = self.schedule.prev_from(&self.previous_datetime) {
-            self.previous_datetime = prev_datetime.clone();
-            Some(prev_datetime)
+        if let Some(prev) = self.schedule.prev_from(&previous) {
+            self.previous_datetime = Some(prev.clone());
+            Some(prev)
         } else {
-            self.is_done = true;
             None
         }
     }
@@ -428,7 +421,6 @@ impl<Z> Iterator for ScheduleIteratorBuf<Z> where Z: TimeZone {
         } else {
             None
         }
-
     }
 }
 
