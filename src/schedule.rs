@@ -14,7 +14,6 @@ impl From<Schedule> for String {
     }
 }
 
-/// Representation of a cron expression
 #[derive(Clone, Debug, Eq)]
 pub struct Schedule {
     source: String,
@@ -227,12 +226,22 @@ impl Schedule {
         self.after(&timezone.from_utc_datetime(&Utc::now().naive_utc()))
     }
 
+    /// The same, but with an iterator with a static ownership
+    pub fn upcoming_owned<Z: TimeZone>(&self, timezone: Z) -> OwnedScheduleIterator<Z> {
+        self.after_owned(timezone.from_utc_datetime(&Utc::now().naive_utc()))
+    }
+
     /// Like the `upcoming` method, but allows you to specify a start time other than the present.
     pub fn after<Z>(&self, after: &DateTime<Z>) -> ScheduleIterator<'_, Z>
     where
         Z: TimeZone,
     {
         ScheduleIterator::new(self, after)
+    }
+
+    /// The same, but with a static ownership.
+    pub fn after_owned<Z: TimeZone>(&self, after: DateTime<Z>) -> OwnedScheduleIterator<Z> {
+        OwnedScheduleIterator::new(self.clone(), after)
     }
 
     pub fn includes<Z>(&self, date_time: DateTime<Z>) -> bool
@@ -333,14 +342,12 @@ impl ScheduleFields {
     }
 }
 
-/// Iterates `DateTime` occurrences of a schedule.
 pub struct ScheduleIterator<'a, Z>
 where
     Z: TimeZone,
 {
-    is_done: bool,
     schedule: &'a Schedule,
-    previous_datetime: DateTime<Z>,
+    previous_datetime: Option<DateTime<Z>>,
 }
 //TODO: Cutoff datetime?
 
@@ -348,11 +355,10 @@ impl<'a, Z> ScheduleIterator<'a, Z>
 where
     Z: TimeZone,
 {
-    fn new(schedule: &'a Schedule, starting_datetime: &DateTime<Z>) -> ScheduleIterator<'a, Z> {
+    fn new(schedule: &'a Schedule, starting_datetime: &DateTime<Z>) -> Self {
         ScheduleIterator {
-            is_done: false,
             schedule,
-            previous_datetime: starting_datetime.clone(),
+            previous_datetime: Some(starting_datetime.clone()),
         }
     }
 }
@@ -364,14 +370,12 @@ where
     type Item = DateTime<Z>;
 
     fn next(&mut self) -> Option<DateTime<Z>> {
-        if self.is_done {
-            return None;
-        }
-        if let Some(next_datetime) = self.schedule.next_after(&self.previous_datetime) {
-            self.previous_datetime = next_datetime.clone();
-            Some(next_datetime)
+        let previous = self.previous_datetime.take()?;
+
+        if let Some(next) = self.schedule.next_after(&previous) {
+            self.previous_datetime = Some(next.clone());
+            Some(next)
         } else {
-            self.is_done = true;
             None
         }
     }
@@ -382,15 +386,52 @@ where
     Z: TimeZone,
 {
     fn next_back(&mut self) -> Option<Self::Item> {
-        if self.is_done {
-            return None;
-        }
+        let previous = self.previous_datetime.take()?;
 
-        if let Some(prev_datetime) = self.schedule.prev_from(&self.previous_datetime) {
-            self.previous_datetime = prev_datetime.clone();
-            Some(prev_datetime)
+        if let Some(prev) = self.schedule.prev_from(&previous) {
+            self.previous_datetime = Some(prev.clone());
+            Some(prev)
         } else {
-            self.is_done = true;
+            None
+        }
+    }
+}
+
+/// A `ScheduleIterator` with a static lifetime.
+pub struct OwnedScheduleIterator<Z> where Z: TimeZone {
+    schedule: Schedule,
+    previous_datetime: Option<DateTime<Z>>
+}
+
+impl<Z> OwnedScheduleIterator<Z> where Z: TimeZone {
+    pub fn new(schedule: Schedule, starting_datetime: DateTime<Z>) -> Self {
+        Self { schedule, previous_datetime: Some(starting_datetime) }
+    }
+}
+
+impl<Z> Iterator for OwnedScheduleIterator<Z> where Z: TimeZone {
+    type Item = DateTime<Z>;
+
+    fn next(&mut self) -> Option<DateTime<Z>> {
+        let previous = self.previous_datetime.take()?;
+
+        if let Some(next) = self.schedule.next_after(&previous) {
+            self.previous_datetime = Some(next.clone());
+            Some(next)
+        } else {
+            None
+        }
+    }
+}
+
+impl<Z: TimeZone> DoubleEndedIterator for OwnedScheduleIterator<Z> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let previous = self.previous_datetime.take()?;
+
+        if let Some(prev) = self.schedule.prev_from(&previous) {
+            self.previous_datetime = Some(prev.clone());
+            Some(prev)
+        } else {
             None
         }
     }
@@ -472,10 +513,42 @@ mod test {
     }
 
     #[test]
+    fn test_upcoming_utc_owned() {
+        let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
+        let schedule = Schedule::from_str(expression).unwrap();
+        let mut upcoming = schedule.upcoming_owned(Utc);
+        let next1 = upcoming.next();
+        assert!(next1.is_some());
+        let next2 = upcoming.next();
+        assert!(next2.is_some());
+        let next3 = upcoming.next();
+        assert!(next3.is_some());
+        println!("Upcoming 1 for {} {:?}", expression, next1);
+        println!("Upcoming 2 for {} {:?}", expression, next2);
+        println!("Upcoming 3 for {} {:?}", expression, next3);
+    }
+
+    #[test]
     fn test_upcoming_rev_utc() {
         let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
         let schedule = Schedule::from_str(expression).unwrap();
         let mut upcoming = schedule.upcoming(Utc).rev();
+        let prev1 = upcoming.next();
+        assert!(prev1.is_some());
+        let prev2 = upcoming.next();
+        assert!(prev2.is_some());
+        let prev3 = upcoming.next();
+        assert!(prev3.is_some());
+        println!("Prev Upcoming 1 for {} {:?}", expression, prev1);
+        println!("Prev Upcoming 2 for {} {:?}", expression, prev2);
+        println!("Prev Upcoming 3 for {} {:?}", expression, prev3);
+    }
+
+    #[test]
+    fn test_upcoming_rev_utc_owned() {
+        let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
+        let schedule = Schedule::from_str(expression).unwrap();
+        let mut upcoming = schedule.upcoming_owned(Utc).rev();
         let prev1 = upcoming.next();
         assert!(prev1.is_some());
         let prev2 = upcoming.next();
