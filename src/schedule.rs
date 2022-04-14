@@ -14,6 +14,7 @@ impl From<Schedule> for String {
     }
 }
 
+/// Representation of a cron expression
 #[derive(Clone, Debug, Eq)]
 pub struct Schedule {
     source: String,
@@ -332,6 +333,7 @@ impl ScheduleFields {
     }
 }
 
+/// Iterates `DateTime` occurrences of a schedule.
 pub struct ScheduleIterator<'a, Z>
 where
     Z: TimeZone,
@@ -563,7 +565,7 @@ mod test {
         let prev = schedule.after(&dt).rev().next().unwrap();
         assert!(prev < dt); // test is ensuring line above does not panic
     }
-    
+
     #[test]
     fn test_time_unit_spec_equality() {
         let schedule_1 = Schedule::from_str("@weekly").unwrap();

@@ -1,12 +1,15 @@
 use std::{error, fmt};
 
+/// A cron error
 #[derive(Debug)]
 pub struct Error {
     kind: ErrorKind,
 }
 
+/// The kind of cron error that occurred
 #[derive(Debug)]
 pub enum ErrorKind {
+    /// Failed to parse an expression
     Expression(String),
 }
 
