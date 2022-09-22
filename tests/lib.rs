@@ -222,6 +222,12 @@ mod tests {
     }
 
     #[test]
+    fn test_invalid_step() {
+        let expression = "0/0 * * * *";
+        assert_eq!("Invalid expression: Invalid cron expression.", Schedule::from_str(expression).unwrap_err().to_string());
+    }
+
+    #[test]
     fn test_time_unit_spec_years() {
         let expression = "* * * * * * 2015-2044";
         let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
