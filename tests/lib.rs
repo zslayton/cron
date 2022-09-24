@@ -222,6 +222,12 @@ mod tests {
     }
 
     #[test]
+    fn test_invalid_step() {
+        let expression = "0/0 * * * *";
+        assert!(Schedule::from_str(expression).is_err());
+    }
+
+    #[test]
     fn test_time_unit_spec_years() {
         let expression = "* * * * * * 2015-2044";
         let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
