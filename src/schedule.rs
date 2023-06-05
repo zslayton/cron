@@ -43,6 +43,11 @@ impl Schedule {
             .range((Included(query.year_lower_bound()), Unbounded))
             .cloned()
         {
+            // It's a future year, the current year's range is irrelevant.
+            if year > after.year() as u32 {
+                query.reset_month();
+                query.reset_day_of_month();
+            }
             let month_start = query.month_lower_bound();
             if !self.fields.months.ordinals().contains(&month_start) {
                 query.reset_month();
@@ -476,6 +481,16 @@ mod test {
         println!("PREV FROM for {} {:?}", expression, prev);
         assert!(prev.is_some());
         assert_eq!(prev, next);
+    }
+
+    #[test]
+    fn test_next_after_past_date_next_year() {
+        let past = Utc::now() - chrono::Duration::weeks(3);
+        let expression = format!("0 5 17 {} {} ? {}", past.day(), past.month(), past.year() + 1);
+        let schedule = Schedule::from_str(&expression).unwrap();
+        let next = schedule.next_after(&Utc::now());
+        println!("NEXT AFTER for {} {:?}", expression, next);
+        assert!(next.is_some());
     }
 
     #[test]
