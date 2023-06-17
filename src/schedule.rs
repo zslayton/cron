@@ -1,12 +1,11 @@
-
 use chrono::offset::TimeZone;
 use chrono::{DateTime, Datelike, Timelike, Utc};
-use std::ops::Bound::{Included, Unbounded};
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::ops::Bound::{Included, Unbounded};
 
-use crate::time_unit::*;
 use crate::ordinal::*;
 use crate::queries::*;
+use crate::time_unit::*;
 
 impl From<Schedule> for String {
     fn from(schedule: Schedule) -> String {
@@ -21,14 +20,8 @@ pub struct Schedule {
 }
 
 impl Schedule {
-    pub(crate) fn new(
-        source: String,
-        fields: ScheduleFields,
-    ) -> Schedule {
-        Schedule {
-            source,
-            fields,
-        }
+    pub(crate) fn new(source: String, fields: ScheduleFields) -> Schedule {
+        Schedule { source, fields }
     }
 
     fn next_after<Z>(&self, after: &DateTime<Z>) -> Option<DateTime<Z>>
@@ -50,7 +43,12 @@ impl Schedule {
             let month_range = (Included(month_start), Included(Months::inclusive_max()));
             for month in self.fields.months.ordinals().range(month_range).cloned() {
                 let day_of_month_start = query.day_of_month_lower_bound();
-                if !self.fields.days_of_month.ordinals().contains(&day_of_month_start) {
+                if !self
+                    .fields
+                    .days_of_month
+                    .ordinals()
+                    .contains(&day_of_month_start)
+                {
                     query.reset_day_of_month();
                 }
                 let day_of_month_end = days_in_month(month, year);
@@ -85,11 +83,20 @@ impl Schedule {
                             let second_range =
                                 (Included(second_start), Included(Seconds::inclusive_max()));
 
-                            for second in self.fields.seconds.ordinals().range(second_range).cloned() {
+                            for second in
+                                self.fields.seconds.ordinals().range(second_range).cloned()
+                            {
                                 let timezone = after.timezone();
                                 let candidate = if let Some(candidate) = timezone
-                                    .ymd(year as i32, month, day_of_month)
-                                    .and_hms_opt(hour, minute, second)
+                                    .with_ymd_and_hms(
+                                        year as i32,
+                                        month,
+                                        day_of_month,
+                                        hour,
+                                        minute,
+                                        second,
+                                    )
+                                    .single()
                                 {
                                     candidate
                                 } else {
@@ -139,9 +146,21 @@ impl Schedule {
             }
             let month_range = (Included(Months::inclusive_min()), Included(month_start));
 
-            for month in self.fields.months.ordinals().range(month_range).rev().cloned() {
+            for month in self
+                .fields
+                .months
+                .ordinals()
+                .range(month_range)
+                .rev()
+                .cloned()
+            {
                 let day_of_month_end = query.day_of_month_upper_bound();
-                if !self.fields.days_of_month.ordinals().contains(&day_of_month_end) {
+                if !self
+                    .fields
+                    .days_of_month
+                    .ordinals()
+                    .contains(&day_of_month_end)
+                {
                     query.reset_day_of_month();
                 }
 
@@ -166,7 +185,14 @@ impl Schedule {
                     }
                     let hour_range = (Included(Hours::inclusive_min()), Included(hour_start));
 
-                    for hour in self.fields.hours.ordinals().range(hour_range).rev().cloned() {
+                    for hour in self
+                        .fields
+                        .hours
+                        .ordinals()
+                        .range(hour_range)
+                        .rev()
+                        .cloned()
+                    {
                         let minute_start = query.minute_upper_bound();
                         if !self.fields.minutes.ordinals().contains(&minute_start) {
                             query.reset_minute();
@@ -174,7 +200,14 @@ impl Schedule {
                         let minute_range =
                             (Included(Minutes::inclusive_min()), Included(minute_start));
 
-                        for minute in self.fields.minutes.ordinals().range(minute_range).rev().cloned() {
+                        for minute in self
+                            .fields
+                            .minutes
+                            .ordinals()
+                            .range(minute_range)
+                            .rev()
+                            .cloned()
+                        {
                             let second_start = query.second_upper_bound();
                             if !self.fields.seconds.ordinals().contains(&second_start) {
                                 query.reset_second();
@@ -182,12 +215,27 @@ impl Schedule {
                             let second_range =
                                 (Included(Seconds::inclusive_min()), Included(second_start));
 
-                            for second in self.fields.seconds.ordinals().range(second_range).rev().cloned()
+                            for second in self
+                                .fields
+                                .seconds
+                                .ordinals()
+                                .range(second_range)
+                                .rev()
+                                .cloned()
                             {
                                 let timezone = before.timezone();
                                 let candidate = if let Some(candidate) = timezone
-                                    .ymd(year as i32, month, day_of_month)
-                                    .and_hms_opt(hour, minute, second)
+                                    // .ymd(year as i32, month, day_of_month)
+                                    // .and_hms_opt(hour, minute, second)
+                                    .with_ymd_and_hms(
+                                        year as i32,
+                                        month,
+                                        day_of_month,
+                                        hour,
+                                        minute,
+                                        second,
+                                    )
+                                    .single()
                                 {
                                     candidate
                                 } else {
@@ -248,13 +296,19 @@ impl Schedule {
     where
         Z: TimeZone,
     {
-        self.fields.years.includes(date_time.year() as Ordinal)  &&
-        self.fields.months.includes(date_time.month() as Ordinal) &&
-        self.fields.days_of_week.includes(date_time.weekday().number_from_sunday()) &&
-        self.fields.days_of_month.includes(date_time.day() as Ordinal) &&
-        self.fields.hours.includes(date_time.hour() as Ordinal) &&
-        self.fields.minutes.includes(date_time.minute() as Ordinal) &&
-        self.fields.seconds.includes(date_time.second() as Ordinal)
+        self.fields.years.includes(date_time.year() as Ordinal)
+            && self.fields.months.includes(date_time.month() as Ordinal)
+            && self
+                .fields
+                .days_of_week
+                .includes(date_time.weekday().number_from_sunday())
+            && self
+                .fields
+                .days_of_month
+                .includes(date_time.day() as Ordinal)
+            && self.fields.hours.includes(date_time.hour() as Ordinal)
+            && self.fields.minutes.includes(date_time.minute() as Ordinal)
+            && self.fields.seconds.includes(date_time.second() as Ordinal)
     }
 
     /// Returns a [TimeUnitSpec] describing the years included in this [Schedule].
@@ -398,18 +452,30 @@ where
 }
 
 /// A `ScheduleIterator` with a static lifetime.
-pub struct OwnedScheduleIterator<Z> where Z: TimeZone {
+pub struct OwnedScheduleIterator<Z>
+where
+    Z: TimeZone,
+{
     schedule: Schedule,
-    previous_datetime: Option<DateTime<Z>>
+    previous_datetime: Option<DateTime<Z>>,
 }
 
-impl<Z> OwnedScheduleIterator<Z> where Z: TimeZone {
+impl<Z> OwnedScheduleIterator<Z>
+where
+    Z: TimeZone,
+{
     pub fn new(schedule: Schedule, starting_datetime: DateTime<Z>) -> Self {
-        Self { schedule, previous_datetime: Some(starting_datetime) }
+        Self {
+            schedule,
+            previous_datetime: Some(starting_datetime),
+        }
     }
 }
 
-impl<Z> Iterator for OwnedScheduleIterator<Z> where Z: TimeZone {
+impl<Z> Iterator for OwnedScheduleIterator<Z>
+where
+    Z: TimeZone,
+{
     type Item = DateTime<Z>;
 
     fn next(&mut self) -> Option<DateTime<Z>> {
@@ -457,7 +523,7 @@ fn days_in_month(month: Ordinal, year: Ordinal) -> u32 {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::str::{FromStr};
+    use std::str::FromStr;
 
     #[test]
     fn test_next_and_prev_from() {
@@ -614,8 +680,9 @@ mod test {
 
         let schedule_tz: Tz = "Europe/London".parse().unwrap();
         let dt = schedule_tz
-            .ymd(2019, 10, 27)
-            .and_hms(0, 3, 29)
+            .with_ymd_and_hms(2019, 10, 27, 0, 3, 29)
+            .single()
+            .unwrap()
             .checked_add_signed(chrono::Duration::hours(1)) // puts it in the middle of the DST transition
             .unwrap();
         let schedule = Schedule::from_str("* * * * * Sat,Sun *").unwrap();
@@ -630,8 +697,9 @@ mod test {
 
         let schedule_tz: Tz = "Europe/London".parse().unwrap();
         let dt = schedule_tz
-            .ymd(2019, 10, 27)
-            .and_hms(0, 3, 29)
+            .with_ymd_and_hms(2019, 10, 27, 0, 3, 29)
+            .single()
+            .unwrap()
             .checked_add_signed(chrono::Duration::hours(1)) // puts it in the middle of the DST transition
             .unwrap();
         let schedule = Schedule::from_str("* * * * * Sat,Sun *").unwrap();
