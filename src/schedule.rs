@@ -485,10 +485,16 @@ mod test {
 
     #[test]
     fn test_next_after_past_date_next_year() {
-        let past = Utc::now() - chrono::Duration::weeks(3);
-        let expression = format!("0 5 17 {} {} ? {}", past.day(), past.month(), past.year() + 1);
+        // Schedule after 2021-10-27
+        let starting_point = Utc
+            .with_ymd_and_hms(2021, 10, 27, 0, 0, 0)
+            .unwrap();
+
+        // Triggers on 2022-06-01. Note that the month and day are smaller than
+        // the month and day in `starting_point`.
+        let expression = format!("0 5 17 1 6 ? 2022");
         let schedule = Schedule::from_str(&expression).unwrap();
-        let next = schedule.next_after(&Utc::now());
+        let next = schedule.next_after(&starting_point);
         println!("NEXT AFTER for {} {:?}", expression, next);
         assert!(next.is_some());
     }
