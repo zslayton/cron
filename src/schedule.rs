@@ -54,7 +54,7 @@ impl Schedule {
                     query.reset_day_of_month();
                 }
                 let day_of_month_end = days_in_month(month, year);
-                let day_of_month_range = (Included(day_of_month_start), Included(day_of_month_end));
+                let day_of_month_range = (Included(day_of_month_start.min(day_of_month_end)), Included(day_of_month_end));
 
                 'day_loop: for day_of_month in self
                     .fields
