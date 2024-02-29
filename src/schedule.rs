@@ -54,7 +54,7 @@ impl Schedule {
                     query.reset_day_of_month();
                 }
                 let day_of_month_end = days_in_month(month, year);
-                let day_of_month_range = (Included(day_of_month_start), Included(day_of_month_end));
+                let day_of_month_range = (Included(day_of_month_start.min(day_of_month_end)), Included(day_of_month_end));
 
                 'day_loop: for day_of_month in self
                     .fields
@@ -637,6 +637,14 @@ mod test {
         let schedule = Schedule::from_str("* * * * * Sat,Sun *").unwrap();
         let prev = schedule.after(&dt).rev().next().unwrap();
         assert!(prev < dt); // test is ensuring line above does not panic
+    }
+
+    #[test]
+    fn test_no_panic_on_leap_day_time_after() {
+        let dt = chrono::DateTime::parse_from_rfc3339("2024-02-29T10:00:00.000+08:00").unwrap();
+        let schedule = Schedule::from_str("0 0 0 * * * 2100").unwrap();
+        let next = schedule.after(&dt).next().unwrap();
+        assert!(next > dt); // test is ensuring line above does not panic
     }
 
     #[test]
