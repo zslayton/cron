@@ -640,6 +640,14 @@ mod test {
     }
 
     #[test]
+    fn test_no_panic_on_leap_day_time_after() {
+        let dt = chrono::DateTime::parse_from_rfc3339("2024-02-29T10:00:00.000+08:00").unwrap();
+        let schedule = Schedule::from_str("0 0 0 * * * 2100").unwrap();
+        let next = schedule.after(&dt).next().unwrap();
+        assert!(next > dt); // test is ensuring line above does not panic
+    }
+
+    #[test]
     fn test_time_unit_spec_equality() {
         let schedule_1 = Schedule::from_str("@weekly").unwrap();
         let schedule_2 = Schedule::from_str("0 0 0 * * 1 *").unwrap();
