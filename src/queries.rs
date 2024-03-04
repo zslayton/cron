@@ -120,8 +120,13 @@ where
     Z: TimeZone,
 {
     pub fn from(before: &DateTime<Z>) -> PrevFromQuery<Z> {
+        let initial_datetime = if before.timestamp_subsec_millis() > 0 {
+            before.clone()
+        } else {
+            before.clone() - Duration::seconds(1)
+        };
         PrevFromQuery {
-            initial_datetime: before.clone() - Duration::seconds(1),
+            initial_datetime,
             first_month: true,
             first_day_of_month: true,
             first_hour: true,

@@ -456,8 +456,10 @@ fn days_in_month(month: Ordinal, year: Ordinal) -> u32 {
 
 #[cfg(test)]
 mod test {
+    use chrono::Duration;
+
     use super::*;
-    use std::str::{FromStr};
+    use std::str::FromStr;
 
     #[test]
     fn test_next_and_prev_from() {
@@ -476,6 +478,11 @@ mod test {
         println!("PREV FROM for {} {:?}", expression, prev);
         assert!(prev.is_some());
         assert_eq!(prev, next);
+
+        let prev2 = schedule.prev_from(&(next2.unwrap() + Duration::milliseconds(100)));
+        println!("PREV2 FROM for {} {:?}", expression, prev2);
+        assert!(prev2.is_some());
+        assert_eq!(prev2, next2);
     }
 
     #[test]
