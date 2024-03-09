@@ -3,7 +3,17 @@ use chrono::offset::TimeZone;
 use chrono::{DateTime, Datelike, Timelike, Utc};
 use std::ops::Bound::{Included, Unbounded};
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::str::FromStr;
 
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize, Serializer, de::{self, Visitor}};
+#[cfg(feature = "serde")]
+use core::fmt;
+
+#[cfg(test)]
+use serde_test::{Token, assert_tokens};
+
+use crate::error::Error;
 use crate::time_unit::*;
 use crate::ordinal::*;
 use crate::queries::*;
@@ -454,11 +464,72 @@ fn days_in_month(month: Ordinal, year: Ordinal) -> u32 {
     }
 }
 
+#[cfg(feature = "serde")]
+struct ScheduleVisitor;
+#[cfg(feature = "serde")]
+impl<'de> Visitor<'de> for ScheduleVisitor {
+    type Value = Schedule;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a valid cron expression")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error, {
+        match Schedule::from_str(v){
+            Ok(value) => Ok(value.into()),
+            Err(err) => Err(de::Error::custom(err))
+        }
+    }
+   
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+        where
+            E: de::Error, {
+        self.visit_str(&v)
+    }
+   
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for Schedule {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+
+impl<'de> Deserialize<'de> for Schedule {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de> {
+            deserializer.deserialize_string(ScheduleVisitor)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use std::str::{FromStr};
 
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_ser_de_schedule() {
+        let cron_value = Schedule::from_str("* * * * * * *").expect("Valid Format");
+        assert_tokens(&cron_value,  &[Token::String("* * * * * * *")])
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_invalid_ser_de_schedule() {
+        use serde_test::assert_de_tokens_error;
+
+        assert_de_tokens_error::<Schedule>(&[Token::String("definitively an invalid value for a cron schedule!")], "Invalid expression: Invalid cron expression.");
+    }
+        
     #[test]
     fn test_next_and_prev_from() {
         let expression = "0 5,13,40-42 17 1 Jan *";
