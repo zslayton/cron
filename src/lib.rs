@@ -1,6 +1,5 @@
 #![deny(rust_2018_idioms)]
 #![deny(rustdoc::broken_intra_doc_links)]
-
 #![allow(clippy::needless_doctest_main)]
 //! A cron expression parser and schedule explorer
 //! # Example
@@ -37,12 +36,12 @@
 /// Error types used by this crate.
 pub mod error;
 
-mod schedule;
-mod time_unit;
 mod ordinal;
-mod specifier;
-mod queries;
 mod parsing;
+mod queries;
+mod schedule;
+mod specifier;
+mod time_unit;
 
-pub use crate::schedule::{Schedule, ScheduleIterator, OwnedScheduleIterator};
+pub use crate::schedule::{OwnedScheduleIterator, Schedule, ScheduleIterator};
 pub use crate::time_unit::TimeUnitSpec;
