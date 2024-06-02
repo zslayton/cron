@@ -76,21 +76,6 @@ where
         }
         let mut ordinals = OrdinalSet::new();
         for specifier in field.specifiers {
-            if let RootSpecifier::Period(_, interval) = specifier {
-                // Having an interval of 0 is not valid and at the same time, having intervals
-                // below 1970 is valid for years so instead of using `validate_ordinal` for the
-                // interval we allow 1-<inclusive max>.
-                if interval < 1 || interval > T::inclusive_max() {
-                    return Err(ErrorKind::Expression(format!(
-                        "{} must be between 1 and {}. ('{}' specified.)",
-                        Self::name(),
-                        Self::inclusive_max(),
-                        interval,
-                    ))
-                    .into());
-                }
-            }
-
             let specifier_ordinals: OrdinalSet = T::ordinals_from_root_specifier(&specifier)?;
             for ordinal in specifier_ordinals {
                 ordinals.insert(T::validate_ordinal(ordinal)?);
