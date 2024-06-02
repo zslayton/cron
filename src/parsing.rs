@@ -53,7 +53,7 @@ where
 {
     fn from_field(field: Field) -> Result<T, Error> {
         if field.specifiers.len() == 1
-            && field.specifiers.get(0).unwrap() == &RootSpecifier::from(Specifier::All)
+            && field.specifiers.first().unwrap() == &RootSpecifier::from(Specifier::All)
         {
             return Ok(T::all());
         }

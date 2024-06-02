@@ -4,7 +4,7 @@ use crate::time_unit::TimeUnitField;
 use once_cell::sync::Lazy;
 use std::borrow::Cow;
 
-static ALL: Lazy<OrdinalSet> = Lazy::new(|| Months::supported_ordinals());
+static ALL: Lazy<OrdinalSet> = Lazy::new(Months::supported_ordinals);
 
 #[derive(Clone, Debug, Eq)]
 pub struct Months {
