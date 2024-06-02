@@ -10,10 +10,10 @@ use std::convert::TryFrom;
 use std::str::{self, FromStr};
 
 use crate::error::{Error, ErrorKind};
-use crate::schedule::{ScheduleFields, Schedule};
+use crate::ordinal::*;
+use crate::schedule::{Schedule, ScheduleFields};
 use crate::specifier::*;
 use crate::time_unit::*;
-use crate::ordinal::*;
 
 impl FromStr for Schedule {
     type Err = Error;
@@ -52,10 +52,12 @@ where
     T: TimeUnitField,
 {
     fn from_field(field: Field) -> Result<T, Error> {
-        if field.specifiers.len() == 1 && 
-            field.specifiers.get(0).unwrap() == &RootSpecifier::from(Specifier::All) 
-            { return Ok(T::all()); }
-        let mut ordinals = OrdinalSet::new(); 
+        if field.specifiers.len() == 1
+            && field.specifiers.get(0).unwrap() == &RootSpecifier::from(Specifier::All)
+        {
+            return Ok(T::all());
+        }
+        let mut ordinals = OrdinalSet::new();
         for specifier in field.specifiers {
             let specifier_ordinals: OrdinalSet = T::ordinals_from_root_specifier(&specifier)?;
             for ordinal in specifier_ordinals {
@@ -255,7 +257,15 @@ fn longhand(i: &str) -> IResult<&str, ScheduleFields> {
     let months = map_res(field, Months::from_field);
     let days_of_week = map_res(field_with_any, DaysOfWeek::from_field);
     let years = opt(map_res(field, Years::from_field));
-    let fields = tuple((seconds, minutes, hours, days_of_month, months, days_of_week, years));
+    let fields = tuple((
+        seconds,
+        minutes,
+        hours,
+        days_of_month,
+        months,
+        days_of_week,
+        years,
+    ));
 
     map(
         terminated(fields, eof),

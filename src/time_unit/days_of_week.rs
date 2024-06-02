@@ -1,20 +1,20 @@
 use crate::error::*;
 use crate::ordinal::{Ordinal, OrdinalSet};
 use crate::time_unit::TimeUnitField;
-use std::borrow::Cow;
 use once_cell::sync::Lazy;
+use std::borrow::Cow;
 
-static ALL: Lazy<OrdinalSet> = Lazy::new(|| { DaysOfWeek::supported_ordinals() });
+static ALL: Lazy<OrdinalSet> = Lazy::new(|| DaysOfWeek::supported_ordinals());
 
 #[derive(Clone, Debug, Eq)]
-pub struct DaysOfWeek{
-    ordinals: Option<OrdinalSet>
+pub struct DaysOfWeek {
+    ordinals: Option<OrdinalSet>,
 }
 
 impl TimeUnitField for DaysOfWeek {
     fn from_optional_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self {
-        DaysOfWeek{
-            ordinals: ordinal_set
+        DaysOfWeek {
+            ordinals: ordinal_set,
         }
     }
     fn name() -> Cow<'static, str> {
@@ -49,7 +49,7 @@ impl TimeUnitField for DaysOfWeek {
     fn ordinals(&self) -> &OrdinalSet {
         match &self.ordinals {
             Some(ordinal_set) => ordinal_set,
-            None => &ALL
+            None => &ALL,
         }
     }
 }
