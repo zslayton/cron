@@ -1,10 +1,7 @@
-use chrono::offset::TimeZone;
-use chrono::{DateTime, Datelike, Timelike, Utc};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::ops::Bound::{Included, Unbounded};
 
-#[cfg(feature = "serde")]
-use core::fmt;
+use jiff::{civil::date, tz::TimeZone, Zoned};
 #[cfg(feature = "serde")]
 use serde::{
     de::{self, Visitor},
@@ -32,10 +29,7 @@ impl Schedule {
         Schedule { source, fields }
     }
 
-    fn next_after<Z>(&self, after: &DateTime<Z>) -> Option<DateTime<Z>>
-    where
-        Z: TimeZone,
-    {
+    fn next_after(&self, after: &Zoned) -> Option<Zoned> {
         let mut query = NextAfterQuery::from(after);
         for year in self
             .fields
@@ -102,16 +96,11 @@ impl Schedule {
                             for second in
                                 self.fields.seconds.ordinals().range(second_range).cloned()
                             {
-                                let timezone = after.timezone();
-                                let candidate = if let chrono::LocalResult::Single(candidate) =
-                                    timezone.with_ymd_and_hms(
-                                        year as i32,
-                                        month,
-                                        day_of_month,
-                                        hour,
-                                        minute,
-                                        second,
-                                    ) {
+                                let time_zone = after.time_zone().clone();
+                                let candidate = date(year as i16, month as i8, day_of_month as i8)
+                                    .at(hour as i8, minute as i8, second as i8, 0)
+                                    .to_zoned(time_zone);
+                                let candidate = if let Ok(candidate) = candidate {
                                     candidate
                                 } else {
                                     continue;
@@ -120,7 +109,7 @@ impl Schedule {
                                     .fields
                                     .days_of_week
                                     .ordinals()
-                                    .contains(&candidate.weekday().number_from_sunday())
+                                    .contains(&(candidate.weekday().to_sunday_one_offset() as u32))
                                 {
                                     continue 'day_loop;
                                 }
@@ -140,10 +129,7 @@ impl Schedule {
         None
     }
 
-    fn prev_from<Z>(&self, before: &DateTime<Z>) -> Option<DateTime<Z>>
-    where
-        Z: TimeZone,
-    {
+    fn prev_from(&self, before: &Zoned) -> Option<Zoned> {
         let mut query = PrevFromQuery::from(before);
         for year in self
             .fields
@@ -237,16 +223,11 @@ impl Schedule {
                                 .rev()
                                 .cloned()
                             {
-                                let timezone = before.timezone();
-                                let candidate = if let chrono::LocalResult::Single(candidate) =
-                                    timezone.with_ymd_and_hms(
-                                        year as i32,
-                                        month,
-                                        day_of_month,
-                                        hour,
-                                        minute,
-                                        second,
-                                    ) {
+                                let time_zone = before.time_zone().clone();
+                                let candidate = date(year as i16, month as i8, day_of_month as i8)
+                                    .at(hour as i8, minute as i8, second as i8, 0)
+                                    .to_zoned(time_zone);
+                                let candidate = if let Ok(candidate) = candidate {
                                     candidate
                                 } else {
                                     continue;
@@ -255,7 +236,7 @@ impl Schedule {
                                     .fields
                                     .days_of_week
                                     .ordinals()
-                                    .contains(&candidate.weekday().number_from_sunday())
+                                    .contains(&(candidate.weekday().to_sunday_one_offset() as u32))
                                 {
                                     continue 'day_loop;
                                 }
@@ -277,41 +258,34 @@ impl Schedule {
 
     /// Provides an iterator which will return each DateTime that matches the schedule starting with
     /// the current time if applicable.
-    pub fn upcoming<Z>(&self, timezone: Z) -> ScheduleIterator<'_, Z>
-    where
-        Z: TimeZone,
-    {
-        self.after(&timezone.from_utc_datetime(&Utc::now().naive_utc()))
+    pub fn upcoming(&self, timezone: TimeZone) -> ScheduleIterator<'_> {
+        let after = Zoned::now().with_time_zone(timezone);
+        self.after(&after)
     }
 
     /// The same, but with an iterator with a static ownership
-    pub fn upcoming_owned<Z: TimeZone>(&self, timezone: Z) -> OwnedScheduleIterator<Z> {
-        self.after_owned(timezone.from_utc_datetime(&Utc::now().naive_utc()))
+    pub fn upcoming_owned(&self, timezone: TimeZone) -> OwnedScheduleIterator {
+        let after = Zoned::now().with_time_zone(timezone);
+        self.after_owned(after)
     }
 
     /// Like the `upcoming` method, but allows you to specify a start time other than the present.
-    pub fn after<Z>(&self, after: &DateTime<Z>) -> ScheduleIterator<'_, Z>
-    where
-        Z: TimeZone,
-    {
+    pub fn after(&self, after: &Zoned) -> ScheduleIterator<'_> {
         ScheduleIterator::new(self, after)
     }
 
     /// The same, but with a static ownership.
-    pub fn after_owned<Z: TimeZone>(&self, after: DateTime<Z>) -> OwnedScheduleIterator<Z> {
+    pub fn after_owned(&self, after: Zoned) -> OwnedScheduleIterator {
         OwnedScheduleIterator::new(self.clone(), after)
     }
 
-    pub fn includes<Z>(&self, date_time: DateTime<Z>) -> bool
-    where
-        Z: TimeZone,
-    {
+    pub fn includes(&self, date_time: Zoned) -> bool {
         self.fields.years.includes(date_time.year() as Ordinal)
             && self.fields.months.includes(date_time.month() as Ordinal)
             && self
                 .fields
                 .days_of_week
-                .includes(date_time.weekday().number_from_sunday())
+                .includes(date_time.weekday().to_sunday_one_offset() as u32)
             && self
                 .fields
                 .days_of_month
@@ -411,20 +385,14 @@ impl ScheduleFields {
     }
 }
 
-pub struct ScheduleIterator<'a, Z>
-where
-    Z: TimeZone,
-{
+pub struct ScheduleIterator<'a> {
     schedule: &'a Schedule,
-    previous_datetime: Option<DateTime<Z>>,
+    previous_datetime: Option<Zoned>,
 }
 //TODO: Cutoff datetime?
 
-impl<'a, Z> ScheduleIterator<'a, Z>
-where
-    Z: TimeZone,
-{
-    fn new(schedule: &'a Schedule, starting_datetime: &DateTime<Z>) -> Self {
+impl<'a> ScheduleIterator<'a> {
+    fn new(schedule: &'a Schedule, starting_datetime: &Zoned) -> Self {
         ScheduleIterator {
             schedule,
             previous_datetime: Some(starting_datetime.clone()),
@@ -432,13 +400,10 @@ where
     }
 }
 
-impl<'a, Z> Iterator for ScheduleIterator<'a, Z>
-where
-    Z: TimeZone,
-{
-    type Item = DateTime<Z>;
+impl<'a> Iterator for ScheduleIterator<'a> {
+    type Item = Zoned;
 
-    fn next(&mut self) -> Option<DateTime<Z>> {
+    fn next(&mut self) -> Option<Zoned> {
         let previous = self.previous_datetime.take()?;
 
         if let Some(next) = self.schedule.next_after(&previous) {
@@ -450,10 +415,7 @@ where
     }
 }
 
-impl<'a, Z> DoubleEndedIterator for ScheduleIterator<'a, Z>
-where
-    Z: TimeZone,
-{
+impl<'a> DoubleEndedIterator for ScheduleIterator<'a> {
     fn next_back(&mut self) -> Option<Self::Item> {
         let previous = self.previous_datetime.take()?;
 
@@ -467,19 +429,13 @@ where
 }
 
 /// A `ScheduleIterator` with a static lifetime.
-pub struct OwnedScheduleIterator<Z>
-where
-    Z: TimeZone,
-{
+pub struct OwnedScheduleIterator {
     schedule: Schedule,
-    previous_datetime: Option<DateTime<Z>>,
+    previous_datetime: Option<Zoned>,
 }
 
-impl<Z> OwnedScheduleIterator<Z>
-where
-    Z: TimeZone,
-{
-    pub fn new(schedule: Schedule, starting_datetime: DateTime<Z>) -> Self {
+impl OwnedScheduleIterator {
+    pub fn new(schedule: Schedule, starting_datetime: Zoned) -> Self {
         Self {
             schedule,
             previous_datetime: Some(starting_datetime),
@@ -487,13 +443,10 @@ where
     }
 }
 
-impl<Z> Iterator for OwnedScheduleIterator<Z>
-where
-    Z: TimeZone,
-{
-    type Item = DateTime<Z>;
+impl Iterator for OwnedScheduleIterator {
+    type Item = Zoned;
 
-    fn next(&mut self) -> Option<DateTime<Z>> {
+    fn next(&mut self) -> Option<Zoned> {
         let previous = self.previous_datetime.take()?;
 
         if let Some(next) = self.schedule.next_after(&previous) {
@@ -505,7 +458,7 @@ where
     }
 }
 
-impl<Z: TimeZone> DoubleEndedIterator for OwnedScheduleIterator<Z> {
+impl DoubleEndedIterator for OwnedScheduleIterator {
     fn next_back(&mut self) -> Option<Self::Item> {
         let previous = self.previous_datetime.take()?;
 
@@ -542,7 +495,7 @@ struct ScheduleVisitor;
 impl<'de> Visitor<'de> for ScheduleVisitor {
     type Value = Schedule;
 
-    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn expecting(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter.write_str("a valid cron expression")
     }
 
@@ -602,12 +555,13 @@ impl<'de> Deserialize<'de> for Schedule {
 
 #[cfg(test)]
 mod test {
-    use chrono::Duration;
+    use std::str::FromStr;
+
+    use jiff::{civil::DateTime, SignedDuration, Span};
     #[cfg(feature = "serde")]
     use serde_test::{assert_tokens, Token};
 
     use super::*;
-    use std::str::FromStr;
 
     #[cfg(feature = "serde")]
     #[test]
@@ -677,20 +631,26 @@ mod test {
         let expression = "0 5,13,40-42 17 1 Jan *";
         let schedule = Schedule::from_str(expression).unwrap();
 
-        let next = schedule.next_after(&Utc::now());
-        println!("NEXT AFTER for {} {:?}", expression, next);
+        let utc_now = Zoned::now().with_time_zone(TimeZone::UTC);
+        let next = schedule.next_after(&utc_now);
+        println!("NEXT AFTER for {} {:?}", expression, &next);
         assert!(next.is_some());
 
-        let next2 = schedule.next_after(&next.unwrap());
+        let next2 = schedule.next_after(next.as_ref().unwrap());
         println!("NEXT2 AFTER for {} {:?}", expression, next2);
         assert!(next2.is_some());
 
-        let prev = schedule.prev_from(&next2.unwrap());
+        let prev = schedule.prev_from(next2.as_ref().unwrap());
         println!("PREV FROM for {} {:?}", expression, prev);
         assert!(prev.is_some());
         assert_eq!(prev, next);
 
-        let prev2 = schedule.prev_from(&(next2.unwrap() + Duration::milliseconds(100)));
+        let prev2 = schedule.prev_from(
+            &next2
+                .as_ref()
+                .map(|next2| next2.saturating_add(SignedDuration::from_millis(100)))
+                .unwrap(),
+        );
         println!("PREV2 FROM for {} {:?}", expression, prev2);
         assert!(prev2.is_some());
         assert_eq!(prev2, next2);
@@ -699,7 +659,10 @@ mod test {
     #[test]
     fn test_next_after_past_date_next_year() {
         // Schedule after 2021-10-27
-        let starting_point = Utc.with_ymd_and_hms(2021, 10, 27, 0, 0, 0).unwrap();
+        let starting_point = date(2021, 10, 27)
+            .at(0, 0, 0, 0)
+            .to_zoned(TimeZone::UTC)
+            .unwrap();
 
         // Triggers on 2022-06-01. Note that the month and day are smaller than
         // the month and day in `starting_point`.
@@ -714,7 +677,8 @@ mod test {
     fn test_prev_from() {
         let expression = "0 5,13,40-42 17 1 Jan *";
         let schedule = Schedule::from_str(expression).unwrap();
-        let prev = schedule.prev_from(&Utc::now());
+        let utc_now = Zoned::now().with_time_zone(TimeZone::UTC);
+        let prev = schedule.prev_from(&utc_now);
         println!("PREV FROM for {} {:?}", expression, prev);
         assert!(prev.is_some());
     }
@@ -723,7 +687,8 @@ mod test {
     fn test_next_after() {
         let expression = "0 5,13,40-42 17 1 Jan *";
         let schedule = Schedule::from_str(expression).unwrap();
-        let next = schedule.next_after(&Utc::now());
+        let utc_now = Zoned::now().with_time_zone(TimeZone::UTC);
+        let next = schedule.next_after(&utc_now);
         println!("NEXT AFTER for {} {:?}", expression, next);
         assert!(next.is_some());
     }
@@ -732,7 +697,7 @@ mod test {
     fn test_upcoming_utc() {
         let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
         let schedule = Schedule::from_str(expression).unwrap();
-        let mut upcoming = schedule.upcoming(Utc);
+        let mut upcoming = schedule.upcoming(TimeZone::UTC);
         let next1 = upcoming.next();
         assert!(next1.is_some());
         let next2 = upcoming.next();
@@ -748,7 +713,7 @@ mod test {
     fn test_upcoming_utc_owned() {
         let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
         let schedule = Schedule::from_str(expression).unwrap();
-        let mut upcoming = schedule.upcoming_owned(Utc);
+        let mut upcoming = schedule.upcoming_owned(TimeZone::UTC);
         let next1 = upcoming.next();
         assert!(next1.is_some());
         let next2 = upcoming.next();
@@ -764,7 +729,7 @@ mod test {
     fn test_upcoming_rev_utc() {
         let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
         let schedule = Schedule::from_str(expression).unwrap();
-        let mut upcoming = schedule.upcoming(Utc).rev();
+        let mut upcoming = schedule.upcoming(TimeZone::UTC).rev();
         let prev1 = upcoming.next();
         assert!(prev1.is_some());
         let prev2 = upcoming.next();
@@ -780,7 +745,7 @@ mod test {
     fn test_upcoming_rev_utc_owned() {
         let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
         let schedule = Schedule::from_str(expression).unwrap();
-        let mut upcoming = schedule.upcoming_owned(Utc).rev();
+        let mut upcoming = schedule.upcoming_owned(TimeZone::UTC).rev();
         let prev1 = upcoming.next();
         assert!(prev1.is_some());
         let prev2 = upcoming.next();
@@ -794,10 +759,9 @@ mod test {
 
     #[test]
     fn test_upcoming_local() {
-        use chrono::Local;
         let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
         let schedule = Schedule::from_str(expression).unwrap();
-        let mut upcoming = schedule.upcoming(Local);
+        let mut upcoming = schedule.upcoming(TimeZone::system());
         let next1 = upcoming.next();
         assert!(next1.is_some());
         let next2 = upcoming.next();
@@ -841,15 +805,24 @@ mod test {
 
     #[test]
     fn test_no_panic_on_nonexistent_time_after() {
-        use chrono::offset::TimeZone;
-        use chrono_tz::Tz;
+        //use chrono::offset::TimeZone;
+        //use chrono_tz::Tz;
 
-        let schedule_tz: Tz = "Europe/London".parse().unwrap();
-        let dt = schedule_tz
-            .with_ymd_and_hms(2019, 10, 27, 0, 3, 29)
+        //let schedule_tz: Tz = "Europe/London".parse().unwrap();
+        //let dt = schedule_tz
+        //    .ymd(2019, 10, 27)
+        //    .and_hms(0, 3, 29)
+        //    .checked_add_signed(chrono::Duration::hours(1)) // puts it in the middle of the DST transition
+        //    .unwrap();
+
+        let schedule_tz: TimeZone = TimeZone::get("Europe/London").unwrap();
+        let dt = DateTime::new(2019, 10, 27, 0, 3, 29, 0)
             .unwrap()
-            .checked_add_signed(chrono::Duration::hours(1)) // puts it in the middle of the DST transition
-            .unwrap();
+            .to_zoned(schedule_tz)
+            .unwrap()
+            .checked_add(Span::new().hours(1))
+            .unwrap(); // puts it in the middle of the DST transition
+
         let schedule = Schedule::from_str("* * * * * Sat,Sun *").unwrap();
         let next = schedule.after(&dt).next().unwrap();
         assert!(next > dt); // test is ensuring line above does not panic
@@ -857,15 +830,14 @@ mod test {
 
     #[test]
     fn test_no_panic_on_nonexistent_time_before() {
-        use chrono::offset::TimeZone;
-        use chrono_tz::Tz;
-
-        let schedule_tz: Tz = "Europe/London".parse().unwrap();
-        let dt = schedule_tz
-            .with_ymd_and_hms(2019, 10, 27, 0, 3, 29)
+        let schedule_tz: TimeZone = TimeZone::get("Europe/London").unwrap();
+        let dt = DateTime::new(2019, 10, 27, 0, 3, 29, 0)
             .unwrap()
-            .checked_add_signed(chrono::Duration::hours(1)) // puts it in the middle of the DST transition
-            .unwrap();
+            .to_zoned(schedule_tz)
+            .unwrap()
+            .checked_add(Span::new().hours(1))
+            .unwrap(); // puts it in the middle of the DST transition
+
         let schedule = Schedule::from_str("* * * * * Sat,Sun *").unwrap();
         let prev = schedule.after(&dt).next_back().unwrap();
         assert!(prev < dt); // test is ensuring line above does not panic
@@ -873,7 +845,9 @@ mod test {
 
     #[test]
     fn test_no_panic_on_leap_day_time_after() {
-        let dt = chrono::DateTime::parse_from_rfc3339("2024-02-29T10:00:00.000+08:00").unwrap();
+        let dt = "2024-02-29T10:00:00.000+08:00[Asia/Singapore]" // N.B. TZ inferred from original
+            .parse()
+            .unwrap();
         let schedule = Schedule::from_str("0 0 0 * * * 2100").unwrap();
         let next = schedule.after(&dt).next().unwrap();
         assert!(next > dt); // test is ensuring line above does not panic

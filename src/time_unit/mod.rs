@@ -59,7 +59,7 @@ impl<'a> DoubleEndedIterator for OrdinalRangeIter<'a> {
 /// Methods exposing a schedule's configured ordinals for each individual unit of time.
 /// # Example
 /// ```
-/// use cron::{Schedule,TimeUnitSpec};
+/// use jiff_cron::{Schedule,TimeUnitSpec};
 /// use std::ops::Bound::{Included,Excluded};
 /// use std::str::FromStr;
 ///
@@ -93,7 +93,7 @@ pub trait TimeUnitSpec {
     /// being described.
     /// # Example
     /// ```
-    /// use cron::{Schedule,TimeUnitSpec};
+    /// use jiff_cron::{Schedule,TimeUnitSpec};
     /// use std::str::FromStr;
     ///
     /// let expression = "* * * * * * 2015-2044";
@@ -109,7 +109,7 @@ pub trait TimeUnitSpec {
     /// lowest to highest.
     /// # Example
     /// ```
-    /// use cron::{Schedule,TimeUnitSpec};
+    /// use jiff_cron::{Schedule,TimeUnitSpec};
     /// use std::str::FromStr;
     ///
     /// let expression = "* * * * 5-8 * *";
@@ -128,7 +128,7 @@ pub trait TimeUnitSpec {
     /// Provides an iterator which will return each included ordinal within the specified range.
     /// # Example
     /// ```
-    /// use cron::{Schedule,TimeUnitSpec};
+    /// use jiff_cron::{Schedule,TimeUnitSpec};
     /// use std::ops::Bound::{Included,Excluded};
     /// use std::str::FromStr;
     ///
@@ -147,7 +147,7 @@ pub trait TimeUnitSpec {
     /// Returns the number of ordinals included in the associated schedule
     /// # Example
     /// ```
-    /// use cron::{Schedule,TimeUnitSpec};
+    /// use jiff_cron::{Schedule,TimeUnitSpec};
     /// use std::str::FromStr;
     ///
     /// let expression = "* * * 1,15 * * *";
@@ -160,7 +160,7 @@ pub trait TimeUnitSpec {
     /// Checks if this TimeUnitSpec is defined as all possibilities (thus created with a '*', '?' or in the case of weekdays '1-7')
     /// # Example
     /// ```
-    /// use cron::{Schedule,TimeUnitSpec};
+    /// use jiff_cron::{Schedule,TimeUnitSpec};
     /// use std::str::FromStr;
     ///
     /// let expression = "* * * 1,15 * * *";
@@ -297,9 +297,9 @@ where
     fn ordinals_from_root_specifier(root_specifier: &RootSpecifier) -> Result<OrdinalSet, Error> {
         let ordinals = match root_specifier {
             RootSpecifier::Specifier(specifier) => Self::ordinals_from_specifier(specifier)?,
-            RootSpecifier::Period(_, 0) => Err(ErrorKind::Expression(
-                "range step cannot be zero".to_string(),
-            ))?,
+            RootSpecifier::Period(_, 0) => {
+                Err(ErrorKind::Expression(format!("range step cannot be zero")))?
+            }
             RootSpecifier::Period(start, step) => {
                 if *step < 1 || *step > Self::inclusive_max() {
                     return Err(ErrorKind::Expression(format!(

@@ -1,26 +1,25 @@
 [package]
-name = "cron"
-version = "0.12.1"
-authors = ["Zack Slayton <zack.slayton@gmail.com>"]
-repository = "https://github.com/zslayton/cron"
-documentation = "https://docs.rs/cron"
+name = "jiff-cron"
+version = "0.1.0"
+authors = [
+    "Max Countryman <hello@maxcountryman.com>",
+    "Zack Slayton <zack.slayton@gmail.com>",
+]
+repository = "https://github.com/maxcountryman/jiff-cron"
+documentation = "https://docs.rs/jiff-cron"
 readme = "README.md"
-description = "A cron expression parser and schedule explorer."
-keywords = [ "cron", "schedule", "repeat", "periodic", "time" ]
+description = "A cron expression parser and schedule explorer built with jiff."
+keywords = ["cron", "schedule", "repeat", "periodic", "time"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
 
-[lib]
-name = "cron"
-
 [dependencies]
-chrono = { version = "~0.4", default-features = false, features = ["clock"] }
+jiff = "0.1"
 nom = "~7"
 once_cell = "1.10"
 serde = {version = "1.0.164", optional = true }
 
 [dev-dependencies]
-chrono-tz = "~0.6"
 serde_test = "1.0.164"
 
 # Dev-dependency for feature "serde".
@@ -30,5 +29,3 @@ postcard = { version = "1.0.10", default-features = false, features = ["use-std"
 
 [features]
 serde = ["dep:serde"]
-
-
