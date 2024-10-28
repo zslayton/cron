@@ -2,7 +2,6 @@ use chrono::offset::TimeZone;
 use chrono::{DateTime, Datelike, Timelike, Utc};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::ops::Bound::{Included, Unbounded};
-use std::str::FromStr;
 
 #[cfg(feature = "serde")]
 use core::fmt;
@@ -12,10 +11,6 @@ use serde::{
     Deserialize, Serialize, Serializer,
 };
 
-#[cfg(test)]
-use serde_test::{assert_tokens, Token};
-
-use crate::error::Error;
 use crate::ordinal::*;
 use crate::queries::*;
 use crate::time_unit::*;
@@ -364,6 +359,11 @@ impl Schedule {
     pub fn timeunitspec_eq(&self, other: &Schedule) -> bool {
         self.fields == other.fields
     }
+
+    /// Returns a reference to the source cron expression.
+    pub fn source(&self) -> &str {
+        &self.source
+    }
 }
 
 impl Display for Schedule {
@@ -546,21 +546,28 @@ impl<'de> Visitor<'de> for ScheduleVisitor {
         formatter.write_str("a valid cron expression")
     }
 
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        match Schedule::from_str(v) {
-            Ok(value) => Ok(value.into()),
-            Err(err) => Err(de::Error::custom(err)),
-        }
-    }
-
+    // Supporting `Deserializer`s shall provide an owned `String`.
+    //
+    // The `Schedule` will decode from a `&str` to it,
+    // then store the owned `String` as `Schedule::source`.
     fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
     where
         E: de::Error,
     {
-        self.visit_str(&v)
+        Schedule::try_from(v).map_err(de::Error::custom)
+    }
+
+    // `Deserializer`s not providing an owned `String`
+    // shall provide a `&str`.
+    //
+    // The `Schedule` will decode from the `&str`,
+    // then clone into the heap to store as an owned `String`
+    // as `Schedule::source`.
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Schedule::try_from(v).map_err(de::Error::custom)
     }
 }
 
@@ -570,7 +577,7 @@ impl Serialize for Schedule {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&self.to_string())
+        serializer.serialize_str(self.source())
     }
 }
 
@@ -580,6 +587,15 @@ impl<'de> Deserialize<'de> for Schedule {
     where
         D: serde::Deserializer<'de>,
     {
+        // Hint that the `Deserialize` type `Schedule`
+        // would benefit from taking ownership of
+        // buffered data owned by the `Deserializer`:
+        //
+        // The deserialization "happy path" decodes from a `&str`,
+        // then stores the source as owned `String`.
+        //
+        // Thus, the optimized happy path receives an owned `String`
+        // if the `Deserializer` in use supports providing one.
         deserializer.deserialize_string(ScheduleVisitor)
     }
 }
@@ -587,6 +603,8 @@ impl<'de> Deserialize<'de> for Schedule {
 #[cfg(test)]
 mod test {
     use chrono::Duration;
+    #[cfg(feature = "serde")]
+    use serde_test::{assert_tokens, Token};
 
     use super::*;
     use std::str::FromStr;
