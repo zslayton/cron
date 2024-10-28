@@ -211,23 +211,23 @@ where
     fn inclusive_min() -> Ordinal;
     fn inclusive_max() -> Ordinal;
     fn ordinals(&self) -> &OrdinalSet;
-    
+
     fn from_ordinal(ordinal: Ordinal) -> Self {
         Self::from_ordinal_set(iter::once(ordinal).collect())
     }
-    
+
     fn supported_ordinals() -> OrdinalSet {
         (Self::inclusive_min()..Self::inclusive_max() + 1).collect()
-    }    
-    
+    }
+
     fn all() -> Self {
         Self::from_optional_ordinal_set(None)
     }
-    
+
     fn from_ordinal_set(ordinal_set: OrdinalSet) -> Self {
         Self::from_optional_ordinal_set(Some(ordinal_set))
     }
-    
+
     fn ordinal_from_name(name: &str) -> Result<Ordinal, Error> {
         Err(ErrorKind::Expression(format!(
             "The '{}' field does not support using names. '{}' \
@@ -264,7 +264,7 @@ where
         //println!("ordinals_from_specifier for {} => {:?}", Self::name(), specifier);
         match *specifier {
             All => Ok(Self::supported_ordinals()),
-            Point(ordinal) => Ok((&[ordinal]).iter().cloned().collect()),
+            Point(ordinal) => Ok(([ordinal]).iter().cloned().collect()),
             Range(start, end) => {
                 match (Self::validate_ordinal(start), Self::validate_ordinal(end)) {
                     (Ok(start), Ok(end)) if start <= end => Ok((start..end + 1).collect()),
@@ -297,7 +297,9 @@ where
     fn ordinals_from_root_specifier(root_specifier: &RootSpecifier) -> Result<OrdinalSet, Error> {
         let ordinals = match root_specifier {
             RootSpecifier::Specifier(specifier) => Self::ordinals_from_specifier(specifier)?,
-            RootSpecifier::Period(_, 0) => Err(ErrorKind::Expression(format!("range step cannot be zero")))?,
+            RootSpecifier::Period(_, 0) => Err(ErrorKind::Expression(
+                "range step cannot be zero".to_string(),
+            ))?,
             RootSpecifier::Period(start, step) => {
                 let base_set = match start {
                     // A point prior to a period implies a range whose start is the specified
@@ -310,7 +312,7 @@ where
                 };
                 base_set.into_iter().step_by(*step as usize).collect()
             }
-            RootSpecifier::NamedPoint(ref name) => (&[Self::ordinal_from_name(name)?])
+            RootSpecifier::NamedPoint(ref name) => ([Self::ordinal_from_name(name)?])
                 .iter()
                 .cloned()
                 .collect::<OrdinalSet>(),
