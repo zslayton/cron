@@ -6,6 +6,7 @@ use nom::multi::separated_list1;
 use nom::sequence::{delimited, separated_pair, terminated, tuple};
 use nom::IResult;
 
+use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::str::{self, FromStr};
 
@@ -15,22 +16,38 @@ use crate::specifier::*;
 use crate::time_unit::*;
 use crate::ordinal::*;
 
-impl FromStr for Schedule {
-    type Err = Error;
-    fn from_str(expression: &str) -> Result<Self, Self::Err> {
-        match schedule(expression) {
-            Ok((_, schedule_fields)) => {
-                Ok(Schedule::new(String::from(expression), schedule_fields))
-            } // Extract from nom tuple
+impl TryFrom<Cow<'_, str>> for Schedule {
+    type Error = Error;
+
+    fn try_from(expression: Cow<'_, str>) -> Result<Self, Self::Error> {
+        match schedule(&expression) {
+            Ok((_, schedule_fields)) => Ok(Schedule::new(expression.into_owned(), schedule_fields)), // Extract from nom tuple
             Err(_) => Err(ErrorKind::Expression("Invalid cron expression.".to_owned()).into()), //TODO: Details
         }
     }
 }
+
+impl TryFrom<String> for Schedule {
+    type Error = Error;
+
+    fn try_from(expression: String) -> Result<Self, Self::Error> {
+        Self::try_from(Cow::Owned(expression))
+    }
+}
+
 impl TryFrom<&str> for Schedule {
     type Error = Error;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        Self::from_str(value)
+    fn try_from(expression: &str) -> Result<Self, Self::Error> {
+        Self::try_from(Cow::Borrowed(expression))
+    }
+}
+
+impl FromStr for Schedule {
+    type Err = Error;
+
+    fn from_str(expression: &str) -> Result<Self, Self::Err> {
+        Self::try_from(Cow::Borrowed(expression))
     }
 }
 
@@ -603,5 +620,35 @@ mod test {
         assert!(schedule(expression).is_err());
         let expression = " @dailyBla ";
         assert!(schedule(expression).is_err());
+    }
+
+    #[test]
+    fn test_try_from_cow_str_owned() {
+        let expression = Cow::Owned(String::from("* * * ? * ?"));
+        Schedule::try_from(expression).unwrap();
+    }
+
+    #[test]
+    fn test_try_from_cow_str_borrowed() {
+        let expression = Cow::Borrowed("* * * ? * ?");
+        Schedule::try_from(expression).unwrap();
+    }
+
+    #[test]
+    fn test_try_from_string() {
+        let expression = String::from("* * * ? * ?");
+        Schedule::try_from(expression).unwrap();
+    }
+
+    #[test]
+    fn test_try_from_str() {
+        let expression = "* * * ? * ?";
+        Schedule::try_from(expression).unwrap();
+    }
+
+    #[test]
+    fn test_from_str() {
+        let expression = "* * * ? * ?";
+        Schedule::from_str(expression).unwrap();
     }
 }
