@@ -537,6 +537,7 @@ fn days_in_month(month: Ordinal, year: Ordinal) -> u32 {
 
 #[cfg(feature = "serde")]
 struct ScheduleVisitor;
+
 #[cfg(feature = "serde")]
 impl<'de> Visitor<'de> for ScheduleVisitor {
     type Value = Schedule;
@@ -573,6 +574,7 @@ impl Serialize for Schedule {
     }
 }
 
+#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for Schedule {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
