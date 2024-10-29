@@ -301,6 +301,16 @@ where
                 "range step cannot be zero".to_string(),
             ))?,
             RootSpecifier::Period(start, step) => {
+                if *step < 1 || *step > Self::inclusive_max() {
+                    return Err(ErrorKind::Expression(format!(
+                        "{} must be between 1 and {}. ('{}' specified.)",
+                        Self::name(),
+                        Self::inclusive_max(),
+                        step,
+                    ))
+                    .into());
+                }
+
                 let base_set = match start {
                     // A point prior to a period implies a range whose start is the specified
                     // point and terminating inclusively with the inclusive max

@@ -661,4 +661,34 @@ mod test {
         let expression = "* * * ? * ?";
         Schedule::from_str(expression).unwrap();
     }
+
+    /// Issue #59
+    #[test]
+    fn test_reject_invalid_interval() {
+        for invalid_expression in [
+            "1-5/61 * * * * *",
+            "*/61 2 3 4 5 6",
+            "* */61 * * * *",
+            "* * */25 * * *",
+            "* * * */32 * *",
+            "* * * * */13 *",
+            "1,2,3/60 * * * * *",
+            "0 0 0 1 1 ? 2020-2040/2200",
+        ] {
+            assert!(schedule(invalid_expression).is_err());
+        }
+
+        for valid_expression in [
+            "1-5/59 * * * * *",
+            "*/10 2 3 4 5 6",
+            "* */30 * * * *",
+            "* * */23 * * *",
+            "* * * */30 * *",
+            "* * * * */10 *",
+            "1,2,3/5 * * * * *",
+            "0 0 0 1 1 ? 2020-2040/10",
+        ] {
+            assert!(schedule(valid_expression).is_ok());
+        }
+    }
 }
