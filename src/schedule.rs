@@ -611,14 +611,14 @@ mod test {
 
     #[cfg(feature = "serde")]
     #[test]
-    fn test_ser_de_schedule() {
-        let cron_value = Schedule::from_str("* * * * * * *").expect("Valid Format");
-        assert_tokens(&cron_value, &[Token::String("* * * * * * *")])
+    fn test_ser_de_schedule_tokens() {
+        let schedule = Schedule::from_str("* * * * * * *").expect("valid format");
+        assert_tokens(&schedule, &[Token::String("* * * * * * *")])
     }
 
     #[cfg(feature = "serde")]
     #[test]
-    fn test_invalid_ser_de_schedule() {
+    fn test_invalid_ser_de_schedule_tokens() {
         use serde_test::assert_de_tokens_error;
 
         assert_de_tokens_error::<Schedule>(
