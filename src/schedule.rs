@@ -629,6 +629,49 @@ mod test {
         );
     }
 
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_ser_de_schedule_shorthand() {
+        let serialized = postcard::to_stdvec(&Schedule::try_from("@hourly").expect("valid format"))
+            .expect("serializable schedule");
+
+        let schedule: Schedule =
+            postcard::from_bytes(&serialized).expect("deserializable schedule");
+
+        let starting_date = Utc.with_ymd_and_hms(2017, 2, 25, 22, 29, 36).unwrap();
+        assert!([
+            Utc.with_ymd_and_hms(2017, 2, 25, 23, 0, 0).unwrap(),
+            Utc.with_ymd_and_hms(2017, 2, 26, 0, 0, 0).unwrap(),
+            Utc.with_ymd_and_hms(2017, 2, 26, 1, 0, 0).unwrap(),
+        ]
+        .into_iter()
+        .eq(schedule.after(&starting_date).take(3)));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_ser_de_schedule_period_values_range() {
+        let serialized =
+            postcard::to_stdvec(&Schedule::try_from("0 0 0 1-31/10 * ?").expect("valid format"))
+                .expect("serializable schedule");
+
+        let schedule: Schedule =
+            postcard::from_bytes(&serialized).expect("deserializable schedule");
+
+        let starting_date = Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
+        assert!([
+            Utc.with_ymd_and_hms(2020, 1, 11, 0, 0, 0).unwrap(),
+            Utc.with_ymd_and_hms(2020, 1, 21, 0, 0, 0).unwrap(),
+            Utc.with_ymd_and_hms(2020, 1, 31, 0, 0, 0).unwrap(),
+            Utc.with_ymd_and_hms(2020, 2, 1, 0, 0, 0).unwrap(),
+            Utc.with_ymd_and_hms(2020, 2, 11, 0, 0, 0).unwrap(),
+            Utc.with_ymd_and_hms(2020, 2, 21, 0, 0, 0).unwrap(),
+            Utc.with_ymd_and_hms(2020, 3, 1, 0, 0, 0).unwrap(),
+        ]
+        .into_iter()
+        .eq(schedule.after(&starting_date).take(7)));
+    }
+
     #[test]
     fn test_next_and_prev_from() {
         let expression = "0 5,13,40-42 17 1 Jan *";

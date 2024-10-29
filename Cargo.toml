@@ -23,6 +23,11 @@ serde = {version = "1.0.164", optional = true }
 chrono-tz = "~0.6"
 serde_test = "1.0.164"
 
+# Dev-dependency for feature "serde".
+# Optional dev-dependencies are not supported yet.
+# Cargo feature request is available at https://github.com/rust-lang/cargo/issues/1596
+postcard = { version = "1.0.10", default-features = false, features = ["use-std"] }
+
 [features]
 serde = ["dep:serde"]
 
