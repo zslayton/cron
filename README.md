@@ -1,4 +1,4 @@
-# jiff-cron [![Rust](https://github.com/maxcoutnryman/jiff-cron/workflows/Rust/badge.svg)](https://github.com/maxcountryman/jiff-cron/actions) [![](https://img.shields.io/crates/v/jiff-cron.svg)](https://crates.io/crates/jiff-cron) [![](https://docs.rs/jiff-cron/badge.svg)](https://docs.rs/jiff-cron)
+# jiff-cron [![Rust](https://github.com/maxcountryman/jiff-cron/workflows/Rust/badge.svg)](https://github.com/maxcountryman/jiff-cron/actions) [![](https://img.shields.io/crates/v/jiff-cron.svg)](https://crates.io/crates/jiff-cron) [![](https://docs.rs/jiff-cron/badge.svg)](https://docs.rs/jiff-cron)
 
 A cron expression parser built with `jiff`.
 
