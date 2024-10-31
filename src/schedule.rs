@@ -592,11 +592,23 @@ mod test {
         let schedule: Schedule =
             postcard::from_bytes(&serialized).expect("deserializable schedule");
 
-        let starting_date = Utc.with_ymd_and_hms(2017, 2, 25, 22, 29, 36).unwrap();
+        let starting_date = date(2017, 2, 25)
+            .at(22, 29, 36, 0)
+            .to_zoned(TimeZone::UTC)
+            .unwrap();
         assert!([
-            Utc.with_ymd_and_hms(2017, 2, 25, 23, 0, 0).unwrap(),
-            Utc.with_ymd_and_hms(2017, 2, 26, 0, 0, 0).unwrap(),
-            Utc.with_ymd_and_hms(2017, 2, 26, 1, 0, 0).unwrap(),
+            date(2017, 2, 25)
+                .at(23, 0, 0, 0)
+                .to_zoned(TimeZone::UTC)
+                .unwrap(),
+            date(2017, 2, 26)
+                .at(0, 0, 0, 0)
+                .to_zoned(TimeZone::UTC)
+                .unwrap(),
+            date(2017, 2, 26)
+                .at(1, 0, 0, 0)
+                .to_zoned(TimeZone::UTC)
+                .unwrap(),
         ]
         .into_iter()
         .eq(schedule.after(&starting_date).take(3)));
@@ -612,15 +624,39 @@ mod test {
         let schedule: Schedule =
             postcard::from_bytes(&serialized).expect("deserializable schedule");
 
-        let starting_date = Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
+        let starting_date = date(2020, 1, 1)
+            .at(0, 0, 0, 0)
+            .to_zoned(TimeZone::UTC)
+            .unwrap();
         assert!([
-            Utc.with_ymd_and_hms(2020, 1, 11, 0, 0, 0).unwrap(),
-            Utc.with_ymd_and_hms(2020, 1, 21, 0, 0, 0).unwrap(),
-            Utc.with_ymd_and_hms(2020, 1, 31, 0, 0, 0).unwrap(),
-            Utc.with_ymd_and_hms(2020, 2, 1, 0, 0, 0).unwrap(),
-            Utc.with_ymd_and_hms(2020, 2, 11, 0, 0, 0).unwrap(),
-            Utc.with_ymd_and_hms(2020, 2, 21, 0, 0, 0).unwrap(),
-            Utc.with_ymd_and_hms(2020, 3, 1, 0, 0, 0).unwrap(),
+            date(2020, 1, 11)
+                .at(0, 0, 0, 0)
+                .to_zoned(TimeZone::UTC)
+                .unwrap(),
+            date(2020, 1, 21)
+                .at(0, 0, 0, 0)
+                .to_zoned(TimeZone::UTC)
+                .unwrap(),
+            date(2020, 1, 31)
+                .at(0, 0, 0, 0)
+                .to_zoned(TimeZone::UTC)
+                .unwrap(),
+            date(2020, 2, 1)
+                .at(0, 0, 0, 0)
+                .to_zoned(TimeZone::UTC)
+                .unwrap(),
+            date(2020, 2, 11)
+                .at(0, 0, 0, 0)
+                .to_zoned(TimeZone::UTC)
+                .unwrap(),
+            date(2020, 2, 21)
+                .at(0, 0, 0, 0)
+                .to_zoned(TimeZone::UTC)
+                .unwrap(),
+            date(2020, 3, 1)
+                .at(0, 0, 0, 0)
+                .to_zoned(TimeZone::UTC)
+                .unwrap(),
         ]
         .into_iter()
         .eq(schedule.after(&starting_date).take(7)));
