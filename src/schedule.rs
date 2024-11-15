@@ -754,7 +754,7 @@ mod test {
         assert!(prev.single().is_some());
         assert_eq!(prev, next);
 
-        let prev2 = schedule.prev_from(&(next2.unwrap() + Duration::milliseconds(100)));
+        let prev2 = schedule.prev_from(&(next2.unwrap() + Duration::nanoseconds(100)));
         println!("PREV2 FROM for {} {:?}", expression, prev2);
         assert!(prev2.single().is_some());
         assert_eq!(prev2, next2);
