@@ -436,7 +436,7 @@ where
     }
 }
 
-impl<'a, Z> Iterator for ScheduleIterator<'a, Z>
+impl<Z> Iterator for ScheduleIterator<'_, Z>
 where
     Z: TimeZone,
 {
@@ -465,7 +465,7 @@ where
     }
 }
 
-impl<'a, Z> DoubleEndedIterator for ScheduleIterator<'a, Z>
+impl<Z> DoubleEndedIterator for ScheduleIterator<'_, Z>
 where
     Z: TimeZone,
 {
@@ -603,7 +603,7 @@ fn days_in_month(month: Ordinal, year: Ordinal) -> u32 {
 struct ScheduleVisitor;
 
 #[cfg(feature = "serde")]
-impl<'de> Visitor<'de> for ScheduleVisitor {
+impl Visitor<'_> for ScheduleVisitor {
     type Value = Schedule;
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
