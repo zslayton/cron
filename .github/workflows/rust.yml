@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Build
       run: cargo build --verbose
     - name: Run tests (default features)
@@ -24,3 +24,7 @@ jobs:
       run: cargo test --verbose --all-features
     - name: Build docs
       run: cargo doc --no-deps --verbose
+    - name: Check formatting
+      run: cargo fmt -- --check
+    - name: Check linting
+      run: cargo clippy --all-targets --all-features -- -D warnings
