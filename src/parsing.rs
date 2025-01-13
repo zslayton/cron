@@ -18,8 +18,8 @@ impl TryFrom<Cow<'_, str>> for Schedule {
 
     fn try_from(expression: Cow<'_, str>) -> Result<Self, Self::Error> {
         match schedule.parse(&expression) {
-            Ok(schedule_fields) => Ok(Schedule::new(expression.into_owned(), schedule_fields)), // Extract from nom tuple
-            Err(_) => Err(ErrorKind::Expression("Invalid cron expression.".to_owned()).into()), //TODO: Details
+            Ok(schedule_fields) => Ok(Schedule::new(expression.into_owned(), schedule_fields)), // Extract from winnow tuple
+            Err(parse_error) => Err(ErrorKind::Expression(format!("{parse_error}")).into()),
         }
     }
 }
