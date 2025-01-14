@@ -16,7 +16,7 @@ pub enum ErrorKind {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
-            ErrorKind::Expression(ref expr) => write!(f, "Invalid expression: {}", expr),
+            ErrorKind::Expression(ref expr) => write!(f, "{expr}"),
         }
     }
 }
