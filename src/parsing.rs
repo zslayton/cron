@@ -258,7 +258,7 @@ fn shorthand(i: &mut &str) -> PResult<ScheduleFields> {
     delimited(multispace0, keywords, multispace0).parse_next(i)
 }
 
-fn longhand(i: &mut &str) -> PResult<ScheduleFields> {
+fn longhand_with_seconds(i: &mut &str) -> PResult<ScheduleFields> {
     let seconds = field.try_map(Seconds::from_field);
     let minutes = field.try_map(Minutes::from_field);
     let hours = field.try_map(Hours::from_field);
@@ -292,6 +292,33 @@ fn longhand(i: &mut &str) -> PResult<ScheduleFields> {
             },
         )
         .parse_next(i)
+}
+
+fn longhand_without_seconds(i: &mut &str) -> PResult<ScheduleFields> {
+    let minutes = field.try_map(Minutes::from_field);
+    let hours = field.try_map(Hours::from_field);
+    let days_of_month = field_with_any.try_map(DaysOfMonth::from_field);
+    let months = field.try_map(Months::from_field);
+    let days_of_week = field_with_any.try_map(DaysOfWeek::from_field);
+    let fields = (minutes, hours, days_of_month, months, days_of_week);
+
+    terminated(fields, eof)
+        .map(|(minutes, hours, days_of_month, months, days_of_week)| {
+            ScheduleFields::new(
+                Seconds::all(),
+                minutes,
+                hours,
+                days_of_month,
+                months,
+                days_of_week,
+                Years::all(),
+            )
+        })
+        .parse_next(i)
+}
+
+fn longhand(i: &mut &str) -> PResult<ScheduleFields> {
+    alt((longhand_with_seconds, longhand_without_seconds)).parse_next(i)
 }
 
 fn schedule(i: &mut &str) -> PResult<ScheduleFields> {
@@ -485,6 +512,12 @@ mod test {
     }
 
     #[test]
+    fn test_nom_valid_schedule_without_seconds() {
+        let expression = "* * * * *";
+        schedule.parse(expression).unwrap();
+    }
+
+    #[test]
     fn test_nom_valid_schedule() {
         let expression = "* * * * * *";
         schedule.parse(expression).unwrap();
@@ -517,6 +550,17 @@ mod test {
     #[test]
     fn test_nom_invalid_seconds_range() {
         let expression = "0-65 * * * * *";
+        assert!(schedule.parse(expression).is_err());
+    }
+
+    #[test]
+    fn test_nom_invalid_hours_range() {
+        let expression = "* * 0-25 * * *";
+        assert!(schedule.parse(expression).is_err());
+
+        // This should make sure hours aren't parsed as minutes
+        // by mistake in 5-field expressions
+        let expression = "* 0-25 * * *";
         assert!(schedule.parse(expression).is_err());
     }
 
@@ -668,16 +712,22 @@ mod test {
             "1,2,3/60 * * * * *",
             "0 0 0 1 1 ? 2020-2040/2200",
         ] {
+            println!("{invalid_expression}");
             assert!(schedule.parse(invalid_expression).is_err());
         }
 
         for valid_expression in [
             "1-5/59 * * * * *",
             "*/10 2 3 4 5 6",
+            "2 3 4 5 6",
             "* */30 * * * *",
+            "*/30 * * * *",
             "* * */23 * * *",
+            "* */23 * * *",
             "* * * */30 * *",
+            "* * */30 * *",
             "* * * * */10 *",
+            "* * * */10 *",
             "1,2,3/5 * * * * *",
             "0 0 0 1 1 ? 2020-2040/10",
         ] {
