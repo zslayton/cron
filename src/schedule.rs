@@ -691,7 +691,7 @@ mod test {
             )],
             "definitively an invalid value for a cron schedule!\n\
                 ^\n\
-                The 'Seconds' field does not support using names. 'definitively' specified.",
+                The 'Minutes' field does not support using names. 'definitively' specified.",
         );
     }
 
