@@ -8,6 +8,12 @@ pub enum Specifier {
     NamedRange(String, String),
 }
 
+#[derive(Debug, PartialEq)]
+pub enum SingleSpecifier {
+    Point(Ordinal),
+    NamedPoint(String),
+}
+
 // Separating out a root specifier allows for a higher tiered specifier, allowing us to achieve
 // periods with base values that are more advanced than an ordinal:
 // - all: '*/2'
@@ -20,6 +26,9 @@ pub enum RootSpecifier {
     Specifier(Specifier),
     Period(Specifier, u32),
     NamedPoint(String),
+    Weekday(Ordinal),
+    LastPoint(SingleSpecifier),
+    NthOfMonth(SingleSpecifier, Ordinal),
 }
 
 impl From<Specifier> for RootSpecifier {

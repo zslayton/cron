@@ -326,7 +326,29 @@ where
                 .iter()
                 .cloned()
                 .collect::<OrdinalSet>(),
+            _ => panic!(
+                "Root specifier not supported for field {}: got {:?}",
+                Self::name(),
+                root_specifier
+            ),
         };
         Ok(ordinals)
+    }
+}
+
+pub fn is_leap_year(year: Ordinal) -> bool {
+    let by_four = year % 4 == 0;
+    let by_hundred = year % 100 == 0;
+    let by_four_hundred = year % 400 == 0;
+    by_four && ((!by_hundred) || by_four_hundred)
+}
+
+pub fn days_in_month(month: Ordinal, year: Ordinal) -> u32 {
+    let is_leap_year = is_leap_year(year);
+    match month {
+        9 | 4 | 6 | 11 => 30,
+        2 if is_leap_year => 29,
+        2 => 28,
+        _ => 31,
     }
 }
