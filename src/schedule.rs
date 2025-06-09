@@ -1031,7 +1031,6 @@ mod test {
         let all_dates = schedule
             .after(&chrono::DateTime::parse_from_rfc3339("2025-06-12T00:00:00.000Z").unwrap())
             .collect::<Vec<_>>();
-        println!("NEXT {:?} AFTER for {:?}", all_dates, schedule);
         assert_eq!(
             all_dates.as_slice(),
             &[

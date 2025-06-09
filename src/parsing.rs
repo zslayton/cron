@@ -154,9 +154,13 @@ fn dow_last_point(i: &mut &str) -> PResult<RootSpecifier> {
 }
 
 fn weekday(i: &mut &str) -> PResult<RootSpecifier> {
-    alt(("LW".map(|_| 0), "WL".map(|_| 0), terminated(ordinal, "W")))
-        .map(|ordinal| RootSpecifier::Weekday(ordinal))
-        .parse_next(i)
+    alt((
+        "LW".map(|_| IS_LAST_OCCURRENCE | IS_WEEKDAY),
+        "WL".map(|_| IS_LAST_OCCURRENCE | IS_WEEKDAY),
+        terminated(ordinal, "W"),
+    ))
+    .map(|ordinal| RootSpecifier::Weekday(ordinal))
+    .parse_next(i)
 }
 
 fn nth_of_month(i: &mut &str) -> PResult<RootSpecifier> {
