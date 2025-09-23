@@ -3,8 +3,35 @@ use crate::ordinal::{Ordinal, OrdinalSet};
 use crate::time_unit::TimeUnitField;
 use once_cell::sync::Lazy;
 use std::borrow::Cow;
+use phf::phf_map;
 
 static ALL: Lazy<OrdinalSet> = Lazy::new(Months::supported_ordinals);
+
+static MONTH_NAME_TO_ORDINAL: phf::Map<&'static str, u32> = phf_map! {
+    "jan" => 1,
+    "january" => 1,
+    "feb" => 2,
+    "february" => 2,
+    "mar" => 3,
+    "march" => 3,
+    "apr" => 4,
+    "april" => 4,
+    "may" => 5,
+    "jun" => 6,
+    "june" => 6,
+    "jul" => 7,
+    "july" => 7,
+    "aug" => 8,
+    "august" => 8,
+    "sep" => 9,
+    "september" => 9,
+    "oct" => 10,
+    "october" => 10,
+    "nov" => 11,
+    "november" => 11,
+    "dec" => 12,
+    "december" => 12,
+};
 
 #[derive(Clone, Debug, Eq)]
 pub struct Months {
@@ -27,27 +54,14 @@ impl TimeUnitField for Months {
         12
     }
     fn ordinal_from_name(name: &str) -> Result<Ordinal, Error> {
-        //TODO: Use phf crate
-        let ordinal = match name.to_lowercase().as_ref() {
-            "jan" | "january" => 1,
-            "feb" | "february" => 2,
-            "mar" | "march" => 3,
-            "apr" | "april" => 4,
-            "may" => 5,
-            "jun" | "june" => 6,
-            "jul" | "july" => 7,
-            "aug" | "august" => 8,
-            "sep" | "september" => 9,
-            "oct" | "october" => 10,
-            "nov" | "november" => 11,
-            "dec" | "december" => 12,
+        match MONTH_NAME_TO_ORDINAL.get(name.to_lowercase().as_ref()) {
+            Some(&ordinal) => Ok(ordinal),
             _ => {
                 return Err(
                     ErrorKind::Expression(format!("'{}' is not a valid month name.", name)).into(),
                 )
             }
-        };
-        Ok(ordinal)
+        }
     }
     fn ordinals(&self) -> &OrdinalSet {
         match &self.ordinals {

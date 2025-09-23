@@ -36,6 +36,9 @@ impl Schedule {
     where
         Z: TimeZone,
     {
+        #[cfg(feature = "vixie")]
+        let dow_and_dom_specific = !self.fields.days_of_week.is_all() && !self.fields.days_of_month.is_all();
+
         let mut query = NextAfterQuery::from(after);
         for year in self
             .fields
@@ -47,7 +50,6 @@ impl Schedule {
             // It's a future year, the current year's range is irrelevant.
             if year > after.year() as u32 {
                 query.reset_month();
-                query.reset_day_of_month();
             }
             let month_start = query.month_lower_bound();
             if !self.fields.months.ordinals().contains(&month_start) {
@@ -55,28 +57,45 @@ impl Schedule {
             }
             let month_range = (Included(month_start), Included(Months::inclusive_max()));
             for month in self.fields.months.ordinals().range(month_range).cloned() {
+                let days_of_month = self.fields.days_of_month.ordinals();
                 let day_of_month_start = query.day_of_month_lower_bound();
-                if !self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .contains(&day_of_month_start)
-                {
-                    query.reset_day_of_month();
-                }
                 let day_of_month_end = days_in_month(month, year);
                 let day_of_month_range = (
                     Included(day_of_month_start.min(day_of_month_end)),
                     Included(day_of_month_end),
                 );
+                
+                #[cfg(not(feature = "vixie"))]
+                let day_of_month_candidates = {
+                  if !self.fields.days_of_month.ordinals().contains(&day_of_month_start) {
+                      query.reset_day_of_month();
+                  }
+                  days_of_month
+                      .range(day_of_month_range)
+                      .cloned()
+                      .filter(|dom| self.fields.days_of_week.ordinals().contains(&day_of_week(year, month, *dom)))
+                };
 
-                'day_loop: for day_of_month in self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .range(day_of_month_range)
-                    .cloned()
-                {
+                #[cfg(feature = "vixie")]
+                let day_of_month_candidates = {
+                  if !dow_and_dom_specific && !days_of_month.contains(&day_of_month_start) {
+                      query.reset_day_of_month();
+                  }
+                      
+                  if dow_and_dom_specific {
+                      (day_of_month_start..=day_of_month_end)
+                        .into_iter()
+                        .filter(|dom| self.fields.days_of_month.ordinals().contains(dom) 
+                            || self.fields.days_of_week.ordinals().contains(&day_of_week(year, month, *dom)))
+                  } else {
+                      days_of_month
+                        .range(day_of_month_range)
+                        .cloned()
+                        .filter(|dom| self.fields.days_of_week.ordinals().contains(&day_of_week(year, month, *dom)))
+                  }
+                };
+
+                for day_of_month in day_of_month_candidates {
                     let hour_start = query.hour_lower_bound();
                     if !self.fields.hours.ordinals().contains(&hour_start) {
                         query.reset_hour();
@@ -103,7 +122,7 @@ impl Schedule {
                                 self.fields.seconds.ordinals().range(second_range).cloned()
                             {
                                 let timezone = after.timezone();
-                                let candidate = match timezone.with_ymd_and_hms(
+                                return match timezone.with_ymd_and_hms(
                                     year as i32,
                                     month,
                                     day_of_month,
@@ -113,18 +132,7 @@ impl Schedule {
                                 ) {
                                     LocalResult::None => continue,
                                     candidate => candidate,
-                                };
-                                if !self.fields.days_of_week.ordinals().contains(
-                                    &candidate
-                                        .clone()
-                                        .latest()
-                                        .unwrap()
-                                        .weekday()
-                                        .number_from_sunday(),
-                                ) {
-                                    continue 'day_loop;
-                                }
-                                return candidate;
+                                  };
                             }
                             query.reset_minute();
                         } // End of minutes range
@@ -144,6 +152,9 @@ impl Schedule {
     where
         Z: TimeZone,
     {
+        #[cfg(feature = "vixie")]
+        let dow_and_dom_specific = !self.fields.days_of_week.is_all() && !self.fields.days_of_month.is_all();
+
         let mut query = PrevFromQuery::from(before);
         for year in self
             .fields
@@ -168,31 +179,48 @@ impl Schedule {
                 .rev()
                 .cloned()
             {
+                let days_of_month = self.fields.days_of_month.ordinals();
                 let day_of_month_end = query.day_of_month_upper_bound();
-                if !self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .contains(&day_of_month_end)
-                {
-                    query.reset_day_of_month();
-                }
-
-                let day_of_month_end = days_in_month(month, year).min(day_of_month_end);
-
                 let day_of_month_range = (
                     Included(DaysOfMonth::inclusive_min()),
-                    Included(day_of_month_end),
+                    Included(days_in_month(month, year).min(day_of_month_end)),
                 );
+                
+                #[cfg(not(feature = "vixie"))]
+                let day_of_month_candidates = {
+                  if !days_of_month.contains(&day_of_month_end) {
+                      query.reset_day_of_month();
+                  }
 
-                'day_loop: for day_of_month in self
-                    .fields
-                    .days_of_month
-                    .ordinals()
+                  days_of_month
                     .range(day_of_month_range)
                     .rev()
                     .cloned()
-                {
+                    .filter(|dom| self.fields.days_of_week.ordinals().contains(&day_of_week(year, month, *dom)))
+                };
+
+                #[cfg(feature = "vixie")]
+                let day_of_month_candidates = {
+                  if !dow_and_dom_specific && !days_of_month.contains(&day_of_month_end) {
+                      query.reset_day_of_month();
+                  }
+                      
+                  if dow_and_dom_specific {
+                      (day_of_month_end..=day_of_month_start)
+                        .into_iter()
+                        .filter(|dom| self.fields.days_of_month.ordinals().contains(dom) 
+                            || self.fields.days_of_week.ordinals().contains(&day_of_week(year, month, *dom)))
+                  } else {
+                      days_of_month
+                        .range(day_of_month_range)
+                        .rev()
+                        .cloned()
+                        .map(|dom| day_of_week(year, month, dom))
+                        .filter(|dom| self.fields.days_of_week.ordinals().contains(&day_of_week(year, month, *dom)))
+                  }
+                };
+
+                for day_of_month in day_of_month_candidates {
                     let hour_start = query.hour_upper_bound();
                     if !self.fields.hours.ordinals().contains(&hour_start) {
                         query.reset_hour();
@@ -238,7 +266,7 @@ impl Schedule {
                                 .cloned()
                             {
                                 let timezone = before.timezone();
-                                let candidate = match timezone.with_ymd_and_hms(
+                                return match timezone.with_ymd_and_hms(
                                     year as i32,
                                     month,
                                     day_of_month,
@@ -249,17 +277,6 @@ impl Schedule {
                                     LocalResult::None => continue,
                                     some => some,
                                 };
-                                if !self.fields.days_of_week.ordinals().contains(
-                                    &candidate
-                                        .clone()
-                                        .latest()
-                                        .unwrap()
-                                        .weekday()
-                                        .number_from_sunday(),
-                                ) {
-                                    continue 'day_loop;
-                                }
-                                return candidate;
                             }
                             query.reset_minute();
                         } // End of minutes range
@@ -302,20 +319,41 @@ impl Schedule {
         OwnedScheduleIterator::new(self.clone(), after)
     }
 
+    #[cfg(feature = "vixie")]
+    /// Vixie cron behavior: If DOM is specific and DOW is inspecific, then only DOM is considered.
+    /// If DOW is specific and DOM is inspecific, then only DOW is considered
+    /// If both are specific, then either is considered.
+    fn includes_dom_dow<Z>(&self, date_time: &DateTime<Z>) -> bool 
+    where  
+        Z: TimeZone,
+    {
+        let dow_inspecific = self.fields.days_of_week.is_all();
+        let dom_inspecific = self.fields.days_of_month.is_all();
+        let dow_includes = self.fields.days_of_week.includes(date_time.weekday().number_from_sunday());
+        let dom_includes = self.fields.days_of_month.includes(date_time.day() as Ordinal);
+
+        (dow_inspecific || dom_inspecific) 
+            && (!dow_inspecific || dow_includes) 
+            && (!dom_inspecific || dom_includes)
+    }
+
+    #[cfg(not(feature = "vixie"))]
+    /// Quartz (the default) cron behavior: Both DOM and DOW must match.
+    fn includes_dom_dow<Z>(&self, date_time: &DateTime<Z>) -> bool 
+    where  
+        Z: TimeZone,
+    {
+        self.fields.days_of_week.includes(date_time.weekday().number_from_sunday())
+            && self.fields.days_of_month.includes(date_time.day() as Ordinal)
+    }
+
     pub fn includes<Z>(&self, date_time: DateTime<Z>) -> bool
     where
         Z: TimeZone,
     {
         self.fields.years.includes(date_time.year() as Ordinal)
             && self.fields.months.includes(date_time.month() as Ordinal)
-            && self
-                .fields
-                .days_of_week
-                .includes(date_time.weekday().number_from_sunday())
-            && self
-                .fields
-                .days_of_month
-                .includes(date_time.day() as Ordinal)
+            && self.includes_dom_dow(&date_time)
             && self.fields.hours.includes(date_time.hour() as Ordinal)
             && self.fields.minutes.includes(date_time.minute() as Ordinal)
             && self.fields.seconds.includes(date_time.second() as Ordinal)
@@ -597,6 +635,22 @@ fn days_in_month(month: Ordinal, year: Ordinal) -> u32 {
         2 => 28,
         _ => 31,
     }
+}
+
+#[cfg(not(feature = "vixie"))]
+fn day_of_week(year: u32, month: u32, day: u32) -> u32 {
+    chrono::NaiveDate::from_ymd_opt(year as i32, month, day)
+        .unwrap()
+        .weekday()
+        .number_from_sunday()
+}
+
+#[cfg(feature = "vixie")]
+fn day_of_week(year: u32, month: u32, day: u32) -> u32 {
+    chrono::NaiveDate::from_ymd_opt(year as i32, month, day)
+        .unwrap()
+        .weekday()
+        .num_days_from_sunday()
 }
 
 #[cfg(feature = "serde")]
