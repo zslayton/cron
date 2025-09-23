@@ -574,7 +574,6 @@ mod tests {
         assert!(first_again.is_some());
         assert_eq!(first, first_again);
 
-        
         let mut prev2 = schedule.after(&(second.unwrap() + Duration::nanoseconds(100)));
         let second_again = prev2.next_back();
         assert!(second_again.is_some());

@@ -81,7 +81,7 @@ impl Schedule {
                 #[cfg(feature = "vixie")]
                 let mut day_of_month_candidates = {
                     let days_of_week = self.fields.days_of_week.ordinals();
-                    
+
                     (day_of_month_start..=day_of_month_end)
                         .into_iter()
                         .filter(|dom| {
