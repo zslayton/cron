@@ -2,8 +2,8 @@ use crate::error::*;
 use crate::ordinal::{Ordinal, OrdinalSet};
 use crate::time_unit::TimeUnitField;
 use once_cell::sync::Lazy;
-use std::borrow::Cow;
 use phf::phf_map;
+use std::borrow::Cow;
 
 static ALL: Lazy<OrdinalSet> = Lazy::new(DaysOfWeek::supported_ordinals);
 
