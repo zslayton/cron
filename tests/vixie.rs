@@ -1,4 +1,4 @@
-#![cfg(all(test, not(feature = "vixie")))]
+#![cfg(all(test, feature = "vixie"))]
 mod tests {
     use chrono::*;
     use chrono_tz::Tz;
@@ -763,8 +763,8 @@ mod tests {
     #[test]
     fn test_time_unit_spec_equality() {
         let schedule_1 = Schedule::from_str("@weekly").unwrap();
-        let schedule_2 = Schedule::from_str("0 0 0 * * 1 *").unwrap();
-        let schedule_3 = Schedule::from_str("0 0 0 * * 1-7 *").unwrap();
+        let schedule_2 = Schedule::from_str("0 0 0 * * 0 *").unwrap();
+        let schedule_3 = Schedule::from_str("0 0 0 * * 0-6 *").unwrap();
         let schedule_4 = Schedule::from_str("0 0 0 * * * *").unwrap();
         assert_ne!(schedule_1, schedule_2);
         assert!(schedule_1.timeunitspec_eq(&schedule_2));

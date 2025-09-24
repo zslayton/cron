@@ -36,6 +36,10 @@ impl Schedule {
     where
         Z: TimeZone,
     {
+        #[cfg(feature = "vixie")]
+        let dow_and_dom_specific =
+            !self.fields.days_of_week.is_all() && !self.fields.days_of_month.is_all();
+
         let mut query = NextAfterQuery::from(after);
         for year in self
             .fields
@@ -47,7 +51,6 @@ impl Schedule {
             // It's a future year, the current year's range is irrelevant.
             if year > after.year() as u32 {
                 query.reset_month();
-                query.reset_day_of_month();
             }
             let month_start = query.month_lower_bound();
             if !self.fields.months.ordinals().contains(&month_start) {
@@ -55,28 +58,48 @@ impl Schedule {
             }
             let month_range = (Included(month_start), Included(Months::inclusive_max()));
             for month in self.fields.months.ordinals().range(month_range).cloned() {
+                let days_of_month = self.fields.days_of_month.ordinals();
                 let day_of_month_start = query.day_of_month_lower_bound();
-                if !self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .contains(&day_of_month_start)
-                {
-                    query.reset_day_of_month();
-                }
                 let day_of_month_end = days_in_month(month, year);
                 let day_of_month_range = (
                     Included(day_of_month_start.min(day_of_month_end)),
                     Included(day_of_month_end),
                 );
 
-                'day_loop: for day_of_month in self
-                    .fields
-                    .days_of_month
-                    .ordinals()
+                #[cfg(not(feature = "vixie"))]
+                let mut day_of_month_candidates = days_of_month
                     .range(day_of_month_range)
                     .cloned()
-                {
+                    .filter(|dom| {
+                        self.fields
+                            .days_of_week
+                            .ordinals()
+                            .contains(&day_of_week(year, month, *dom))
+                    })
+                    .peekable();
+
+                #[cfg(feature = "vixie")]
+                let mut day_of_month_candidates = {
+                    let days_of_week = self.fields.days_of_week.ordinals();
+
+                    (day_of_month_start..=day_of_month_end)
+                        .into_iter()
+                        .filter(|dom| {
+                            if dow_and_dom_specific {
+                                return days_of_month.contains(dom)
+                                    || days_of_week.contains(&day_of_week(year, month, *dom));
+                            }
+                            days_of_month.contains(dom)
+                                && days_of_week.contains(&day_of_week(year, month, *dom))
+                        })
+                        .peekable()
+                };
+
+                if day_of_month_candidates.peek() != Some(&day_of_month_start) {
+                    query.reset_day_of_month();
+                }
+
+                for day_of_month in day_of_month_candidates {
                     let hour_start = query.hour_lower_bound();
                     if !self.fields.hours.ordinals().contains(&hour_start) {
                         query.reset_hour();
@@ -103,7 +126,7 @@ impl Schedule {
                                 self.fields.seconds.ordinals().range(second_range).cloned()
                             {
                                 let timezone = after.timezone();
-                                let candidate = match timezone.with_ymd_and_hms(
+                                return match timezone.with_ymd_and_hms(
                                     year as i32,
                                     month,
                                     day_of_month,
@@ -114,17 +137,6 @@ impl Schedule {
                                     LocalResult::None => continue,
                                     candidate => candidate,
                                 };
-                                if !self.fields.days_of_week.ordinals().contains(
-                                    &candidate
-                                        .clone()
-                                        .latest()
-                                        .unwrap()
-                                        .weekday()
-                                        .number_from_sunday(),
-                                ) {
-                                    continue 'day_loop;
-                                }
-                                return candidate;
                             }
                             query.reset_minute();
                         } // End of minutes range
@@ -144,6 +156,10 @@ impl Schedule {
     where
         Z: TimeZone,
     {
+        #[cfg(feature = "vixie")]
+        let dow_and_dom_specific =
+            !self.fields.days_of_week.is_all() && !self.fields.days_of_month.is_all();
+
         let mut query = PrevFromQuery::from(before);
         for year in self
             .fields
@@ -168,31 +184,49 @@ impl Schedule {
                 .rev()
                 .cloned()
             {
+                let days_of_month = self.fields.days_of_month.ordinals();
                 let day_of_month_end = query.day_of_month_upper_bound();
-                if !self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .contains(&day_of_month_end)
-                {
-                    query.reset_day_of_month();
-                }
-
-                let day_of_month_end = days_in_month(month, year).min(day_of_month_end);
-
                 let day_of_month_range = (
                     Included(DaysOfMonth::inclusive_min()),
-                    Included(day_of_month_end),
+                    Included(days_in_month(month, year).min(day_of_month_end)),
                 );
 
-                'day_loop: for day_of_month in self
-                    .fields
-                    .days_of_month
-                    .ordinals()
+                #[cfg(not(feature = "vixie"))]
+                let mut day_of_month_candidates = days_of_month
                     .range(day_of_month_range)
                     .rev()
                     .cloned()
-                {
+                    .filter(|dom| {
+                        self.fields
+                            .days_of_week
+                            .ordinals()
+                            .contains(&day_of_week(year, month, *dom))
+                    })
+                    .peekable();
+
+                #[cfg(feature = "vixie")]
+                let mut day_of_month_candidates = {
+                    let days_of_week = self.fields.days_of_week.ordinals();
+
+                    (DaysOfMonth::inclusive_min()..=day_of_month_end)
+                        .into_iter()
+                        .rev()
+                        .filter(|dom| {
+                            if dow_and_dom_specific {
+                                return days_of_month.contains(dom)
+                                    || days_of_week.contains(&day_of_week(year, month, *dom));
+                            }
+                            days_of_month.contains(dom)
+                                && days_of_week.contains(&day_of_week(year, month, *dom))
+                        })
+                        .peekable()
+                };
+
+                if day_of_month_candidates.peek() != Some(&day_of_month_end) {
+                    query.reset_day_of_month();
+                }
+
+                for day_of_month in day_of_month_candidates {
                     let hour_start = query.hour_upper_bound();
                     if !self.fields.hours.ordinals().contains(&hour_start) {
                         query.reset_hour();
@@ -238,7 +272,7 @@ impl Schedule {
                                 .cloned()
                             {
                                 let timezone = before.timezone();
-                                let candidate = match timezone.with_ymd_and_hms(
+                                return match timezone.with_ymd_and_hms(
                                     year as i32,
                                     month,
                                     day_of_month,
@@ -249,17 +283,6 @@ impl Schedule {
                                     LocalResult::None => continue,
                                     some => some,
                                 };
-                                if !self.fields.days_of_week.ordinals().contains(
-                                    &candidate
-                                        .clone()
-                                        .latest()
-                                        .unwrap()
-                                        .weekday()
-                                        .number_from_sunday(),
-                                ) {
-                                    continue 'day_loop;
-                                }
-                                return candidate;
                             }
                             query.reset_minute();
                         } // End of minutes range
@@ -302,20 +325,52 @@ impl Schedule {
         OwnedScheduleIterator::new(self.clone(), after)
     }
 
+    #[cfg(feature = "vixie")]
+    /// Vixie cron behavior: If DOM is specific and DOW is inspecific, then only DOM is considered.
+    /// If DOW is specific and DOM is inspecific, then only DOW is considered
+    /// If both are specific, then either is considered.
+    fn includes_dom_dow<Z>(&self, date_time: &DateTime<Z>) -> bool
+    where
+        Z: TimeZone,
+    {
+        let dow_inspecific = self.fields.days_of_week.is_all();
+        let dom_inspecific = self.fields.days_of_month.is_all();
+        let dow_includes = self
+            .fields
+            .days_of_week
+            .includes(date_time.weekday().number_from_sunday());
+        let dom_includes = self
+            .fields
+            .days_of_month
+            .includes(date_time.day() as Ordinal);
+
+        (dow_inspecific || dom_inspecific)
+            && (!dow_inspecific || dow_includes)
+            && (!dom_inspecific || dom_includes)
+    }
+
+    #[cfg(not(feature = "vixie"))]
+    /// Quartz (the default) cron behavior: Both DOM and DOW must match.
+    fn includes_dom_dow<Z>(&self, date_time: &DateTime<Z>) -> bool
+    where
+        Z: TimeZone,
+    {
+        self.fields
+            .days_of_week
+            .includes(date_time.weekday().number_from_sunday())
+            && self
+                .fields
+                .days_of_month
+                .includes(date_time.day() as Ordinal)
+    }
+
     pub fn includes<Z>(&self, date_time: DateTime<Z>) -> bool
     where
         Z: TimeZone,
     {
         self.fields.years.includes(date_time.year() as Ordinal)
             && self.fields.months.includes(date_time.month() as Ordinal)
-            && self
-                .fields
-                .days_of_week
-                .includes(date_time.weekday().number_from_sunday())
-            && self
-                .fields
-                .days_of_month
-                .includes(date_time.day() as Ordinal)
+            && self.includes_dom_dow(&date_time)
             && self.fields.hours.includes(date_time.hour() as Ordinal)
             && self.fields.minutes.includes(date_time.minute() as Ordinal)
             && self.fields.seconds.includes(date_time.second() as Ordinal)
@@ -599,6 +654,22 @@ fn days_in_month(month: Ordinal, year: Ordinal) -> u32 {
     }
 }
 
+#[cfg(not(feature = "vixie"))]
+fn day_of_week(year: u32, month: u32, day: u32) -> u32 {
+    chrono::NaiveDate::from_ymd_opt(year as i32, month, day)
+        .unwrap()
+        .weekday()
+        .number_from_sunday()
+}
+
+#[cfg(feature = "vixie")]
+fn day_of_week(year: u32, month: u32, day: u32) -> u32 {
+    chrono::NaiveDate::from_ymd_opt(year as i32, month, day)
+        .unwrap()
+        .weekday()
+        .num_days_from_sunday()
+}
+
 #[cfg(feature = "serde")]
 struct ScheduleVisitor;
 
@@ -666,12 +737,8 @@ impl<'de> Deserialize<'de> for Schedule {
 
 #[cfg(test)]
 mod test {
-    use chrono::Duration;
     #[cfg(feature = "serde")]
     use serde_test::{assert_tokens, Token};
-
-    use super::*;
-    use std::str::FromStr;
 
     #[cfg(feature = "serde")]
     #[test]
@@ -736,272 +803,5 @@ mod test {
         ]
         .into_iter()
         .eq(schedule.after(&starting_date).take(7)));
-    }
-
-    #[test]
-    fn test_next_and_prev_from() {
-        let expression = "0 5,13,40-42 17 1 Jan *";
-        let schedule = Schedule::from_str(expression).unwrap();
-
-        let next = schedule.next_after(&Utc::now());
-        println!("NEXT AFTER for {} {:?}", expression, next);
-        assert!(next.single().is_some());
-
-        let next2 = schedule.next_after(&next.unwrap());
-        println!("NEXT2 AFTER for {} {:?}", expression, next2);
-        assert!(next2.single().is_some());
-
-        let prev = schedule.prev_from(&next2.unwrap());
-        println!("PREV FROM for {} {:?}", expression, prev);
-        assert!(prev.single().is_some());
-        assert_eq!(prev, next);
-
-        let prev2 = schedule.prev_from(&(next2.unwrap() + Duration::nanoseconds(100)));
-        println!("PREV2 FROM for {} {:?}", expression, prev2);
-        assert!(prev2.single().is_some());
-        assert_eq!(prev2, next2);
-    }
-
-    #[test]
-    fn test_next_after_past_date_next_year() {
-        // Schedule after 2021-10-27
-        let starting_point = Utc.with_ymd_and_hms(2021, 10, 27, 0, 0, 0).unwrap();
-
-        // Triggers on 2022-06-01. Note that the month and day are smaller than
-        // the month and day in `starting_point`.
-        let expression = "0 5 17 1 6 ? 2022".to_string();
-        let schedule = Schedule::from_str(&expression).unwrap();
-        let next = schedule.next_after(&starting_point);
-        println!("NEXT AFTER for {} {:?}", expression, next);
-        assert!(next.single().is_some());
-    }
-
-    #[test]
-    fn test_prev_from() {
-        let expression = "0 5,13,40-42 17 1 Jan *";
-        let schedule = Schedule::from_str(expression).unwrap();
-        let prev = schedule.prev_from(&Utc::now());
-        println!("PREV FROM for {} {:?}", expression, prev);
-        assert!(prev.single().is_some());
-    }
-
-    #[test]
-    fn test_next_after() {
-        let expression = "0 5,13,40-42 17 1 Jan *";
-        let schedule = Schedule::from_str(expression).unwrap();
-        let next = schedule.next_after(&Utc::now());
-        println!("NEXT AFTER for {} {:?}", expression, next);
-        assert!(next.single().is_some());
-    }
-
-    #[test]
-    fn test_upcoming_utc() {
-        let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
-        let schedule = Schedule::from_str(expression).unwrap();
-        let mut upcoming = schedule.upcoming(Utc);
-        let next1 = upcoming.next();
-        assert!(next1.is_some());
-        let next2 = upcoming.next();
-        assert!(next2.is_some());
-        let next3 = upcoming.next();
-        assert!(next3.is_some());
-        println!("Upcoming 1 for {} {:?}", expression, next1);
-        println!("Upcoming 2 for {} {:?}", expression, next2);
-        println!("Upcoming 3 for {} {:?}", expression, next3);
-    }
-
-    #[test]
-    fn test_upcoming_utc_owned() {
-        let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
-        let schedule = Schedule::from_str(expression).unwrap();
-        let mut upcoming = schedule.upcoming_owned(Utc);
-        let next1 = upcoming.next();
-        assert!(next1.is_some());
-        let next2 = upcoming.next();
-        assert!(next2.is_some());
-        let next3 = upcoming.next();
-        assert!(next3.is_some());
-        println!("Upcoming 1 for {} {:?}", expression, next1);
-        println!("Upcoming 2 for {} {:?}", expression, next2);
-        println!("Upcoming 3 for {} {:?}", expression, next3);
-    }
-
-    #[test]
-    fn test_upcoming_rev_utc() {
-        let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
-        let schedule = Schedule::from_str(expression).unwrap();
-        let mut upcoming = schedule.upcoming(Utc).rev();
-        let prev1 = upcoming.next();
-        assert!(prev1.is_some());
-        let prev2 = upcoming.next();
-        assert!(prev2.is_some());
-        let prev3 = upcoming.next();
-        assert!(prev3.is_some());
-        println!("Prev Upcoming 1 for {} {:?}", expression, prev1);
-        println!("Prev Upcoming 2 for {} {:?}", expression, prev2);
-        println!("Prev Upcoming 3 for {} {:?}", expression, prev3);
-    }
-
-    #[test]
-    fn test_upcoming_rev_utc_owned() {
-        let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
-        let schedule = Schedule::from_str(expression).unwrap();
-        let mut upcoming = schedule.upcoming_owned(Utc).rev();
-        let prev1 = upcoming.next();
-        assert!(prev1.is_some());
-        let prev2 = upcoming.next();
-        assert!(prev2.is_some());
-        let prev3 = upcoming.next();
-        assert!(prev3.is_some());
-        println!("Prev Upcoming 1 for {} {:?}", expression, prev1);
-        println!("Prev Upcoming 2 for {} {:?}", expression, prev2);
-        println!("Prev Upcoming 3 for {} {:?}", expression, prev3);
-    }
-
-    #[test]
-    fn test_upcoming_local() {
-        use chrono::Local;
-        let expression = "0 0,30 0,6,12,18 1,15 Jan-March Thurs";
-        let schedule = Schedule::from_str(expression).unwrap();
-        let mut upcoming = schedule.upcoming(Local);
-        let next1 = upcoming.next();
-        assert!(next1.is_some());
-        let next2 = upcoming.next();
-        assert!(next2.is_some());
-        let next3 = upcoming.next();
-        assert!(next3.is_some());
-        println!("Upcoming 1 for {} {:?}", expression, next1);
-        println!("Upcoming 2 for {} {:?}", expression, next2);
-        println!("Upcoming 3 for {} {:?}", expression, next3);
-    }
-
-    #[test]
-    fn test_schedule_to_string() {
-        let expression = "* 1,2,3 * * * *";
-        let schedule: Schedule = Schedule::from_str(expression).unwrap();
-        let result = String::from(schedule);
-        assert_eq!(expression, result);
-    }
-
-    #[test]
-    fn test_display_schedule() {
-        use std::fmt::Write;
-        let expression = "@monthly";
-        let schedule = Schedule::from_str(expression).unwrap();
-        let mut result = String::new();
-        write!(result, "{}", schedule).unwrap();
-        assert_eq!(expression, result);
-    }
-
-    #[test]
-    fn test_valid_from_str() {
-        let schedule = Schedule::from_str("0 0,30 0,6,12,18 1,15 Jan-March Thurs");
-        schedule.unwrap();
-    }
-
-    #[test]
-    fn test_invalid_from_str() {
-        let schedule = Schedule::from_str("cheesecake 0,30 0,6,12,18 1,15 Jan-March Thurs");
-        assert!(schedule.is_err());
-    }
-
-    #[test]
-    fn test_no_panic_on_nonexistent_time_after() {
-        use chrono::offset::TimeZone;
-        use chrono_tz::Tz;
-
-        let schedule_tz: Tz = "Europe/London".parse().unwrap();
-        let dt = schedule_tz
-            .with_ymd_and_hms(2019, 10, 27, 0, 3, 29)
-            .unwrap()
-            .checked_add_signed(chrono::Duration::hours(1)) // puts it in the middle of the DST transition
-            .unwrap();
-        let schedule = Schedule::from_str("* * * * * Sat,Sun *").unwrap();
-        let next = schedule.after(&dt).next().unwrap();
-        assert!(next > dt); // test is ensuring line above does not panic
-    }
-
-    #[test]
-    fn test_no_panic_on_nonexistent_time_before() {
-        use chrono::offset::TimeZone;
-        use chrono_tz::Tz;
-
-        let schedule_tz: Tz = "Europe/London".parse().unwrap();
-        let dt = schedule_tz
-            .with_ymd_and_hms(2019, 10, 27, 0, 3, 29)
-            .unwrap()
-            .checked_add_signed(chrono::Duration::hours(1)) // puts it in the middle of the DST transition
-            .unwrap();
-        let schedule = Schedule::from_str("* * * * * Sat,Sun *").unwrap();
-        let prev = schedule.after(&dt).nth_back(1).unwrap();
-        assert!(prev < dt); // test is ensuring line above does not panic
-    }
-
-    #[test]
-    fn test_no_panic_on_leap_day_time_after() {
-        let dt = chrono::DateTime::parse_from_rfc3339("2024-02-29T10:00:00.000+08:00").unwrap();
-        let schedule = Schedule::from_str("0 0 0 * * * 2100").unwrap();
-        let next = schedule.after(&dt).next().unwrap();
-        assert!(next > dt); // test is ensuring line above does not panic
-    }
-
-    #[test]
-    fn test_time_unit_spec_equality() {
-        let schedule_1 = Schedule::from_str("@weekly").unwrap();
-        let schedule_2 = Schedule::from_str("0 0 0 * * 1 *").unwrap();
-        let schedule_3 = Schedule::from_str("0 0 0 * * 1-7 *").unwrap();
-        let schedule_4 = Schedule::from_str("0 0 0 * * * *").unwrap();
-        assert_ne!(schedule_1, schedule_2);
-        assert!(schedule_1.timeunitspec_eq(&schedule_2));
-        assert!(schedule_3.timeunitspec_eq(&schedule_4));
-    }
-
-    #[test]
-    fn test_dst_ambiguous_time_after() {
-        use chrono_tz::Tz;
-
-        let schedule_tz: Tz = "America/Chicago".parse().unwrap();
-        let dt = schedule_tz
-            .with_ymd_and_hms(2022, 11, 5, 23, 30, 0)
-            .unwrap();
-        let schedule = Schedule::from_str("0 0 * * * * *").unwrap();
-        let times = schedule
-            .after(&dt)
-            .map(|x| x.to_string())
-            .take(5)
-            .collect::<Vec<_>>();
-        let expected_times = [
-            "2022-11-06 00:00:00 CDT".to_string(),
-            "2022-11-06 01:00:00 CDT".to_string(),
-            "2022-11-06 01:00:00 CST".to_string(), // 1 AM happens again
-            "2022-11-06 02:00:00 CST".to_string(),
-            "2022-11-06 03:00:00 CST".to_string(),
-        ];
-
-        assert_eq!(times.as_slice(), expected_times.as_slice());
-    }
-
-    #[test]
-    fn test_dst_ambiguous_time_before() {
-        use chrono_tz::Tz;
-
-        let schedule_tz: Tz = "America/Chicago".parse().unwrap();
-        let dt = schedule_tz.with_ymd_and_hms(2022, 11, 6, 3, 30, 0).unwrap();
-        let schedule = Schedule::from_str("0 0 * * * * *").unwrap();
-        let times = schedule
-            .after(&dt)
-            .map(|x| x.to_string())
-            .rev()
-            .take(5)
-            .collect::<Vec<_>>();
-        let expected_times = [
-            "2022-11-06 03:00:00 CST".to_string(),
-            "2022-11-06 02:00:00 CST".to_string(),
-            "2022-11-06 01:00:00 CST".to_string(),
-            "2022-11-06 01:00:00 CDT".to_string(), // 1 AM happens again
-            "2022-11-06 00:00:00 CDT".to_string(),
-        ];
-
-        assert_eq!(times.as_slice(), expected_times.as_slice());
     }
 }

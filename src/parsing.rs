@@ -205,6 +205,22 @@ fn shorthand_monthly(i: &mut &str) -> PResult<ScheduleFields> {
     Ok(fields)
 }
 
+#[cfg(feature = "vixie")]
+fn shorthand_weekly(i: &mut &str) -> PResult<ScheduleFields> {
+    "@weekly".parse_next(i)?;
+    let fields = ScheduleFields::new(
+        Seconds::from_ordinal(0),
+        Minutes::from_ordinal(0),
+        Hours::from_ordinal(0),
+        DaysOfMonth::all(),
+        Months::all(),
+        DaysOfWeek::from_ordinal(0),
+        Years::all(),
+    );
+    Ok(fields)
+}
+
+#[cfg(not(feature = "vixie"))]
 fn shorthand_weekly(i: &mut &str) -> PResult<ScheduleFields> {
     "@weekly".parse_next(i)?;
     let fields = ScheduleFields::new(
