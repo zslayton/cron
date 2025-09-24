@@ -211,7 +211,6 @@ impl Schedule {
                     (DaysOfMonth::inclusive_min()..=day_of_month_end)
                         .into_iter()
                         .rev()
-                        .cloned()
                         .filter(|dom| {
                             if dow_and_dom_specific {
                                 return days_of_month.contains(dom)
