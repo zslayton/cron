@@ -1,7 +1,6 @@
 use winnow::ascii::{alpha1, digit1, multispace0};
 use winnow::combinator::{alt, delimited, eof, opt, separated, separated_pair, terminated};
 use winnow::prelude::*;
-use winnow::PResult;
 
 use std::borrow::Cow;
 use std::convert::TryFrom;
@@ -82,71 +81,71 @@ where
     }
 }
 
-fn ordinal(i: &mut &str) -> PResult<u32> {
+fn ordinal(i: &mut &str) -> winnow::Result<u32> {
     delimited(multispace0, digit1, multispace0)
         .try_map(u32::from_str)
         .parse_next(i)
 }
 
-fn name(i: &mut &str) -> PResult<String> {
+fn name(i: &mut &str) -> winnow::Result<String> {
     delimited(multispace0, alpha1, multispace0)
         .map(ToOwned::to_owned)
         .parse_next(i)
 }
 
-fn point(i: &mut &str) -> PResult<Specifier> {
+fn point(i: &mut &str) -> winnow::Result<Specifier> {
     ordinal.map(Specifier::Point).parse_next(i)
 }
 
-fn named_point(i: &mut &str) -> PResult<RootSpecifier> {
+fn named_point(i: &mut &str) -> winnow::Result<RootSpecifier> {
     name.map(RootSpecifier::NamedPoint).parse_next(i)
 }
 
-fn period(i: &mut &str) -> PResult<RootSpecifier> {
+fn period(i: &mut &str) -> winnow::Result<RootSpecifier> {
     separated_pair(specifier, "/", ordinal)
         .map(|(start, step)| RootSpecifier::Period(start, step))
         .parse_next(i)
 }
 
-fn period_with_any(i: &mut &str) -> PResult<RootSpecifier> {
+fn period_with_any(i: &mut &str) -> winnow::Result<RootSpecifier> {
     separated_pair(specifier_with_any, "/", ordinal)
         .map(|(start, step)| RootSpecifier::Period(start, step))
         .parse_next(i)
 }
 
-fn range(i: &mut &str) -> PResult<Specifier> {
+fn range(i: &mut &str) -> winnow::Result<Specifier> {
     separated_pair(ordinal, "-", ordinal)
         .map(|(start, end)| Specifier::Range(start, end))
         .parse_next(i)
 }
 
-fn named_range(i: &mut &str) -> PResult<Specifier> {
+fn named_range(i: &mut &str) -> winnow::Result<Specifier> {
     separated_pair(name, "-", name)
         .map(|(start, end)| Specifier::NamedRange(start, end))
         .parse_next(i)
 }
 
-fn all(i: &mut &str) -> PResult<Specifier> {
+fn all(i: &mut &str) -> winnow::Result<Specifier> {
     "*".map(|_| Specifier::All).parse_next(i)
 }
 
-fn any(i: &mut &str) -> PResult<Specifier> {
+fn any(i: &mut &str) -> winnow::Result<Specifier> {
     "?".map(|_| Specifier::All).parse_next(i)
 }
 
-fn specifier(i: &mut &str) -> PResult<Specifier> {
+fn specifier(i: &mut &str) -> winnow::Result<Specifier> {
     alt((all, range, point, named_range)).parse_next(i)
 }
 
-fn specifier_with_any(i: &mut &str) -> PResult<Specifier> {
+fn specifier_with_any(i: &mut &str) -> winnow::Result<Specifier> {
     alt((any, specifier)).parse_next(i)
 }
 
-fn root_specifier(i: &mut &str) -> PResult<RootSpecifier> {
+fn root_specifier(i: &mut &str) -> winnow::Result<RootSpecifier> {
     alt((period, specifier.map(RootSpecifier::from), named_point)).parse_next(i)
 }
 
-fn root_specifier_with_any(i: &mut &str) -> PResult<RootSpecifier> {
+fn root_specifier_with_any(i: &mut &str) -> winnow::Result<RootSpecifier> {
     alt((
         period_with_any,
         specifier_with_any.map(RootSpecifier::from),
@@ -155,29 +154,29 @@ fn root_specifier_with_any(i: &mut &str) -> PResult<RootSpecifier> {
     .parse_next(i)
 }
 
-fn root_specifier_list(i: &mut &str) -> PResult<Vec<RootSpecifier>> {
+fn root_specifier_list(i: &mut &str) -> winnow::Result<Vec<RootSpecifier>> {
     let list = separated(1.., root_specifier, ",");
     let single_item = root_specifier.map(|spec| vec![spec]);
     delimited(multispace0, alt((list, single_item)), multispace0).parse_next(i)
 }
 
-fn root_specifier_list_with_any(i: &mut &str) -> PResult<Vec<RootSpecifier>> {
+fn root_specifier_list_with_any(i: &mut &str) -> winnow::Result<Vec<RootSpecifier>> {
     let list = separated(1.., root_specifier_with_any, ",");
     let single_item = root_specifier_with_any.map(|spec| vec![spec]);
     delimited(multispace0, alt((list, single_item)), multispace0).parse_next(i)
 }
 
-fn field(i: &mut &str) -> PResult<Field> {
+fn field(i: &mut &str) -> winnow::Result<Field> {
     let specifiers = root_specifier_list.parse_next(i)?;
     Ok(Field { specifiers })
 }
 
-fn field_with_any(i: &mut &str) -> PResult<Field> {
+fn field_with_any(i: &mut &str) -> winnow::Result<Field> {
     let specifiers = root_specifier_list_with_any.parse_next(i)?;
     Ok(Field { specifiers })
 }
 
-fn shorthand_yearly(i: &mut &str) -> PResult<ScheduleFields> {
+fn shorthand_yearly(i: &mut &str) -> winnow::Result<ScheduleFields> {
     "@yearly".parse_next(i)?;
     let fields = ScheduleFields::new(
         Seconds::from_ordinal(0),
@@ -191,7 +190,7 @@ fn shorthand_yearly(i: &mut &str) -> PResult<ScheduleFields> {
     Ok(fields)
 }
 
-fn shorthand_monthly(i: &mut &str) -> PResult<ScheduleFields> {
+fn shorthand_monthly(i: &mut &str) -> winnow::Result<ScheduleFields> {
     "@monthly".parse_next(i)?;
     let fields = ScheduleFields::new(
         Seconds::from_ordinal(0),
@@ -205,7 +204,7 @@ fn shorthand_monthly(i: &mut &str) -> PResult<ScheduleFields> {
     Ok(fields)
 }
 
-fn shorthand_weekly(i: &mut &str) -> PResult<ScheduleFields> {
+fn shorthand_weekly(i: &mut &str) -> winnow::Result<ScheduleFields> {
     "@weekly".parse_next(i)?;
     let fields = ScheduleFields::new(
         Seconds::from_ordinal(0),
@@ -219,7 +218,7 @@ fn shorthand_weekly(i: &mut &str) -> PResult<ScheduleFields> {
     Ok(fields)
 }
 
-fn shorthand_daily(i: &mut &str) -> PResult<ScheduleFields> {
+fn shorthand_daily(i: &mut &str) -> winnow::Result<ScheduleFields> {
     "@daily".parse_next(i)?;
     let fields = ScheduleFields::new(
         Seconds::from_ordinal(0),
@@ -233,7 +232,7 @@ fn shorthand_daily(i: &mut &str) -> PResult<ScheduleFields> {
     Ok(fields)
 }
 
-fn shorthand_hourly(i: &mut &str) -> PResult<ScheduleFields> {
+fn shorthand_hourly(i: &mut &str) -> winnow::Result<ScheduleFields> {
     "@hourly".parse_next(i)?;
     let fields = ScheduleFields::new(
         Seconds::from_ordinal(0),
@@ -247,7 +246,7 @@ fn shorthand_hourly(i: &mut &str) -> PResult<ScheduleFields> {
     Ok(fields)
 }
 
-fn shorthand(i: &mut &str) -> PResult<ScheduleFields> {
+fn shorthand(i: &mut &str) -> winnow::Result<ScheduleFields> {
     let keywords = alt((
         shorthand_yearly,
         shorthand_monthly,
@@ -258,7 +257,7 @@ fn shorthand(i: &mut &str) -> PResult<ScheduleFields> {
     delimited(multispace0, keywords, multispace0).parse_next(i)
 }
 
-fn longhand(i: &mut &str) -> PResult<ScheduleFields> {
+fn longhand(i: &mut &str) -> winnow::Result<ScheduleFields> {
     let seconds = field.try_map(Seconds::from_field);
     let minutes = field.try_map(Minutes::from_field);
     let hours = field.try_map(Hours::from_field);
@@ -294,7 +293,7 @@ fn longhand(i: &mut &str) -> PResult<ScheduleFields> {
         .parse_next(i)
 }
 
-fn schedule(i: &mut &str) -> PResult<ScheduleFields> {
+fn schedule(i: &mut &str) -> winnow::Result<ScheduleFields> {
     alt((shorthand, longhand)).parse_next(i)
 }
 
