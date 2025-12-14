@@ -56,12 +56,8 @@ impl Schedule {
             let month_range = (Included(month_start), Included(Months::inclusive_max()));
             for month in self.fields.months.ordinals().range(month_range).cloned() {
                 let day_of_month_start = query.day_of_month_lower_bound();
-                if !self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .contains(&day_of_month_start)
-                {
+                let day_in_month = self.fields.days_of_month.days_in_month(month, year);
+                if !day_in_month.contains(&day_of_month_start) {
                     query.reset_day_of_month();
                 }
                 let day_of_month_end = days_in_month(month, year);
@@ -70,13 +66,7 @@ impl Schedule {
                     Included(day_of_month_end),
                 );
 
-                'day_loop: for day_of_month in self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .range(day_of_month_range)
-                    .cloned()
-                {
+                'day_loop: for day_of_month in day_in_month.range(day_of_month_range).cloned() {
                     let hour_start = query.hour_lower_bound();
                     if !self.fields.hours.ordinals().contains(&hour_start) {
                         query.reset_hour();
@@ -114,14 +104,11 @@ impl Schedule {
                                     LocalResult::None => continue,
                                     candidate => candidate,
                                 };
-                                if !self.fields.days_of_week.ordinals().contains(
-                                    &candidate
-                                        .clone()
-                                        .latest()
-                                        .unwrap()
-                                        .weekday()
-                                        .number_from_sunday(),
-                                ) {
+                                if !self
+                                    .fields
+                                    .days_of_week
+                                    .match_day_of(&candidate.clone().latest().unwrap())
+                                {
                                     continue 'day_loop;
                                 }
                                 return candidate;
@@ -169,12 +156,8 @@ impl Schedule {
                 .cloned()
             {
                 let day_of_month_end = query.day_of_month_upper_bound();
-                if !self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .contains(&day_of_month_end)
-                {
+                let day_in_month = self.fields.days_of_month.days_in_month(month, year);
+                if !day_in_month.contains(&day_of_month_end) {
                     query.reset_day_of_month();
                 }
 
@@ -185,13 +168,7 @@ impl Schedule {
                     Included(day_of_month_end),
                 );
 
-                'day_loop: for day_of_month in self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .range(day_of_month_range)
-                    .rev()
-                    .cloned()
+                'day_loop: for day_of_month in day_in_month.range(day_of_month_range).rev().cloned()
                 {
                     let hour_start = query.hour_upper_bound();
                     if !self.fields.hours.ordinals().contains(&hour_start) {
@@ -249,14 +226,11 @@ impl Schedule {
                                     LocalResult::None => continue,
                                     some => some,
                                 };
-                                if !self.fields.days_of_week.ordinals().contains(
-                                    &candidate
-                                        .clone()
-                                        .latest()
-                                        .unwrap()
-                                        .weekday()
-                                        .number_from_sunday(),
-                                ) {
+                                if !self
+                                    .fields
+                                    .days_of_week
+                                    .match_day_of(&candidate.clone().latest().unwrap())
+                                {
                                     continue 'day_loop;
                                 }
                                 return candidate;
@@ -308,14 +282,12 @@ impl Schedule {
     {
         self.fields.years.includes(date_time.year() as Ordinal)
             && self.fields.months.includes(date_time.month() as Ordinal)
-            && self
-                .fields
-                .days_of_week
-                .includes(date_time.weekday().number_from_sunday())
+            && self.fields.days_of_week.match_day_of(&date_time)
             && self
                 .fields
                 .days_of_month
-                .includes(date_time.day() as Ordinal)
+                .days_in_month(date_time.month() as Ordinal, date_time.year() as Ordinal)
+                .contains(&(date_time.day() as Ordinal))
             && self.fields.hours.includes(date_time.hour() as Ordinal)
             && self.fields.minutes.includes(date_time.minute() as Ordinal)
             && self.fields.seconds.includes(date_time.second() as Ordinal)
@@ -579,23 +551,6 @@ impl<Z: TimeZone> DoubleEndedIterator for OwnedScheduleIterator<Z> {
                 LocalResult::None => None,
             }
         }
-    }
-}
-
-fn is_leap_year(year: Ordinal) -> bool {
-    let by_four = year % 4 == 0;
-    let by_hundred = year % 100 == 0;
-    let by_four_hundred = year % 400 == 0;
-    by_four && ((!by_hundred) || by_four_hundred)
-}
-
-fn days_in_month(month: Ordinal, year: Ordinal) -> u32 {
-    let is_leap_year = is_leap_year(year);
-    match month {
-        9 | 4 | 6 | 11 => 30,
-        2 if is_leap_year => 29,
-        2 => 28,
-        _ => 31,
     }
 }
 
@@ -1003,5 +958,122 @@ mod test {
         ];
 
         assert_eq!(times.as_slice(), expected_times.as_slice());
+    }
+
+    #[test]
+    fn test_last_specifier_in_days_of_month() {
+        let schedule = Schedule::from_str("0 0 0 1-25/10,L,L-2 6 ? 2025").unwrap();
+        let all_dates = schedule
+            .after(&chrono::DateTime::parse_from_rfc3339("2025-06-12T00:00:00.000Z").unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            all_dates.as_slice(),
+            &[
+                chrono::DateTime::parse_from_rfc3339("2025-06-21T00:00:00.000Z").unwrap(),
+                chrono::DateTime::parse_from_rfc3339("2025-06-28T00:00:00.000Z").unwrap(),
+                chrono::DateTime::parse_from_rfc3339("2025-06-30T00:00:00.000Z").unwrap(),
+            ]
+        );
+
+        let all_dates = schedule
+            .after(&chrono::DateTime::parse_from_rfc3339("2025-06-30T12:00:00.000Z").unwrap())
+            .rev()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            all_dates.as_slice(),
+            &[
+                chrono::DateTime::parse_from_rfc3339("2025-06-01T00:00:00.000Z").unwrap(),
+                chrono::DateTime::parse_from_rfc3339("2025-06-11T00:00:00.000Z").unwrap(),
+                chrono::DateTime::parse_from_rfc3339("2025-06-21T00:00:00.000Z").unwrap(),
+                chrono::DateTime::parse_from_rfc3339("2025-06-28T00:00:00.000Z").unwrap(),
+                chrono::DateTime::parse_from_rfc3339("2025-06-30T00:00:00.000Z").unwrap(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_too_big_last_specifier_in_days_of_month() {
+        assert!(Schedule::from_str("0 0 0 L-28 6 ? 2025").is_ok());
+        assert!(Schedule::from_str("0 0 0 L-29 6 ? 2025").is_err());
+    }
+
+    #[test]
+    fn test_weekday_specifier_in_days_of_month() {
+        let schedule = Schedule::from_str("0 0 0 10W,15W,21W,LW 6 ? 2025").unwrap();
+        let all_dates = schedule
+            .after(&chrono::DateTime::parse_from_rfc3339("2025-06-02T00:00:00.000Z").unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            all_dates.as_slice(),
+            &[
+                chrono::DateTime::parse_from_rfc3339("2025-06-10T00:00:00.000Z").unwrap(),
+                chrono::DateTime::parse_from_rfc3339("2025-06-16T00:00:00.000Z").unwrap(),
+                chrono::DateTime::parse_from_rfc3339("2025-06-20T00:00:00.000Z").unwrap(),
+                chrono::DateTime::parse_from_rfc3339("2025-06-30T00:00:00.000Z").unwrap(),
+            ]
+        );
+
+        // Test for particular case where the closest weekday is not in the same month:
+        // (in such case we still return a weekday in the same month)
+
+        // Test that if sunday is last day of the month, LW (or WL) returns the last friday
+        let schedule = Schedule::from_str("0 0 0 WL 8 ? 2025").unwrap();
+
+        let the_date = schedule
+            .after(&chrono::DateTime::parse_from_rfc3339("2025-08-02T00:00:00.000Z").unwrap())
+            .next()
+            .unwrap();
+        assert_eq!(
+            the_date,
+            chrono::DateTime::parse_from_rfc3339("2025-08-29T00:00:00.000Z").unwrap()
+        );
+
+        // Test that if saturday is the first day of the month, LW return the first monday
+        let schedule = Schedule::from_str("0 0 0 1W 3 ? 2025").unwrap();
+        let the_date = schedule
+            .after(&chrono::DateTime::parse_from_rfc3339("2025-02-28T00:00:00.000Z").unwrap())
+            .next()
+            .unwrap();
+        assert_eq!(
+            the_date,
+            chrono::DateTime::parse_from_rfc3339("2025-03-03T00:00:00.000Z").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_last_specifier_in_days_of_week() {
+        let schedule = Schedule::from_str("0 0 0 * 6 FRIL,3L,L 2025").unwrap();
+        let all_dates = schedule
+            .after(&chrono::DateTime::parse_from_rfc3339("2025-06-12T00:00:00.000Z").unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            all_dates.as_slice(),
+            &[
+                chrono::DateTime::parse_from_rfc3339("2025-06-14T00:00:00.000Z").unwrap(),
+                chrono::DateTime::parse_from_rfc3339("2025-06-21T00:00:00.000Z").unwrap(),
+                chrono::DateTime::parse_from_rfc3339("2025-06-24T00:00:00.000Z").unwrap(),
+                chrono::DateTime::parse_from_rfc3339("2025-06-27T00:00:00.000Z").unwrap(),
+                chrono::DateTime::parse_from_rfc3339("2025-06-28T00:00:00.000Z").unwrap(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_occurrence_specifier_in_days_of_week() {
+        let schedule = Schedule::from_str("0 0 0 * 6 MON#3,5#4 2025").unwrap();
+        let all_dates = schedule
+            .after(&chrono::DateTime::parse_from_rfc3339("2025-06-12T00:00:00.000Z").unwrap())
+            .collect::<Vec<_>>();
+        println!("NEXT {:?} AFTER for {:?}", all_dates, schedule);
+        assert_eq!(
+            all_dates.as_slice(),
+            &[
+                chrono::DateTime::parse_from_rfc3339("2025-06-16T00:00:00.000Z").unwrap(),
+                chrono::DateTime::parse_from_rfc3339("2025-06-26T00:00:00.000Z").unwrap(),
+            ]
+        );
     }
 }

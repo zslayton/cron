@@ -238,25 +238,7 @@ where
         .into())
     }
     fn validate_ordinal(ordinal: Ordinal) -> Result<Ordinal, Error> {
-        //println!("validate_ordinal for {} => {}", Self::name(), ordinal);
-        match ordinal {
-            i if i < Self::inclusive_min() => Err(ErrorKind::Expression(format!(
-                "{} must be greater than or equal to {}. ('{}' \
-                 specified.)",
-                Self::name(),
-                Self::inclusive_min(),
-                i
-            ))
-            .into()),
-            i if i > Self::inclusive_max() => Err(ErrorKind::Expression(format!(
-                "{} must be less than {}. ('{}' specified.)",
-                Self::name(),
-                Self::inclusive_max(),
-                i
-            ))
-            .into()),
-            i => Ok(i),
-        }
+        validate_ordinal_default::<Self>(ordinal)
     }
 
     fn ordinals_from_specifier(specifier: &Specifier) -> Result<OrdinalSet, Error> {
@@ -295,38 +277,88 @@ where
     }
 
     fn ordinals_from_root_specifier(root_specifier: &RootSpecifier) -> Result<OrdinalSet, Error> {
-        let ordinals = match root_specifier {
-            RootSpecifier::Specifier(specifier) => Self::ordinals_from_specifier(specifier)?,
-            RootSpecifier::Period(_, 0) => Err(ErrorKind::Expression(
-                "range step cannot be zero".to_string(),
-            ))?,
-            RootSpecifier::Period(start, step) => {
-                if *step < 1 || *step > Self::inclusive_max() {
-                    return Err(ErrorKind::Expression(format!(
-                        "{} must be between 1 and {}. ('{}' specified.)",
-                        Self::name(),
-                        Self::inclusive_max(),
-                        step,
-                    ))
-                    .into());
-                }
-
-                let base_set = match start {
-                    // A point prior to a period implies a range whose start is the specified
-                    // point and terminating inclusively with the inclusive max
-                    Specifier::Point(start) => {
-                        let start = Self::validate_ordinal(*start)?;
-                        (start..=Self::inclusive_max()).collect()
-                    }
-                    specifier => Self::ordinals_from_specifier(specifier)?,
-                };
-                base_set.into_iter().step_by(*step as usize).collect()
-            }
-            RootSpecifier::NamedPoint(ref name) => ([Self::ordinal_from_name(name)?])
-                .iter()
-                .cloned()
-                .collect::<OrdinalSet>(),
-        };
-        Ok(ordinals)
+        ordinals_from_root_specifier_default::<Self>(root_specifier)
     }
+}
+
+fn is_leap_year(year: Ordinal) -> bool {
+    let by_four = year % 4 == 0;
+    let by_hundred = year % 100 == 0;
+    let by_four_hundred = year % 400 == 0;
+    by_four && ((!by_hundred) || by_four_hundred)
+}
+
+pub fn days_in_month(month: Ordinal, year: Ordinal) -> u32 {
+    let is_leap_year = is_leap_year(year);
+    match month {
+        9 | 4 | 6 | 11 => 30,
+        2 if is_leap_year => 29,
+        2 => 28,
+        _ => 31,
+    }
+}
+
+fn validate_ordinal_default<T: TimeUnitField>(ordinal: Ordinal) -> Result<Ordinal, Error> {
+    //println!("validate_ordinal for {} => {}", Self::name(), ordinal);
+    match ordinal {
+        i if i < T::inclusive_min() => Err(ErrorKind::Expression(format!(
+            "{} must be greater than or equal to {}. ('{}' \
+             specified.)",
+            T::name(),
+            T::inclusive_min(),
+            i
+        ))
+        .into()),
+        i if i > T::inclusive_max() => Err(ErrorKind::Expression(format!(
+            "{} must be less than {}. ('{}' specified.)",
+            T::name(),
+            T::inclusive_max(),
+            i
+        ))
+        .into()),
+        i => Ok(i),
+    }
+}
+
+fn ordinals_from_root_specifier_default<T: TimeUnitField>(
+    root_specifier: &RootSpecifier,
+) -> Result<OrdinalSet, Error> {
+    let ordinals = match root_specifier {
+        RootSpecifier::Specifier(specifier) => T::ordinals_from_specifier(specifier)?,
+        RootSpecifier::Period(_, 0) => Err(ErrorKind::Expression(
+            "range step cannot be zero".to_string(),
+        ))?,
+        RootSpecifier::Period(start, step) => {
+            if *step < 1 || *step > T::inclusive_max() {
+                return Err(ErrorKind::Expression(format!(
+                    "{} must be between 1 and {}. ('{}' specified.)",
+                    T::name(),
+                    T::inclusive_max(),
+                    step,
+                ))
+                .into());
+            }
+
+            let base_set = match start {
+                // A point prior to a period implies a range whose start is the specified
+                // point and terminating inclusively with the inclusive max
+                Specifier::Point(start) => {
+                    let start = T::validate_ordinal(*start)?;
+                    (start..=T::inclusive_max()).collect()
+                }
+                specifier => T::ordinals_from_specifier(specifier)?,
+            };
+            base_set.into_iter().step_by(*step as usize).collect()
+        }
+        RootSpecifier::NamedPoint(ref name) => ([T::ordinal_from_name(name)?])
+            .iter()
+            .cloned()
+            .collect::<OrdinalSet>(),
+        _ => panic!(
+            "Root specifier not supported for field {}: got {:?}",
+            T::name(),
+            root_specifier
+        ),
+    };
+    Ok(ordinals)
 }

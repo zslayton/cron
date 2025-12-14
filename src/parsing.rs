@@ -1,6 +1,10 @@
 use winnow::ascii::{alpha1, digit1, multispace0};
-use winnow::combinator::{alt, delimited, eof, opt, separated, separated_pair, terminated};
+use winnow::combinator::{
+    alt, delimited, eof, opt, preceded, separated, separated_pair, terminated,
+};
 use winnow::prelude::*;
+use winnow::stream::AsChar;
+use winnow::token::take_while;
 
 use std::borrow::Cow;
 use std::convert::TryFrom;
@@ -101,6 +105,69 @@ fn named_point(i: &mut &str) -> winnow::Result<RootSpecifier> {
     name.map(RootSpecifier::NamedPoint).parse_next(i)
 }
 
+fn last_named(i: &mut &str) -> winnow::Result<SingleSpecifier> {
+    delimited(
+        multispace0,
+        terminated(take_while(3.., |c| AsChar::is_alpha(c) && c != 'L'), "L"),
+        multispace0,
+    )
+    .map(|s: &str| SingleSpecifier::NamedPoint(s.to_owned()))
+    .parse_next(i)
+}
+
+fn single_point(i: &mut &str) -> winnow::Result<SingleSpecifier> {
+    digit1
+        .try_map(u32::from_str)
+        .map(SingleSpecifier::Point)
+        .parse_next(i)
+}
+
+fn single_named_point(i: &mut &str) -> winnow::Result<SingleSpecifier> {
+    alpha1
+        .map(ToOwned::to_owned)
+        .map(SingleSpecifier::NamedPoint)
+        .parse_next(i)
+}
+
+fn single_specifier(i: &mut &str) -> winnow::Result<SingleSpecifier> {
+    alt((single_point, single_named_point)).parse_next(i)
+}
+
+fn dom_last_point(i: &mut &str) -> winnow::Result<RootSpecifier> {
+    alt((
+        preceded("L-", single_point),
+        "L".map(|_| SingleSpecifier::Point(0)),
+    ))
+    .map(|specifier| RootSpecifier::LastPoint(specifier))
+    .parse_next(i)
+}
+
+fn dow_last_point(i: &mut &str) -> winnow::Result<RootSpecifier> {
+    alt((
+        terminated(single_specifier, "L"),
+        last_named,
+        "L".map(|_| SingleSpecifier::Point(0)),
+    ))
+    .map(|specifier| RootSpecifier::LastPoint(specifier))
+    .parse_next(i)
+}
+
+fn weekday(i: &mut &str) -> winnow::Result<RootSpecifier> {
+    alt((
+        "LW".map(|_| IS_LAST_OCCURRENCE | IS_WEEKDAY),
+        "WL".map(|_| IS_LAST_OCCURRENCE | IS_WEEKDAY),
+        terminated(ordinal, "W"),
+    ))
+    .map(|ordinal| RootSpecifier::Weekday(ordinal))
+    .parse_next(i)
+}
+
+fn nth_of_month(i: &mut &str) -> winnow::Result<RootSpecifier> {
+    separated_pair(single_specifier, "#", digit1.try_map(u32::from_str))
+        .map(|(specifier, ordinal)| RootSpecifier::NthOfMonth(specifier, ordinal))
+        .parse_next(i)
+}
+
 fn period(i: &mut &str) -> winnow::Result<RootSpecifier> {
     separated_pair(specifier, "/", ordinal)
         .map(|(start, step)| RootSpecifier::Period(start, step))
@@ -145,11 +212,23 @@ fn root_specifier(i: &mut &str) -> winnow::Result<RootSpecifier> {
     alt((period, specifier.map(RootSpecifier::from), named_point)).parse_next(i)
 }
 
-fn root_specifier_with_any(i: &mut &str) -> winnow::Result<RootSpecifier> {
+fn dow_root_specifier_with_any(i: &mut &str) -> winnow::Result<RootSpecifier> {
     alt((
         period_with_any,
+        dow_last_point,
+        nth_of_month,
         specifier_with_any.map(RootSpecifier::from),
         named_point,
+    ))
+    .parse_next(i)
+}
+
+fn dom_root_specifier_with_any(i: &mut &str) -> winnow::Result<RootSpecifier> {
+    alt((
+        period_with_any,
+        weekday,
+        dom_last_point,
+        specifier_with_any.map(RootSpecifier::from),
     ))
     .parse_next(i)
 }
@@ -160,9 +239,15 @@ fn root_specifier_list(i: &mut &str) -> winnow::Result<Vec<RootSpecifier>> {
     delimited(multispace0, alt((list, single_item)), multispace0).parse_next(i)
 }
 
-fn root_specifier_list_with_any(i: &mut &str) -> winnow::Result<Vec<RootSpecifier>> {
-    let list = separated(1.., root_specifier_with_any, ",");
-    let single_item = root_specifier_with_any.map(|spec| vec![spec]);
+fn dow_root_specifier_list_with_any(i: &mut &str) -> winnow::Result<Vec<RootSpecifier>> {
+    let list = separated(1.., dow_root_specifier_with_any, ",");
+    let single_item = dow_root_specifier_with_any.map(|spec| vec![spec]);
+    delimited(multispace0, alt((list, single_item)), multispace0).parse_next(i)
+}
+
+fn dom_root_specifier_list_with_any(i: &mut &str) -> winnow::Result<Vec<RootSpecifier>> {
+    let list = separated(1.., dom_root_specifier_with_any, ",");
+    let single_item = dom_root_specifier_with_any.map(|spec| vec![spec]);
     delimited(multispace0, alt((list, single_item)), multispace0).parse_next(i)
 }
 
@@ -171,8 +256,13 @@ fn field(i: &mut &str) -> winnow::Result<Field> {
     Ok(Field { specifiers })
 }
 
-fn field_with_any(i: &mut &str) -> winnow::Result<Field> {
-    let specifiers = root_specifier_list_with_any.parse_next(i)?;
+fn dow_field_with_any(i: &mut &str) -> winnow::Result<Field> {
+    let specifiers = dow_root_specifier_list_with_any.parse_next(i)?;
+    Ok(Field { specifiers })
+}
+
+fn dom_field_with_any(i: &mut &str) -> winnow::Result<Field> {
+    let specifiers = dom_root_specifier_list_with_any.parse_next(i)?;
     Ok(Field { specifiers })
 }
 
@@ -261,9 +351,9 @@ fn longhand(i: &mut &str) -> winnow::Result<ScheduleFields> {
     let seconds = field.try_map(Seconds::from_field);
     let minutes = field.try_map(Minutes::from_field);
     let hours = field.try_map(Hours::from_field);
-    let days_of_month = field_with_any.try_map(DaysOfMonth::from_field);
+    let days_of_month = dom_field_with_any.try_map(DaysOfMonth::from_field);
     let months = field.try_map(Months::from_field);
-    let days_of_week = field_with_any.try_map(DaysOfWeek::from_field);
+    let days_of_week = dow_field_with_any.try_map(DaysOfWeek::from_field);
     let years = opt(field.try_map(Years::from_field));
     let fields = (
         seconds,
@@ -326,6 +416,112 @@ mod test {
     }
 
     #[test]
+    fn test_nom_valid_last_point() {
+        let expression = "L";
+        let result = dom_last_point.parse(expression).unwrap();
+        assert_eq!(result, RootSpecifier::LastPoint(SingleSpecifier::Point(0)));
+    }
+
+    #[test]
+    fn test_nom_valid_to_last_point() {
+        let expression = "L-5";
+        dom_last_point.parse(expression).unwrap();
+
+        let expression = "L-0";
+        dom_last_point.parse(expression).unwrap();
+
+        // "L-[number]" is invalid in day of week fields
+        let expression = "L-0";
+        assert!(dow_last_point.parse(expression).is_err());
+    }
+
+    #[test]
+    fn test_nom_invalid_to_last_point() {
+        let expression = "5-L";
+        assert!(dom_last_point.parse(expression).is_err());
+
+        let expression = "L-LW";
+        assert!(dom_last_point.parse(expression).is_err());
+    }
+
+    #[test]
+    fn test_nom_valid_last_of_point_named() {
+        let expression = "MONDAYL";
+        dow_last_point.parse(expression).unwrap();
+        let expression = "MONL";
+        dow_last_point.parse(expression).unwrap();
+    }
+
+    #[test]
+    fn test_nom_valid_last_of_point_num() {
+        let expression = "1L";
+        dow_last_point.parse(expression).unwrap();
+
+        let expression = "0L";
+        dow_last_point.parse(expression).unwrap();
+    }
+
+    #[test]
+    fn test_nom_invalid_last_of_point_num() {
+        let expression = "1 L";
+        assert!(dow_last_point.parse(expression).is_err());
+
+        // Invalid because it can be ambiguous with a last specifier
+        // (MON L could be "last MONDAY" or "MONDAY and SATURDAY")
+        let expression = "MON L";
+        assert!(dow_last_point.parse(expression).is_err());
+    }
+
+    #[test]
+    fn test_nom_valid_weekday() {
+        let expression = "1W";
+        weekday.parse(expression).unwrap();
+    }
+
+    #[test]
+    fn test_nom_valid_last_weekday() {
+        let expression = "LW";
+        weekday.parse(expression).unwrap();
+
+        let expression = "WL";
+        weekday.parse(expression).unwrap();
+    }
+
+    #[test]
+    fn test_nom_invalid_weekday() {
+        let expression = "W";
+        assert!(weekday.parse(expression).is_err());
+
+        let expression = "WEDW";
+        assert!(weekday.parse(expression).is_err());
+    }
+
+    #[test]
+    fn test_nom_valid_nth_of_month() {
+        let expression = "1#1";
+        nth_of_month.parse(expression).unwrap();
+    }
+
+    #[test]
+    fn test_nom_valid_named_nth_of_month() {
+        let expression = "MON#1";
+        nth_of_month.parse(expression).unwrap();
+
+        // Parsing is valid but this will error when building schedule:
+        let expression = "FRIDAY#0";
+        nth_of_month.parse(expression).unwrap();
+    }
+
+    #[test]
+    fn test_nom_invalid_named_nth_of_month() {
+        let expression = "MON# 1";
+        assert!(nth_of_month.parse(expression).is_err());
+
+        let expression = "MON #1";
+        assert!(nth_of_month.parse(expression).is_err());
+    }
+
+    #[test]
     fn test_nom_valid_period() {
         let expression = "1/2";
         period.parse(expression).unwrap();
@@ -341,20 +537,26 @@ mod test {
     fn test_nom_valid_number_list() {
         let expression = "1,2";
         field.parse(expression).unwrap();
-        field_with_any.parse(expression).unwrap();
+        dow_field_with_any.parse(expression).unwrap();
+    }
+
+    #[test]
+    fn test_nom_valid_last_point_list() {
+        let expression = "TUEL,FRIL";
+        dow_field_with_any.parse(expression).unwrap();
     }
 
     #[test]
     fn test_nom_invalid_number_list() {
         let expression = ",1,2";
         assert!(field.parse(expression).is_err());
-        assert!(field_with_any.parse(expression).is_err());
+        assert!(dow_field_with_any.parse(expression).is_err());
     }
 
     #[test]
     fn test_nom_field_with_any_valid_any() {
         let expression = "?";
-        field_with_any.parse(expression).unwrap();
+        dom_field_with_any.parse(expression).unwrap();
     }
 
     #[test]
@@ -469,6 +671,24 @@ mod test {
     fn test_nom_invalid_range_field() {
         let expression = "-4";
         assert!(range.parse(expression).is_err());
+
+        let expression = "1-4L";
+        assert!(range.parse(expression).is_err());
+
+        let expression = "2-5#3";
+        assert!(range.parse(expression).is_err());
+
+        let expression = "1-L-3";
+        assert!(range.parse(expression).is_err());
+
+        let expression = "1-5W";
+        assert!(range.parse(expression).is_err());
+
+        let expression = "1-LW";
+        assert!(range.parse(expression).is_err());
+
+        let expression = "1-WL";
+        assert!(range.parse(expression).is_err());
     }
 
     #[test]
@@ -481,6 +701,12 @@ mod test {
     fn test_nom_invalid_named_range_field() {
         let expression = "3-THURS";
         assert!(named_range.parse(expression).is_err());
+
+        let expression = "Tue-Thu#3";
+        assert!(range.parse(expression).is_err());
+
+        let expression = "Tue-L";
+        assert!(range.parse(expression).is_err());
     }
 
     #[test]
