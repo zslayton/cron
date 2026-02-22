@@ -1,5 +1,5 @@
 use chrono::offset::{LocalResult, TimeZone};
-use chrono::{DateTime, Datelike, Timelike, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, Timelike, Utc};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::ops::Bound::{Included, Unbounded};
 
@@ -70,13 +70,26 @@ impl Schedule {
                     Included(day_of_month_end),
                 );
 
-                'day_loop: for day_of_month in self
+                for day_of_month in self
                     .fields
                     .days_of_month
                     .ordinals()
                     .range(day_of_month_range)
                     .cloned()
                 {
+                    if !self.fields.days_of_week.is_all()
+                        && !NaiveDate::from_ymd_opt(year as i32, month, day_of_month)
+                            .map(|d| {
+                                self.fields
+                                    .days_of_week
+                                    .ordinals()
+                                    .contains(&d.weekday().number_from_sunday())
+                            })
+                            .unwrap_or(false)
+                    {
+                        query.reset_day_of_month();
+                        continue;
+                    }
                     let hour_start = query.hour_lower_bound();
                     if !self.fields.hours.ordinals().contains(&hour_start) {
                         query.reset_hour();
@@ -114,16 +127,6 @@ impl Schedule {
                                     LocalResult::None => continue,
                                     candidate => candidate,
                                 };
-                                if !self.fields.days_of_week.ordinals().contains(
-                                    &candidate
-                                        .clone()
-                                        .latest()
-                                        .unwrap()
-                                        .weekday()
-                                        .number_from_sunday(),
-                                ) {
-                                    continue 'day_loop;
-                                }
                                 return candidate;
                             }
                             query.reset_minute();
@@ -185,7 +188,7 @@ impl Schedule {
                     Included(day_of_month_end),
                 );
 
-                'day_loop: for day_of_month in self
+                for day_of_month in self
                     .fields
                     .days_of_month
                     .ordinals()
@@ -193,6 +196,19 @@ impl Schedule {
                     .rev()
                     .cloned()
                 {
+                    if !self.fields.days_of_week.is_all()
+                        && !NaiveDate::from_ymd_opt(year as i32, month, day_of_month)
+                            .map(|d| {
+                                self.fields
+                                    .days_of_week
+                                    .ordinals()
+                                    .contains(&d.weekday().number_from_sunday())
+                            })
+                            .unwrap_or(false)
+                    {
+                        query.reset_day_of_month();
+                        continue;
+                    }
                     let hour_start = query.hour_upper_bound();
                     if !self.fields.hours.ordinals().contains(&hour_start) {
                         query.reset_hour();
@@ -249,16 +265,6 @@ impl Schedule {
                                     LocalResult::None => continue,
                                     some => some,
                                 };
-                                if !self.fields.days_of_week.ordinals().contains(
-                                    &candidate
-                                        .clone()
-                                        .latest()
-                                        .unwrap()
-                                        .weekday()
-                                        .number_from_sunday(),
-                                ) {
-                                    continue 'day_loop;
-                                }
                                 return candidate;
                             }
                             query.reset_minute();
