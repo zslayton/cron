@@ -70,26 +70,28 @@ impl Schedule {
                     Included(day_of_month_end),
                 );
 
-                for day_of_month in self
+                let mut day_iter = self
                     .fields
                     .days_of_month
                     .ordinals()
                     .range(day_of_month_range)
                     .cloned()
-                {
-                    if !self.fields.days_of_week.is_all()
-                        && !NaiveDate::from_ymd_opt(year as i32, month, day_of_month)
-                            .map(|d| {
-                                self.fields
-                                    .days_of_week
-                                    .ordinals()
-                                    .contains(&d.weekday().number_from_sunday())
-                            })
-                            .unwrap_or(false)
-                    {
-                        query.reset_day_of_month();
-                        continue;
-                    }
+                    .filter(|&day| {
+                        self.fields.days_of_week.is_all()
+                            || NaiveDate::from_ymd_opt(year as i32, month, day)
+                                .map(|d| {
+                                    self.fields
+                                        .days_of_week
+                                        .ordinals()
+                                        .contains(&d.weekday().number_from_sunday())
+                                })
+                                .unwrap_or(false)
+                    })
+                    .peekable();
+                if day_iter.peek() != Some(&day_of_month_start) {
+                    query.reset_day_of_month();
+                }
+                for day_of_month in day_iter {
                     let hour_start = query.hour_lower_bound();
                     if !self.fields.hours.ordinals().contains(&hour_start) {
                         query.reset_hour();
@@ -188,27 +190,29 @@ impl Schedule {
                     Included(day_of_month_end),
                 );
 
-                for day_of_month in self
+                let mut day_iter = self
                     .fields
                     .days_of_month
                     .ordinals()
                     .range(day_of_month_range)
                     .rev()
                     .cloned()
-                {
-                    if !self.fields.days_of_week.is_all()
-                        && !NaiveDate::from_ymd_opt(year as i32, month, day_of_month)
-                            .map(|d| {
-                                self.fields
-                                    .days_of_week
-                                    .ordinals()
-                                    .contains(&d.weekday().number_from_sunday())
-                            })
-                            .unwrap_or(false)
-                    {
-                        query.reset_day_of_month();
-                        continue;
-                    }
+                    .filter(|&day| {
+                        self.fields.days_of_week.is_all()
+                            || NaiveDate::from_ymd_opt(year as i32, month, day)
+                                .map(|d| {
+                                    self.fields
+                                        .days_of_week
+                                        .ordinals()
+                                        .contains(&d.weekday().number_from_sunday())
+                                })
+                                .unwrap_or(false)
+                    })
+                    .peekable();
+                if day_iter.peek() != Some(&day_of_month_end) {
+                    query.reset_day_of_month();
+                }
+                for day_of_month in day_iter {
                     let hour_start = query.hour_upper_bound();
                     if !self.fields.hours.ordinals().contains(&hour_start) {
                         query.reset_hour();
