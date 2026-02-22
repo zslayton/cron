@@ -47,7 +47,6 @@ impl Schedule {
             // It's a future year, the current year's range is irrelevant.
             if year > after.year() as u32 {
                 query.reset_month();
-                query.reset_day_of_month();
             }
             let month_start = query.month_lower_bound();
             if !self.fields.months.ordinals().contains(&month_start) {
