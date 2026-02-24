@@ -1,7 +1,6 @@
 use chrono::offset::{LocalResult, TimeZone};
-use chrono::{DateTime, Datelike, NaiveDate, Timelike, Utc};
+use chrono::{DateTime, Datelike, Timelike, Utc};
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::ops::Bound::{Included, Unbounded};
 
 #[cfg(feature = "serde")]
 use core::fmt;
@@ -36,366 +35,97 @@ impl Schedule {
     where
         Z: TimeZone,
     {
-        let mut query = NextAfterQuery::from(after);
-        let mut deferred_candidate: Option<DateTime<Z>> = None;
-        let after_naive = after.naive_local();
-        let after_in_first_fold = match after.timezone().from_local_datetime(&after_naive) {
-            LocalResult::Ambiguous(first, second) => {
-                let earlier = if first <= second { first } else { second };
-                *after == earlier
-            }
-            _ => false,
-        };
-        for year in self
-            .fields
-            .years
-            .ordinals()
-            .range((Included(query.year_lower_bound()), Unbounded))
-            .cloned()
-        {
-            // It's a future year, the current year's range is irrelevant.
-            if year > after.year() as u32 {
-                query.reset_month();
-            }
-            let month_start = query.month_lower_bound();
-            if !self.fields.months.ordinals().contains(&month_start) {
-                query.reset_month();
-            }
-            let month_range = (Included(month_start), Included(Months::inclusive_max()));
-            for month in self.fields.months.ordinals().range(month_range).cloned() {
-                let day_of_month_start = query.day_of_month_lower_bound();
-                if !self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .contains(&day_of_month_start)
-                {
-                    query.reset_day_of_month();
-                }
-                let day_of_month_end = days_in_month(month, year);
-                let day_of_month_range = (
-                    Included(day_of_month_start.min(day_of_month_end)),
-                    Included(day_of_month_end),
-                );
-
-                let mut day_iter = self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .range(day_of_month_range)
-                    .cloned()
-                    .filter(|&day| {
-                        self.fields.days_of_week.is_all()
-                            || NaiveDate::from_ymd_opt(year as i32, month, day)
-                                .map(|d| {
-                                    self.fields
-                                        .days_of_week
-                                        .ordinals()
-                                        .contains(&d.weekday().number_from_sunday())
-                                })
-                                .unwrap_or(false)
-                    })
-                    .peekable();
-                if day_iter.peek() != Some(&day_of_month_start) {
-                    query.reset_day_of_month();
-                }
-                for day_of_month in day_iter {
-                    let hour_start = query.hour_lower_bound();
-                    if !self.fields.hours.ordinals().contains(&hour_start) {
-                        query.reset_hour();
-                    }
-                    let hour_range = (Included(hour_start), Included(Hours::inclusive_max()));
-
-                    for hour in self.fields.hours.ordinals().range(hour_range).cloned() {
-                        let fold_hour_scan = after_in_first_fold
-                            && year as i32 == after_naive.year()
-                            && month == after_naive.month()
-                            && day_of_month == after_naive.day()
-                            && hour == after_naive.hour();
-                        let query_minute_start = query.minute_lower_bound();
-                        let minute_start = if fold_hour_scan {
-                            Minutes::inclusive_min()
-                        } else {
-                            query_minute_start
-                        };
-                        if !self.fields.minutes.ordinals().contains(&minute_start) {
-                            query.reset_minute();
-                        }
-                        let minute_range =
-                            (Included(minute_start), Included(Minutes::inclusive_max()));
-
-                        for minute in self.fields.minutes.ordinals().range(minute_range).cloned() {
-                            let query_second_start = query.second_lower_bound();
-                            let second_start = if fold_hour_scan {
-                                Seconds::inclusive_min()
-                            } else {
-                                query_second_start
-                            };
-                            if !self.fields.seconds.ordinals().contains(&second_start) {
-                                query.reset_second();
-                            }
-                            let second_range =
-                                (Included(second_start), Included(Seconds::inclusive_max()));
-
-                            for second in
-                                self.fields.seconds.ordinals().range(second_range).cloned()
-                            {
-                                let timezone = after.timezone();
-                                let local_result = timezone.with_ymd_and_hms(
-                                    year as i32,
-                                    month,
-                                    day_of_month,
-                                    hour,
-                                    minute,
-                                    second,
-                                );
-                                match local_result {
-                                    LocalResult::None => continue,
-                                    LocalResult::Single(candidate) => {
-                                        if candidate <= *after {
-                                            continue;
-                                        }
-                                        if let Some(deferred) = deferred_candidate.take() {
-                                            return Some(if deferred < candidate {
-                                                deferred
-                                            } else {
-                                                candidate
-                                            });
-                                        }
-                                        return Some(candidate);
-                                    }
-                                    LocalResult::Ambiguous(earlier, later) => {
-                                        if earlier > *after {
-                                            if let Some(deferred) = deferred_candidate.take() {
-                                                return Some(if deferred < earlier {
-                                                    deferred
-                                                } else {
-                                                    earlier
-                                                });
-                                            }
-                                            return Some(earlier);
-                                        }
-                                        if later > *after {
-                                            deferred_candidate = Some(match deferred_candidate {
-                                                Some(existing) if existing < later => existing,
-                                                _ => later,
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-                            query.reset_minute();
-                        } // End of minutes range
-                        query.reset_hour();
-                    } // End of hours range
-                    query.reset_day_of_month();
-                } // End of Day of Month range
-                query.reset_month();
-            } // End of Month range
-        }
-
-        if let Some(candidate) = deferred_candidate {
-            return Some(candidate);
-        }
-        // We ran out of dates to try.
-        None
+        self.find_with_query(NextAfterQuery::from(after), after)
     }
 
     fn prev_from<Z>(&self, before: &DateTime<Z>) -> Option<DateTime<Z>>
     where
         Z: TimeZone,
     {
-        let mut query = PrevFromQuery::from(before);
+        self.find_with_query(PrevFromQuery::from(before), before)
+    }
+
+    fn find_with_query<Z, Q>(&self, mut query: Q, datetime: &DateTime<Z>) -> Option<DateTime<Z>>
+    where
+        Z: TimeZone,
+        Q: Query<Z>,
+    {
         let mut deferred_candidate: Option<DateTime<Z>> = None;
-        let before_naive = before.naive_local();
-        let before_in_second_fold = match before.timezone().from_local_datetime(&before_naive) {
+        let reference_naive = datetime.naive_local();
+        let fold_scan_active = match datetime.timezone().from_local_datetime(&reference_naive) {
             LocalResult::Ambiguous(first, second) => {
-                let later = if first <= second { second } else { first };
-                *before == later
+                *datetime == query.preferred_candidate(first, second)
             }
             _ => false,
         };
-        for year in self
-            .fields
-            .years
-            .ordinals()
-            .range((Unbounded, Included(query.year_upper_bound())))
-            .rev()
-            .cloned()
-        {
-            let month_start = query.month_upper_bound();
-
-            if !self.fields.months.ordinals().contains(&month_start) {
-                query.reset_month();
-            }
-            let month_range = (Included(Months::inclusive_min()), Included(month_start));
-
-            for month in self
-                .fields
-                .months
-                .ordinals()
-                .range(month_range)
-                .rev()
-                .cloned()
-            {
-                let day_of_month_end = query.day_of_month_upper_bound();
-                if !self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .contains(&day_of_month_end)
-                {
-                    query.reset_day_of_month();
-                }
-
-                let day_of_month_end = days_in_month(month, year).min(day_of_month_end);
-
-                let day_of_month_range = (
-                    Included(DaysOfMonth::inclusive_min()),
-                    Included(day_of_month_end),
-                );
-
-                let mut day_iter = self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .range(day_of_month_range)
-                    .rev()
-                    .cloned()
-                    .filter(|&day| {
-                        self.fields.days_of_week.is_all()
-                            || NaiveDate::from_ymd_opt(year as i32, month, day)
-                                .map(|d| {
-                                    self.fields
-                                        .days_of_week
-                                        .ordinals()
-                                        .contains(&d.weekday().number_from_sunday())
-                                })
-                                .unwrap_or(false)
-                    })
-                    .peekable();
-                if day_iter.peek() != Some(&day_of_month_end) {
-                    query.reset_day_of_month();
-                }
-                for day_of_month in day_iter {
-                    let hour_start = query.hour_upper_bound();
-                    if !self.fields.hours.ordinals().contains(&hour_start) {
-                        query.reset_hour();
-                    }
-                    let hour_range = (Included(Hours::inclusive_min()), Included(hour_start));
-
-                    for hour in self
-                        .fields
-                        .hours
-                        .ordinals()
-                        .range(hour_range)
-                        .rev()
-                        .cloned()
-                    {
-                        let fold_hour_scan = before_in_second_fold
-                            && year as i32 == before_naive.year()
-                            && month == before_naive.month()
-                            && day_of_month == before_naive.day()
-                            && hour == before_naive.hour();
-                        let query_minute_start = query.minute_upper_bound();
-                        let minute_start = if fold_hour_scan {
-                            Minutes::inclusive_max()
-                        } else {
-                            query_minute_start
-                        };
-                        if !self.fields.minutes.ordinals().contains(&minute_start) {
-                            query.reset_minute();
-                        }
-                        let minute_range =
-                            (Included(Minutes::inclusive_min()), Included(minute_start));
-
-                        for minute in self
-                            .fields
-                            .minutes
-                            .ordinals()
-                            .range(minute_range)
-                            .rev()
-                            .cloned()
-                        {
-                            let query_second_start = query.second_upper_bound();
-                            let second_start = if fold_hour_scan {
-                                Seconds::inclusive_max()
-                            } else {
-                                query_second_start
-                            };
-                            if !self.fields.seconds.ordinals().contains(&second_start) {
-                                query.reset_second();
-                            }
-                            let second_range =
-                                (Included(Seconds::inclusive_min()), Included(second_start));
-
-                            for second in self
-                                .fields
-                                .seconds
-                                .ordinals()
-                                .range(second_range)
-                                .rev()
-                                .cloned()
-                            {
-                                let timezone = before.timezone();
-                                let local_result = timezone.with_ymd_and_hms(
-                                    year as i32,
-                                    month,
-                                    day_of_month,
-                                    hour,
-                                    minute,
-                                    second,
+        for year in query.years(&self.fields) {
+            for month in query.months(&self.fields, *year) {
+                for day_of_month in query.days_of_month(&self.fields, *year, *month) {
+                    for hour in query.hours(&self.fields) {
+                        let fold_hour_scan = fold_scan_active
+                            && *year as i32 == reference_naive.year()
+                            && *month == reference_naive.month()
+                            && *day_of_month == reference_naive.day()
+                            && *hour == reference_naive.hour();
+                        for minute in query.minutes(&self.fields, fold_hour_scan) {
+                            for second in query.seconds(&self.fields, fold_hour_scan) {
+                                let local_result = datetime.timezone().with_ymd_and_hms(
+                                    *year as i32,
+                                    *month,
+                                    *day_of_month,
+                                    *hour,
+                                    *minute,
+                                    *second,
                                 );
                                 match local_result {
                                     LocalResult::None => continue,
                                     LocalResult::Single(candidate) => {
-                                        if candidate >= *before {
+                                        if !query.preceeds_reference_datetime(&candidate) {
                                             continue;
                                         }
                                         if let Some(deferred) = deferred_candidate.take() {
-                                            return Some(if deferred > candidate {
-                                                deferred
-                                            } else {
-                                                candidate
-                                            });
+                                            return Some(
+                                                query.preferred_candidate(deferred, candidate),
+                                            );
                                         }
                                         return Some(candidate);
                                     }
                                     LocalResult::Ambiguous(earlier, later) => {
-                                        if later < *before {
+                                        let primary = query
+                                            .preferred_candidate(earlier.clone(), later.clone());
+                                        if query.preceeds_reference_datetime(&primary) {
                                             if let Some(deferred) = deferred_candidate.take() {
-                                                return Some(if deferred > later {
-                                                    deferred
-                                                } else {
-                                                    later
-                                                });
+                                                return Some(
+                                                    query.preferred_candidate(deferred, primary),
+                                                );
                                             }
-                                            return Some(later);
+                                            return Some(primary);
                                         }
-                                        if earlier < *before {
-                                            deferred_candidate = Some(match deferred_candidate {
-                                                Some(existing) if existing > earlier => existing,
-                                                _ => earlier,
-                                            });
+
+                                        let secondary =
+                                            if primary == earlier { later } else { earlier };
+                                        if query.preceeds_reference_datetime(&secondary) {
+                                            deferred_candidate =
+                                                Some(match deferred_candidate.take() {
+                                                    Some(existing) => query
+                                                        .preferred_candidate(existing, secondary),
+                                                    None => secondary,
+                                                });
                                         }
                                     }
                                 }
                             }
                             query.reset_minute();
-                        } // End of minutes range
+                        }
                         query.reset_hour();
-                    } // End of hours range
+                    }
                     query.reset_day_of_month();
-                } // End of Day of Month range
+                }
                 query.reset_month();
-            } // End of Month range
+            }
         }
 
-        if let Some(candidate) = deferred_candidate {
-            return Some(candidate);
-        }
-        // We ran out of dates to try.
-        None
+        deferred_candidate
     }
 
     /// Provides an iterator which will return each DateTime that matches the schedule starting with
@@ -532,6 +262,38 @@ impl ScheduleFields {
             seconds,
         }
     }
+
+    pub(crate) fn years_ordinals(&self) -> &OrdinalSet {
+        self.years.ordinals()
+    }
+
+    pub(crate) fn months_ordinals(&self) -> &OrdinalSet {
+        self.months.ordinals()
+    }
+
+    pub(crate) fn days_of_month_ordinals(&self) -> &OrdinalSet {
+        self.days_of_month.ordinals()
+    }
+
+    pub(crate) fn hours_ordinals(&self) -> &OrdinalSet {
+        self.hours.ordinals()
+    }
+
+    pub(crate) fn minutes_ordinals(&self) -> &OrdinalSet {
+        self.minutes.ordinals()
+    }
+
+    pub(crate) fn seconds_ordinals(&self) -> &OrdinalSet {
+        self.seconds.ordinals()
+    }
+
+    pub(crate) fn days_of_week_is_all(&self) -> bool {
+        self.days_of_week.is_all()
+    }
+
+    pub(crate) fn includes_day_of_week(&self, day_of_week: Ordinal) -> bool {
+        self.days_of_week.ordinals().contains(&day_of_week)
+    }
 }
 
 pub struct ScheduleIterator<'a, Z>
@@ -626,23 +388,6 @@ impl<Z: TimeZone> DoubleEndedIterator for OwnedScheduleIterator<Z> {
         let prev = self.schedule.prev_from(&previous)?;
         self.previous_datetime = Some(prev.clone());
         Some(prev)
-    }
-}
-
-fn is_leap_year(year: Ordinal) -> bool {
-    let by_four = year.is_multiple_of(4);
-    let by_hundred = year.is_multiple_of(100);
-    let by_four_hundred = year.is_multiple_of(400);
-    by_four && ((!by_hundred) || by_four_hundred)
-}
-
-fn days_in_month(month: Ordinal, year: Ordinal) -> u32 {
-    let is_leap_year = is_leap_year(year);
-    match month {
-        9 | 4 | 6 | 11 => 30,
-        2 if is_leap_year => 29,
-        2 => 28,
-        _ => 31,
     }
 }
 
