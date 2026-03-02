@@ -275,6 +275,54 @@ impl Schedule {
         LocalResult::None
     }
 
+    /// Returns the DateTime of the next call Schedule relative to the transmitted time
+    /// 
+    /// Example:
+    /// ```
+    /// use std::str::FromStr;
+    ///
+    /// use chrono::{Utc, TimeDelta};
+    /// use cron::Schedule;
+    ///
+    ///
+    /// let schedule  = Schedule::from_str("*/1 * * * * *").unwrap();
+    /// let now = Utc::now();
+    /// let after = schedule.get_next_after(&now).unwrap();
+    ///
+    /// assert!(after > now);
+    /// ```
+    pub fn get_next_after<Z>(&self, after: &DateTime<Z>) -> LocalResult<DateTime<Z>>
+    where
+        Z: TimeZone,
+    {
+        // Public wrapper for access private method
+        self.next_after(after)
+    }
+
+    /// Returns the DateTime of the previous call Schedule relative to the transmitted time
+    ///
+    /// Example:
+    /// ```
+    /// use std::str::FromStr;
+    ///
+    /// use chrono::{Utc, TimeDelta};
+    /// use cron::Schedule;
+    ///
+    ///
+    /// let schedule  = Schedule::from_str("*/1 * * * * *").unwrap();
+    /// let now = Utc::now();
+    /// let prev = schedule.get_prev_from(&now).unwrap();
+    ///
+    /// assert!(prev < now);
+    /// ```
+    pub fn get_prev_from<Z>(&self, before: &DateTime<Z>) -> LocalResult<DateTime<Z>>
+    where
+        Z: TimeZone,
+    {
+        // Public wrapper for access private method
+        self.prev_from(before)
+    }
+
     /// Provides an iterator which will return each DateTime that matches the schedule starting with
     /// the current time if applicable.
     pub fn upcoming<Z>(&self, timezone: Z) -> ScheduleIterator<'_, Z>
