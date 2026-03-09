@@ -49,7 +49,7 @@ impl TimeUnitField for DaysOfWeek {
     fn ordinal_from_name(name: &str) -> Result<Ordinal, Error> {
         DAY_OF_WEEK_MAP
             .get(name.to_lowercase().as_ref())
-            .map(|&v| v)
+            .copied()
             .ok_or_else(|| {
                 ErrorKind::Expression(format!("'{}' is not a valid day of the week.", name)).into()
             })

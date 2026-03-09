@@ -56,7 +56,7 @@ impl TimeUnitField for Months {
     fn ordinal_from_name(name: &str) -> Result<Ordinal, Error> {
         MONTH_MAP
             .get(name.to_lowercase().as_ref())
-            .map(|&v| v)
+            .copied()
             .ok_or_else(|| {
                 ErrorKind::Expression(format!("'{}' is not a valid month name.", name)).into()
             })
