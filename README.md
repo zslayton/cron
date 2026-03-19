@@ -31,6 +31,46 @@ Upcoming fire times:
 */
 ```
 
+## Parsing With Config Options
+
+`Schedule::from_str(...)` uses the default config.
+
+If you need custom behavior, use the builder:
+
+```rust
+use chrono::TimeDelta;
+use cron::{CronScheduleParts, DayOfWeekNumbering, DowDomOperand, Schedule};
+
+let schedule = Schedule::builder()
+    .allowed_cron_schedule_parts(CronScheduleParts::Both) // 5-part and 6-part expressions
+    .day_of_week_numbering(DayOfWeekNumbering::ZeroToSix) // Vixie-style DOW numbering
+    .dow_dom_operand(DowDomOperand::Or)                   // combine DOM + DOW with OR
+    .search_interval(TimeDelta::days(400 * 366))          // bound search window
+    .parse("30 9 1 * 1")
+    .unwrap();
+```
+
+Convenience constructors:
+
+```rust
+use cron::{CronScheduleParts, Schedule};
+
+let custom = Schedule::builder()
+    .allowed_cron_schedule_parts(CronScheduleParts::Both)
+    .parse("30 9 * * Mon")
+    .unwrap();
+
+let default = Schedule::default().parse("0 30 9 * * Mon").unwrap();
+let vixie = Schedule::vixie().parse("0 0 0 * * 0").unwrap();
+```
+
+Default config values:
+
+- `cron_schedule_parts`: `CronScheduleParts::Six`
+- `day_of_week_numbering`: `DayOfWeekNumbering::OneToSeven`
+- `dow_dom_operand`: `DowDomOperand::And`
+- `search_interval`: `400 * 366` days
+
 ## License
 
 Licensed under either of

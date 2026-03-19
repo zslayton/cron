@@ -6,19 +6,32 @@ use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::str::{self, FromStr};
 
+use crate::config::{CronScheduleParts, DayOfWeekNumbering};
 use crate::error::{Error, ErrorKind};
 use crate::ordinal::*;
 use crate::schedule::{Schedule, ScheduleFields};
 use crate::specifier::*;
 use crate::time_unit::*;
+use crate::ScheduleConfig;
 
 impl TryFrom<Cow<'_, str>> for Schedule {
     type Error = Error;
 
     fn try_from(expression: Cow<'_, str>) -> Result<Self, Self::Error> {
-        match schedule.parse(&expression) {
-            Ok(schedule_fields) => Ok(Schedule::new(expression.into_owned(), schedule_fields)), // Extract from winnow tuple
-            Err(parse_error) => Err(ErrorKind::Expression(format!("{parse_error}")).into()),
+        Self::from_str_with_config(expression.as_ref(), ScheduleConfig::default())
+    }
+}
+
+impl Schedule {
+    /// Parse a cron expression using the supplied [ScheduleConfig].
+    pub fn from_str_with_config(expression: &str, config: ScheduleConfig) -> Result<Self, Error> {
+        match schedule_with_config(expression, config) {
+            Ok(schedule_fields) => Ok(Schedule::new(
+                expression.to_owned(),
+                schedule_fields,
+                config,
+            )),
+            Err(parse_error) => Err(ErrorKind::Expression(parse_error.to_string()).into()),
         }
     }
 }
@@ -45,6 +58,10 @@ impl FromStr for Schedule {
     fn from_str(expression: &str) -> Result<Self, Self::Err> {
         Self::try_from(Cow::Borrowed(expression))
     }
+}
+
+fn parse_with_defaults(i: &mut &str) -> winnow::Result<ScheduleFields> {
+    schedule.parse_next(i)
 }
 
 #[derive(Debug, PartialEq)]
@@ -295,6 +312,230 @@ fn longhand(i: &mut &str) -> winnow::Result<ScheduleFields> {
 
 fn schedule(i: &mut &str) -> winnow::Result<ScheduleFields> {
     alt((shorthand, longhand)).parse_next(i)
+}
+
+fn parse_field_token(token: &str) -> Result<Field, String> {
+    terminated(field, eof)
+        .parse(token)
+        .map_err(|parse_error| format!("{parse_error}"))
+}
+
+fn parse_field_with_any_token(token: &str) -> Result<Field, String> {
+    terminated(field_with_any, eof)
+        .parse(token)
+        .map_err(|parse_error| format!("{parse_error}"))
+}
+
+fn normalize_day_of_week_ordinal(
+    ordinal: Ordinal,
+    numbering: DayOfWeekNumbering,
+) -> Result<Ordinal, Error> {
+    match numbering {
+        DayOfWeekNumbering::OneToSeven => DaysOfWeek::validate_ordinal(ordinal),
+        DayOfWeekNumbering::ZeroToSix => match ordinal {
+            0..=6 => Ok(ordinal + 1),
+            _ => Err(ErrorKind::Expression(format!(
+                "Days of Week must be less than 7. ('{}' specified.)",
+                ordinal
+            ))
+            .into()),
+        },
+    }
+}
+
+fn normalize_day_of_week_specifier(
+    specifier: Specifier,
+    numbering: DayOfWeekNumbering,
+) -> Result<Specifier, Error> {
+    match specifier {
+        Specifier::All => Ok(Specifier::All),
+        Specifier::Point(ordinal) => Ok(Specifier::Point(normalize_day_of_week_ordinal(
+            ordinal, numbering,
+        )?)),
+        Specifier::Range(start, end) => Ok(Specifier::Range(
+            normalize_day_of_week_ordinal(start, numbering)?,
+            normalize_day_of_week_ordinal(end, numbering)?,
+        )),
+        Specifier::NamedRange(start, end) => Ok(Specifier::NamedRange(start, end)),
+    }
+}
+
+fn normalize_day_of_week_field(
+    field: Field,
+    numbering: DayOfWeekNumbering,
+) -> Result<Field, Error> {
+    let specifiers = field
+        .specifiers
+        .into_iter()
+        .map(|root_specifier| {
+            let specifier = match root_specifier {
+                RootSpecifier::Specifier(specifier) => {
+                    RootSpecifier::Specifier(normalize_day_of_week_specifier(specifier, numbering)?)
+                }
+                RootSpecifier::Period(specifier, step) => RootSpecifier::Period(
+                    normalize_day_of_week_specifier(specifier, numbering)?,
+                    step,
+                ),
+                RootSpecifier::NamedPoint(name) => RootSpecifier::NamedPoint(name),
+            };
+            Ok(specifier)
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
+    Ok(Field { specifiers })
+}
+
+fn build_schedule_fields_from_six_part_tokens(
+    tokens: &[&str],
+    config: ScheduleConfig,
+) -> Result<ScheduleFields, String> {
+    let parse_years = |year_token: Option<&str>| -> Result<Years, String> {
+        match year_token {
+            Some(token) => Years::from_field(parse_field_token(token)?)
+                .map_err(|parse_error| format!("{parse_error}")),
+            None => Ok(Years::all()),
+        }
+    };
+
+    let parse_days_of_week = |token: &str| -> Result<DaysOfWeek, String> {
+        let field = parse_field_with_any_token(token).and_then(|f| {
+            normalize_day_of_week_field(f, config.day_of_week_numbering).map_err(|e| format!("{e}"))
+        })?;
+        DaysOfWeek::from_field(field).map_err(|parse_error| format!("{parse_error}"))
+    };
+
+    let (seconds, minutes, hours, days_of_month, months, days_of_week, years) = match tokens {
+        [seconds, minutes, hours, days_of_month, months, days_of_week] => (
+            Seconds::from_field(parse_field_token(seconds)?).map_err(|e| e.to_string())?,
+            Minutes::from_field(parse_field_token(minutes)?).map_err(|e| e.to_string())?,
+            Hours::from_field(parse_field_token(hours)?).map_err(|e| e.to_string())?,
+            DaysOfMonth::from_field(parse_field_with_any_token(days_of_month)?)
+                .map_err(|e| e.to_string())?,
+            Months::from_field(parse_field_token(months)?).map_err(|e| e.to_string())?,
+            parse_days_of_week(days_of_week)?,
+            Years::all(),
+        ),
+        [seconds, minutes, hours, days_of_month, months, days_of_week, year] => (
+            Seconds::from_field(parse_field_token(seconds)?).map_err(|e| e.to_string())?,
+            Minutes::from_field(parse_field_token(minutes)?).map_err(|e| e.to_string())?,
+            Hours::from_field(parse_field_token(hours)?).map_err(|e| e.to_string())?,
+            DaysOfMonth::from_field(parse_field_with_any_token(days_of_month)?)
+                .map_err(|e| e.to_string())?,
+            Months::from_field(parse_field_token(months)?).map_err(|e| e.to_string())?,
+            parse_days_of_week(days_of_week)?,
+            parse_years(Some(year))?,
+        ),
+        _ => return Err("a valid cron expression".to_owned()),
+    };
+
+    Ok(ScheduleFields::new(
+        seconds,
+        minutes,
+        hours,
+        days_of_month,
+        months,
+        days_of_week,
+        years,
+    ))
+}
+
+fn build_schedule_fields_from_five_part_tokens(
+    tokens: &[&str],
+    config: ScheduleConfig,
+) -> Result<ScheduleFields, String> {
+    let parse_years = |year_token: Option<&str>| -> Result<Years, String> {
+        match year_token {
+            Some(token) => Years::from_field(parse_field_token(token)?)
+                .map_err(|parse_error| format!("{parse_error}")),
+            None => Ok(Years::all()),
+        }
+    };
+
+    let parse_days_of_week = |token: &str| -> Result<DaysOfWeek, String> {
+        let field = parse_field_with_any_token(token).and_then(|f| {
+            normalize_day_of_week_field(f, config.day_of_week_numbering).map_err(|e| format!("{e}"))
+        })?;
+        DaysOfWeek::from_field(field).map_err(|parse_error| format!("{parse_error}"))
+    };
+
+    let (minutes, hours, days_of_month, months, days_of_week, years) = match tokens {
+        [minutes, hours, days_of_month, months, days_of_week] => (
+            Minutes::from_field(parse_field_token(minutes)?).map_err(|e| e.to_string())?,
+            Hours::from_field(parse_field_token(hours)?).map_err(|e| e.to_string())?,
+            DaysOfMonth::from_field(parse_field_with_any_token(days_of_month)?)
+                .map_err(|e| e.to_string())?,
+            Months::from_field(parse_field_token(months)?).map_err(|e| e.to_string())?,
+            parse_days_of_week(days_of_week)?,
+            Years::all(),
+        ),
+        [minutes, hours, days_of_month, months, days_of_week, year] => (
+            Minutes::from_field(parse_field_token(minutes)?).map_err(|e| e.to_string())?,
+            Hours::from_field(parse_field_token(hours)?).map_err(|e| e.to_string())?,
+            DaysOfMonth::from_field(parse_field_with_any_token(days_of_month)?)
+                .map_err(|e| e.to_string())?,
+            Months::from_field(parse_field_token(months)?).map_err(|e| e.to_string())?,
+            parse_days_of_week(days_of_week)?,
+            parse_years(Some(year))?,
+        ),
+        _ => return Err("a valid cron expression".to_owned()),
+    };
+
+    Ok(ScheduleFields::new(
+        Seconds::from_ordinal(0),
+        minutes,
+        hours,
+        days_of_month,
+        months,
+        days_of_week,
+        years,
+    ))
+}
+
+fn schedule_with_config(
+    expression: &str,
+    config: ScheduleConfig,
+) -> Result<ScheduleFields, String> {
+    if config == ScheduleConfig::default() {
+        return parse_with_defaults
+            .parse(expression)
+            .map_err(|parse_error| format!("{parse_error}"));
+    }
+
+    if let Ok(fields) = terminated(shorthand, eof).parse(expression) {
+        return Ok(fields);
+    }
+
+    let tokens = expression.split_whitespace().collect::<Vec<_>>();
+    if tokens.is_empty() {
+        return Err("a valid cron expression".to_owned());
+    }
+
+    let parse_six = || match tokens.len() {
+        6 | 7 => build_schedule_fields_from_six_part_tokens(tokens.as_slice(), config),
+        _ => Err("a valid cron expression".to_owned()),
+    };
+
+    let parse_five = || match tokens.len() {
+        5 | 6 => build_schedule_fields_from_five_part_tokens(tokens.as_slice(), config),
+        _ => Err("a valid cron expression".to_owned()),
+    };
+
+    match config.cron_schedule_parts {
+        CronScheduleParts::Six => parse_six(),
+        CronScheduleParts::Five => parse_five(),
+        CronScheduleParts::Both => {
+            if tokens.len() == 6 {
+                parse_six().or_else(|_| parse_five())
+            } else if matches!(tokens.len(), 7 | 5) {
+                if tokens.len() == 7 {
+                    parse_six()
+                } else {
+                    parse_five()
+                }
+            } else {
+                Err("a valid cron expression".to_owned())
+            }
+        }
+    }
 }
 
 #[cfg(test)]

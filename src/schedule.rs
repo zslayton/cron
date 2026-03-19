@@ -1,5 +1,5 @@
 use chrono::offset::{LocalResult, TimeZone};
-use chrono::{DateTime, Datelike, Timelike, Utc};
+use chrono::{DateTime, Datelike, TimeDelta, Timelike, Utc};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 #[cfg(feature = "serde")]
@@ -10,9 +10,11 @@ use serde::{
     Deserialize, Serialize, Serializer,
 };
 
+use crate::error::Error;
 use crate::ordinal::*;
 use crate::queries::*;
 use crate::time_unit::*;
+use crate::{CronScheduleParts, DayOfWeekNumbering, DowDomOperand, ScheduleConfig};
 
 impl From<Schedule> for String {
     fn from(schedule: Schedule) -> String {
@@ -24,11 +26,34 @@ impl From<Schedule> for String {
 pub struct Schedule {
     source: String,
     fields: ScheduleFields,
+    config: ScheduleConfig,
 }
 
 impl Schedule {
-    pub(crate) fn new(source: String, fields: ScheduleFields) -> Schedule {
-        Schedule { source, fields }
+    /// Returns a builder configured with default parsing behavior.
+    pub fn builder() -> ScheduleConfigBuilder {
+        ScheduleConfigBuilder::default()
+    }
+
+    /// Returns a default parser builder.
+    #[allow(clippy::should_implement_trait)]
+    pub fn default() -> ScheduleConfigBuilder {
+        Schedule::builder()
+    }
+
+    /// Returns a parser builder configured for Vixie day-of-week numbering (0-6).
+    pub fn vixie() -> ScheduleConfigBuilder {
+        Schedule::builder()
+            .day_of_week_numbering(DayOfWeekNumbering::ZeroToSix)
+            .dow_dom_operand(DowDomOperand::Or)
+    }
+
+    pub(crate) fn new(source: String, fields: ScheduleFields, config: ScheduleConfig) -> Schedule {
+        Schedule {
+            source,
+            fields,
+            config,
+        }
     }
 
     fn next_after<Z>(&self, after: &DateTime<Z>) -> Option<DateTime<Z>>
@@ -60,19 +85,21 @@ impl Schedule {
         };
         for year in query.years(&self.fields) {
             for month in query.months(&self.fields, *year) {
-                for day_of_month in query.days_of_month(&self.fields, *year, *month) {
+                for day_of_month in
+                    query.days_of_month(&self.fields, *year, *month, self.config.dow_dom_operand)
+                {
                     for hour in query.hours(&self.fields) {
                         let fold_hour_scan = fold_scan_active
                             && *year as i32 == reference_naive.year()
                             && *month == reference_naive.month()
-                            && *day_of_month == reference_naive.day()
+                            && day_of_month == reference_naive.day()
                             && *hour == reference_naive.hour();
                         for minute in query.minutes(&self.fields, fold_hour_scan) {
                             for second in query.seconds(&self.fields, fold_hour_scan) {
                                 let local_result = datetime.timezone().with_ymd_and_hms(
                                     *year as i32,
                                     *month,
-                                    *day_of_month,
+                                    day_of_month,
                                     *hour,
                                     *minute,
                                     *second,
@@ -82,6 +109,13 @@ impl Schedule {
                                     LocalResult::Single(candidate) => {
                                         if !query.preceeds_reference_datetime(&candidate) {
                                             continue;
+                                        }
+                                        if !self.within_search_interval(
+                                            datetime,
+                                            &candidate,
+                                            query.is_reversed(),
+                                        ) {
+                                            return deferred_candidate;
                                         }
                                         if let Some(deferred) = deferred_candidate.take() {
                                             return Some(
@@ -93,7 +127,13 @@ impl Schedule {
                                     LocalResult::Ambiguous(earlier, later) => {
                                         let primary = query
                                             .preferred_candidate(earlier.clone(), later.clone());
-                                        if query.preceeds_reference_datetime(&primary) {
+                                        if query.preceeds_reference_datetime(&primary)
+                                            && self.within_search_interval(
+                                                datetime,
+                                                &primary,
+                                                query.is_reversed(),
+                                            )
+                                        {
                                             if let Some(deferred) = deferred_candidate.take() {
                                                 return Some(
                                                     query.preferred_candidate(deferred, primary),
@@ -104,7 +144,13 @@ impl Schedule {
 
                                         let secondary =
                                             if primary == earlier { later } else { earlier };
-                                        if query.preceeds_reference_datetime(&secondary) {
+                                        if query.preceeds_reference_datetime(&secondary)
+                                            && self.within_search_interval(
+                                                datetime,
+                                                &secondary,
+                                                query.is_reversed(),
+                                            )
+                                        {
                                             deferred_candidate =
                                                 Some(match deferred_candidate.take() {
                                                     Some(existing) => query
@@ -159,16 +205,13 @@ impl Schedule {
     where
         Z: TimeZone,
     {
+        let day_of_month = date_time.day() as Ordinal;
+        let day_of_week = date_time.weekday().number_from_sunday();
         self.fields.years.includes(date_time.year() as Ordinal)
             && self.fields.months.includes(date_time.month() as Ordinal)
             && self
                 .fields
-                .days_of_week
-                .includes(date_time.weekday().number_from_sunday())
-            && self
-                .fields
-                .days_of_month
-                .includes(date_time.day() as Ordinal)
+                .day_matches(day_of_month, day_of_week, self.config.dow_dom_operand)
             && self.fields.hours.includes(date_time.hour() as Ordinal)
             && self.fields.minutes.includes(date_time.minute() as Ordinal)
             && self.fields.seconds.includes(date_time.second() as Ordinal)
@@ -216,6 +259,71 @@ impl Schedule {
     /// Returns a reference to the source cron expression.
     pub fn source(&self) -> &str {
         &self.source
+    }
+
+    /// Returns the parsing configuration associated with this schedule.
+    pub fn config(&self) -> ScheduleConfig {
+        self.config
+    }
+
+    fn within_search_interval<Z>(
+        &self,
+        reference_datetime: &DateTime<Z>,
+        candidate: &DateTime<Z>,
+        reversed: bool,
+    ) -> bool
+    where
+        Z: TimeZone,
+    {
+        let elapsed = if reversed {
+            reference_datetime
+                .clone()
+                .signed_duration_since(candidate.clone())
+        } else {
+            candidate
+                .clone()
+                .signed_duration_since(reference_datetime.clone())
+        };
+        elapsed <= self.config.search_interval
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub struct ScheduleConfigBuilder {
+    config: ScheduleConfig,
+}
+
+impl ScheduleConfigBuilder {
+    pub fn allowed_cron_schedule_parts(mut self, parts: CronScheduleParts) -> Self {
+        self.config.cron_schedule_parts = parts;
+        self
+    }
+
+    pub fn day_of_week_numbering(mut self, numbering: DayOfWeekNumbering) -> Self {
+        self.config.day_of_week_numbering = numbering;
+        self
+    }
+
+    pub fn dow_dom_operand(mut self, operand: DowDomOperand) -> Self {
+        self.config.dow_dom_operand = operand;
+        self
+    }
+
+    pub fn days_matching(self, operand: DowDomOperand) -> Self {
+        self.dow_dom_operand(operand)
+    }
+
+    pub fn search_interval(mut self, interval: TimeDelta) -> Self {
+        self.config.search_interval = interval;
+        self
+    }
+
+    pub fn parse(self, expression: &str) -> Result<Schedule, Error> {
+        Schedule::from_str_with_config(expression, self.config)
+    }
+
+    pub fn config(&self) -> ScheduleConfig {
+        self.config
     }
 }
 
@@ -291,8 +399,35 @@ impl ScheduleFields {
         self.days_of_week.is_all()
     }
 
+    pub(crate) fn days_of_month_is_all(&self) -> bool {
+        self.days_of_month.is_all()
+    }
+
+    pub(crate) fn includes_day_of_month(&self, day_of_month: Ordinal) -> bool {
+        self.days_of_month.ordinals().contains(&day_of_month)
+    }
+
     pub(crate) fn includes_day_of_week(&self, day_of_week: Ordinal) -> bool {
         self.days_of_week.ordinals().contains(&day_of_week)
+    }
+
+    pub(crate) fn day_matches(
+        &self,
+        day_of_month: Ordinal,
+        day_of_week: Ordinal,
+        operand: DowDomOperand,
+    ) -> bool {
+        let dom_matches = self.includes_day_of_month(day_of_month);
+        let dow_matches = self.includes_day_of_week(day_of_week);
+        let both_restricted = !self.days_of_month_is_all() && !self.days_of_week_is_all();
+        if both_restricted {
+            match operand {
+                DowDomOperand::And => dom_matches && dow_matches,
+                DowDomOperand::Or => dom_matches || dow_matches,
+            }
+        } else {
+            dom_matches && dow_matches
+        }
     }
 }
 
