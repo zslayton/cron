@@ -6,6 +6,7 @@ use std::ops::Bound::{Included, Unbounded};
 use crate::ordinal::Ordinal;
 use crate::schedule::ScheduleFields;
 use crate::time_unit::{DaysOfMonth, Hours, Minutes, Months, Seconds, TimeUnitField};
+use crate::DowDomOperand;
 
 pub(crate) trait Cursor<Z>
 where
@@ -135,25 +136,42 @@ where
         fields: &'a ScheduleFields,
         year: Ordinal,
         month: Ordinal,
-    ) -> Box<dyn Iterator<Item = &'a Ordinal> + 'a> {
+        operand: DowDomOperand,
+    ) -> Box<dyn Iterator<Item = Ordinal> + 'a> {
         let day_of_month_end = days_in_month(month, year);
         let bound = self.cursor_day_of_month_bound(self.day_of_month_default_bound());
 
         let range = self.day_of_month_range(bound, day_of_month_end);
-        let iter = fields
-            .days_of_month_ordinals()
-            .range(range)
-            .filter(move |day| {
-                let day = **day;
-                fields.days_of_week_is_all()
-                    || NaiveDate::from_ymd_opt(year as i32, month, day)
-                        .map(|d| fields.includes_day_of_week(d.weekday().number_from_sunday()))
-                        .unwrap_or(false)
-            });
+        let both_restricted = !fields.days_of_month_is_all() && !fields.days_of_week_is_all();
+        let should_scan_all_days = operand == DowDomOperand::Or && both_restricted;
+
+        let base_iter: Box<dyn DoubleEndedIterator<Item = Ordinal> + 'a> = if should_scan_all_days {
+            // TODO: Simplify this bound-to-range conversion when
+            // https://github.com/rust-lang/rust/issues/136903 lands.
+            let start = match range.0 {
+                Included(value) => value,
+                Bound::Excluded(value) => value + 1,
+                Unbounded => DaysOfMonth::inclusive_min(),
+            };
+            let end = match range.1 {
+                Included(value) => value,
+                Bound::Excluded(value) => value.saturating_sub(1),
+                Unbounded => DaysOfMonth::inclusive_max(),
+            };
+            Box::new(start..=end)
+        } else {
+            Box::new(fields.days_of_month_ordinals().range(range).copied())
+        };
+
+        let iter = base_iter.filter(move |day| {
+            NaiveDate::from_ymd_opt(year as i32, month, *day)
+                .map(|d| fields.day_matches(*day, d.weekday().number_from_sunday(), operand))
+                .unwrap_or(false)
+        });
 
         let mut ordered = order_iter(self.is_reversed(), iter).peekable();
         let expected_start = bound.min(day_of_month_end);
-        if ordered.peek().map(|day| **day) != Some(expected_start) {
+        if ordered.peek().copied() != Some(expected_start) {
             self.reset_day_of_month();
         }
         Box::new(ordered)

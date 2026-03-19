@@ -2,7 +2,10 @@
 mod tests {
     use chrono::*;
     use chrono_tz::Tz;
-    use cron::{Schedule, TimeUnitSpec};
+    use cron::{
+        CronScheduleParts, DayOfWeekNumbering, DowDomOperand, Schedule, ScheduleConfig,
+        TimeUnitSpec,
+    };
     use std::ops::Bound::{Excluded, Included};
     use std::str::FromStr;
 
@@ -76,6 +79,141 @@ mod tests {
     fn test_not_enough_fields() {
         let expression = "1 2 3 2019";
         assert!(Schedule::from_str(expression).is_err());
+    }
+
+    #[test]
+    fn test_parse_five_part_with_config() {
+        let config = ScheduleConfig {
+            cron_schedule_parts: CronScheduleParts::Five,
+            ..ScheduleConfig::default()
+        };
+        let schedule = Schedule::from_str_with_config("30 9 * * Mon", config).unwrap();
+        let next = schedule
+            .after(&Utc.with_ymd_and_hms(2024, 1, 1, 9, 29, 59).unwrap())
+            .next()
+            .unwrap();
+        assert_eq!(0, next.second());
+    }
+
+    #[test]
+    fn test_default_config_rejects_five_part() {
+        assert!(Schedule::from_str_with_config("30 9 * * Mon", ScheduleConfig::default()).is_err());
+    }
+
+    #[test]
+    fn test_parse_both_part_modes() {
+        let config = ScheduleConfig {
+            cron_schedule_parts: CronScheduleParts::Both,
+            ..ScheduleConfig::default()
+        };
+        assert!(Schedule::from_str_with_config("0 30 9 * * Mon", config).is_ok());
+        assert!(Schedule::from_str_with_config("30 9 * * Mon", config).is_ok());
+    }
+
+    #[test]
+    fn test_parse_vixie_day_of_week_numbering() {
+        let config = ScheduleConfig {
+            day_of_week_numbering: DayOfWeekNumbering::ZeroToSix,
+            ..ScheduleConfig::default()
+        };
+        let schedule = Schedule::from_str_with_config("0 0 0 * * 0", config).unwrap();
+        let sunday = Utc.with_ymd_and_hms(2024, 1, 7, 0, 0, 0).unwrap();
+        let monday = Utc.with_ymd_and_hms(2024, 1, 8, 0, 0, 0).unwrap();
+        assert!(schedule.includes(sunday));
+        assert!(!schedule.includes(monday));
+    }
+
+    #[test]
+    fn test_default_day_of_week_numbering_rejects_zero() {
+        assert!(Schedule::from_str_with_config("0 0 0 * * 0", ScheduleConfig::default()).is_err());
+    }
+
+    #[test]
+    fn test_builder_interface_custom_parts() {
+        let schedule = Schedule::builder()
+            .allowed_cron_schedule_parts(CronScheduleParts::Both)
+            .parse("30 9 * * Mon")
+            .unwrap();
+        let next = schedule
+            .after(&Utc.with_ymd_and_hms(2024, 1, 1, 9, 29, 59).unwrap())
+            .next()
+            .unwrap();
+        assert_eq!(0, next.second());
+    }
+
+    #[test]
+    fn test_builder_interface_default() {
+        let schedule = Schedule::default().parse("0 30 9 * * Mon").unwrap();
+        let next = schedule
+            .after(&Utc.with_ymd_and_hms(2024, 1, 1, 9, 29, 59).unwrap())
+            .next()
+            .unwrap();
+        assert_eq!(30, next.minute());
+    }
+
+    #[test]
+    fn test_builder_interface_vixie() {
+        let schedule = Schedule::vixie().parse("0 0 0 * * 0").unwrap();
+        let sunday = Utc.with_ymd_and_hms(2024, 1, 7, 0, 0, 0).unwrap();
+        assert!(schedule.includes(sunday));
+    }
+
+    #[test]
+    fn test_days_matching_default_and() {
+        let schedule = Schedule::default().parse("0 0 0 1 * Mon").unwrap();
+        let mon_1st = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let mon_8th = Utc.with_ymd_and_hms(2024, 1, 8, 0, 0, 0).unwrap();
+        let thu_1st = Utc.with_ymd_and_hms(2024, 2, 1, 0, 0, 0).unwrap();
+        assert!(schedule.includes(mon_1st));
+        assert!(!schedule.includes(mon_8th));
+        assert!(!schedule.includes(thu_1st));
+    }
+
+    #[test]
+    fn test_days_matching_or() {
+        let schedule = Schedule::builder()
+            .dow_dom_operand(DowDomOperand::Or)
+            .parse("0 0 0 1 * Mon")
+            .unwrap();
+        let mon_1st = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let mon_8th = Utc.with_ymd_and_hms(2024, 1, 8, 0, 0, 0).unwrap();
+        let thu_1st = Utc.with_ymd_and_hms(2024, 2, 1, 0, 0, 0).unwrap();
+        let tue_2nd = Utc.with_ymd_and_hms(2024, 1, 2, 0, 0, 0).unwrap();
+        assert!(schedule.includes(mon_1st));
+        assert!(schedule.includes(mon_8th));
+        assert!(schedule.includes(thu_1st));
+        assert!(!schedule.includes(tue_2nd));
+    }
+
+    #[test]
+    fn test_vixie_includes_or_days_matching() {
+        let schedule = Schedule::vixie().parse("0 0 0 1 * 1").unwrap();
+        let mon_1st = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let mon_8th = Utc.with_ymd_and_hms(2024, 1, 8, 0, 0, 0).unwrap();
+        let thu_1st = Utc.with_ymd_and_hms(2024, 2, 1, 0, 0, 0).unwrap();
+        assert!(schedule.includes(mon_1st));
+        assert!(schedule.includes(mon_8th));
+        assert!(schedule.includes(thu_1st));
+    }
+
+    #[test]
+    fn test_search_interval_limits_next() {
+        let schedule = Schedule::builder()
+            .search_interval(TimeDelta::days(300))
+            .parse("0 0 0 1 1 *")
+            .unwrap();
+        let start = Utc.with_ymd_and_hms(2024, 1, 2, 0, 0, 0).unwrap();
+        assert!(schedule.after(&start).next().is_none());
+    }
+
+    #[test]
+    fn test_search_interval_limits_prev() {
+        let schedule = Schedule::builder()
+            .search_interval(TimeDelta::days(300))
+            .parse("0 0 0 1 1 *")
+            .unwrap();
+        let start = Utc.with_ymd_and_hms(2024, 12, 31, 0, 0, 0).unwrap();
+        assert!(schedule.after(&start).next_back().is_none());
     }
 
     #[test]
