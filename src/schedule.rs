@@ -1,7 +1,6 @@
 use chrono::offset::{LocalResult, TimeZone};
 use chrono::{DateTime, Datelike, Timelike, Utc};
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::ops::Bound::{Included, Unbounded};
 
 #[cfg(feature = "serde")]
 use core::fmt;
@@ -32,247 +31,101 @@ impl Schedule {
         Schedule { source, fields }
     }
 
-    fn next_after<Z>(&self, after: &DateTime<Z>) -> LocalResult<DateTime<Z>>
+    fn next_after<Z>(&self, after: &DateTime<Z>) -> Option<DateTime<Z>>
     where
         Z: TimeZone,
     {
-        let mut query = NextAfterQuery::from(after);
-        for year in self
-            .fields
-            .years
-            .ordinals()
-            .range((Included(query.year_lower_bound()), Unbounded))
-            .cloned()
-        {
-            // It's a future year, the current year's range is irrelevant.
-            if year > after.year() as u32 {
-                query.reset_month();
-                query.reset_day_of_month();
-            }
-            let month_start = query.month_lower_bound();
-            if !self.fields.months.ordinals().contains(&month_start) {
-                query.reset_month();
-            }
-            let month_range = (Included(month_start), Included(Months::inclusive_max()));
-            for month in self.fields.months.ordinals().range(month_range).cloned() {
-                let day_of_month_start = query.day_of_month_lower_bound();
-                if !self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .contains(&day_of_month_start)
-                {
-                    query.reset_day_of_month();
-                }
-                let day_of_month_end = days_in_month(month, year);
-                let day_of_month_range = (
-                    Included(day_of_month_start.min(day_of_month_end)),
-                    Included(day_of_month_end),
-                );
-
-                'day_loop: for day_of_month in self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .range(day_of_month_range)
-                    .cloned()
-                {
-                    let hour_start = query.hour_lower_bound();
-                    if !self.fields.hours.ordinals().contains(&hour_start) {
-                        query.reset_hour();
-                    }
-                    let hour_range = (Included(hour_start), Included(Hours::inclusive_max()));
-
-                    for hour in self.fields.hours.ordinals().range(hour_range).cloned() {
-                        let minute_start = query.minute_lower_bound();
-                        if !self.fields.minutes.ordinals().contains(&minute_start) {
-                            query.reset_minute();
-                        }
-                        let minute_range =
-                            (Included(minute_start), Included(Minutes::inclusive_max()));
-
-                        for minute in self.fields.minutes.ordinals().range(minute_range).cloned() {
-                            let second_start = query.second_lower_bound();
-                            if !self.fields.seconds.ordinals().contains(&second_start) {
-                                query.reset_second();
-                            }
-                            let second_range =
-                                (Included(second_start), Included(Seconds::inclusive_max()));
-
-                            for second in
-                                self.fields.seconds.ordinals().range(second_range).cloned()
-                            {
-                                let timezone = after.timezone();
-                                let candidate = match timezone.with_ymd_and_hms(
-                                    year as i32,
-                                    month,
-                                    day_of_month,
-                                    hour,
-                                    minute,
-                                    second,
-                                ) {
-                                    LocalResult::None => continue,
-                                    candidate => candidate,
-                                };
-                                if !self.fields.days_of_week.ordinals().contains(
-                                    &candidate
-                                        .clone()
-                                        .latest()
-                                        .unwrap()
-                                        .weekday()
-                                        .number_from_sunday(),
-                                ) {
-                                    continue 'day_loop;
-                                }
-                                return candidate;
-                            }
-                            query.reset_minute();
-                        } // End of minutes range
-                        query.reset_hour();
-                    } // End of hours range
-                    query.reset_day_of_month();
-                } // End of Day of Month range
-                query.reset_month();
-            } // End of Month range
-        }
-
-        // We ran out of dates to try.
-        LocalResult::None
+        self.find_with_query(NextAfterQuery::from(after), after)
     }
 
-    fn prev_from<Z>(&self, before: &DateTime<Z>) -> LocalResult<DateTime<Z>>
+    fn prev_from<Z>(&self, before: &DateTime<Z>) -> Option<DateTime<Z>>
     where
         Z: TimeZone,
     {
-        let mut query = PrevFromQuery::from(before);
-        for year in self
-            .fields
-            .years
-            .ordinals()
-            .range((Unbounded, Included(query.year_upper_bound())))
-            .rev()
-            .cloned()
-        {
-            let month_start = query.month_upper_bound();
+        self.find_with_query(PrevFromQuery::from(before), before)
+    }
 
-            if !self.fields.months.ordinals().contains(&month_start) {
-                query.reset_month();
+    fn find_with_query<Z, Q>(&self, mut query: Q, datetime: &DateTime<Z>) -> Option<DateTime<Z>>
+    where
+        Z: TimeZone,
+        Q: Query<Z>,
+    {
+        let mut deferred_candidate: Option<DateTime<Z>> = None;
+        let reference_naive = datetime.naive_local();
+        let fold_scan_active = match datetime.timezone().from_local_datetime(&reference_naive) {
+            LocalResult::Ambiguous(first, second) => {
+                *datetime == query.preferred_candidate(first, second)
             }
-            let month_range = (Included(Months::inclusive_min()), Included(month_start));
+            _ => false,
+        };
+        for year in query.years(&self.fields) {
+            for month in query.months(&self.fields, *year) {
+                for day_of_month in query.days_of_month(&self.fields, *year, *month) {
+                    for hour in query.hours(&self.fields) {
+                        let fold_hour_scan = fold_scan_active
+                            && *year as i32 == reference_naive.year()
+                            && *month == reference_naive.month()
+                            && *day_of_month == reference_naive.day()
+                            && *hour == reference_naive.hour();
+                        for minute in query.minutes(&self.fields, fold_hour_scan) {
+                            for second in query.seconds(&self.fields, fold_hour_scan) {
+                                let local_result = datetime.timezone().with_ymd_and_hms(
+                                    *year as i32,
+                                    *month,
+                                    *day_of_month,
+                                    *hour,
+                                    *minute,
+                                    *second,
+                                );
+                                match local_result {
+                                    LocalResult::None => continue,
+                                    LocalResult::Single(candidate) => {
+                                        if !query.preceeds_reference_datetime(&candidate) {
+                                            continue;
+                                        }
+                                        if let Some(deferred) = deferred_candidate.take() {
+                                            return Some(
+                                                query.preferred_candidate(deferred, candidate),
+                                            );
+                                        }
+                                        return Some(candidate);
+                                    }
+                                    LocalResult::Ambiguous(earlier, later) => {
+                                        let primary = query
+                                            .preferred_candidate(earlier.clone(), later.clone());
+                                        if query.preceeds_reference_datetime(&primary) {
+                                            if let Some(deferred) = deferred_candidate.take() {
+                                                return Some(
+                                                    query.preferred_candidate(deferred, primary),
+                                                );
+                                            }
+                                            return Some(primary);
+                                        }
 
-            for month in self
-                .fields
-                .months
-                .ordinals()
-                .range(month_range)
-                .rev()
-                .cloned()
-            {
-                let day_of_month_end = query.day_of_month_upper_bound();
-                if !self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .contains(&day_of_month_end)
-                {
-                    query.reset_day_of_month();
-                }
-
-                let day_of_month_end = days_in_month(month, year).min(day_of_month_end);
-
-                let day_of_month_range = (
-                    Included(DaysOfMonth::inclusive_min()),
-                    Included(day_of_month_end),
-                );
-
-                'day_loop: for day_of_month in self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .range(day_of_month_range)
-                    .rev()
-                    .cloned()
-                {
-                    let hour_start = query.hour_upper_bound();
-                    if !self.fields.hours.ordinals().contains(&hour_start) {
-                        query.reset_hour();
-                    }
-                    let hour_range = (Included(Hours::inclusive_min()), Included(hour_start));
-
-                    for hour in self
-                        .fields
-                        .hours
-                        .ordinals()
-                        .range(hour_range)
-                        .rev()
-                        .cloned()
-                    {
-                        let minute_start = query.minute_upper_bound();
-                        if !self.fields.minutes.ordinals().contains(&minute_start) {
+                                        let secondary =
+                                            if primary == earlier { later } else { earlier };
+                                        if query.preceeds_reference_datetime(&secondary) {
+                                            deferred_candidate =
+                                                Some(match deferred_candidate.take() {
+                                                    Some(existing) => query
+                                                        .preferred_candidate(existing, secondary),
+                                                    None => secondary,
+                                                });
+                                        }
+                                    }
+                                }
+                            }
                             query.reset_minute();
                         }
-                        let minute_range =
-                            (Included(Minutes::inclusive_min()), Included(minute_start));
-
-                        for minute in self
-                            .fields
-                            .minutes
-                            .ordinals()
-                            .range(minute_range)
-                            .rev()
-                            .cloned()
-                        {
-                            let second_start = query.second_upper_bound();
-                            if !self.fields.seconds.ordinals().contains(&second_start) {
-                                query.reset_second();
-                            }
-                            let second_range =
-                                (Included(Seconds::inclusive_min()), Included(second_start));
-
-                            for second in self
-                                .fields
-                                .seconds
-                                .ordinals()
-                                .range(second_range)
-                                .rev()
-                                .cloned()
-                            {
-                                let timezone = before.timezone();
-                                let candidate = match timezone.with_ymd_and_hms(
-                                    year as i32,
-                                    month,
-                                    day_of_month,
-                                    hour,
-                                    minute,
-                                    second,
-                                ) {
-                                    LocalResult::None => continue,
-                                    some => some,
-                                };
-                                if !self.fields.days_of_week.ordinals().contains(
-                                    &candidate
-                                        .clone()
-                                        .latest()
-                                        .unwrap()
-                                        .weekday()
-                                        .number_from_sunday(),
-                                ) {
-                                    continue 'day_loop;
-                                }
-                                return candidate;
-                            }
-                            query.reset_minute();
-                        } // End of minutes range
                         query.reset_hour();
-                    } // End of hours range
+                    }
                     query.reset_day_of_month();
-                } // End of Day of Month range
+                }
                 query.reset_month();
-            } // End of Month range
+            }
         }
 
-        // We ran out of dates to try.
-        LocalResult::None
+        deferred_candidate
     }
 
     /// Provides an iterator which will return each DateTime that matches the schedule starting with
@@ -409,6 +262,38 @@ impl ScheduleFields {
             seconds,
         }
     }
+
+    pub(crate) fn years_ordinals(&self) -> &OrdinalSet {
+        self.years.ordinals()
+    }
+
+    pub(crate) fn months_ordinals(&self) -> &OrdinalSet {
+        self.months.ordinals()
+    }
+
+    pub(crate) fn days_of_month_ordinals(&self) -> &OrdinalSet {
+        self.days_of_month.ordinals()
+    }
+
+    pub(crate) fn hours_ordinals(&self) -> &OrdinalSet {
+        self.hours.ordinals()
+    }
+
+    pub(crate) fn minutes_ordinals(&self) -> &OrdinalSet {
+        self.minutes.ordinals()
+    }
+
+    pub(crate) fn seconds_ordinals(&self) -> &OrdinalSet {
+        self.seconds.ordinals()
+    }
+
+    pub(crate) fn days_of_week_is_all(&self) -> bool {
+        self.days_of_week.is_all()
+    }
+
+    pub(crate) fn includes_day_of_week(&self, day_of_week: Ordinal) -> bool {
+        self.days_of_week.ordinals().contains(&day_of_week)
+    }
 }
 
 pub struct ScheduleIterator<'a, Z>
@@ -417,8 +302,6 @@ where
 {
     schedule: &'a Schedule,
     previous_datetime: Option<DateTime<Z>>,
-    later_datetime: Option<DateTime<Z>>,
-    earlier_datetime: Option<DateTime<Z>>,
 }
 //TODO: Cutoff datetime?
 
@@ -430,8 +313,6 @@ where
         ScheduleIterator {
             schedule,
             previous_datetime: Some(starting_datetime.clone()),
-            later_datetime: None,
-            earlier_datetime: None,
         }
     }
 }
@@ -445,23 +326,9 @@ where
     fn next(&mut self) -> Option<DateTime<Z>> {
         let previous = self.previous_datetime.take()?;
 
-        if let Some(later) = self.later_datetime.take() {
-            self.previous_datetime = Some(later.clone());
-            Some(later)
-        } else {
-            match self.schedule.next_after(&previous) {
-                LocalResult::Single(next) => {
-                    self.previous_datetime = Some(next.clone());
-                    Some(next)
-                }
-                LocalResult::Ambiguous(earlier, later) => {
-                    self.previous_datetime = Some(earlier.clone());
-                    self.later_datetime = Some(later);
-                    Some(earlier)
-                }
-                LocalResult::None => None,
-            }
-        }
+        let next = self.schedule.next_after(&previous)?;
+        self.previous_datetime = Some(next.clone());
+        Some(next)
     }
 }
 
@@ -472,23 +339,9 @@ where
     fn next_back(&mut self) -> Option<Self::Item> {
         let previous = self.previous_datetime.take()?;
 
-        if let Some(earlier) = self.earlier_datetime.take() {
-            self.previous_datetime = Some(earlier.clone());
-            Some(earlier)
-        } else {
-            match self.schedule.prev_from(&previous) {
-                LocalResult::Single(prev) => {
-                    self.previous_datetime = Some(prev.clone());
-                    Some(prev)
-                }
-                LocalResult::Ambiguous(earlier, later) => {
-                    self.previous_datetime = Some(later.clone());
-                    self.earlier_datetime = Some(earlier);
-                    Some(later)
-                }
-                LocalResult::None => None,
-            }
-        }
+        let prev = self.schedule.prev_from(&previous)?;
+        self.previous_datetime = Some(prev.clone());
+        Some(prev)
     }
 }
 
@@ -499,12 +352,6 @@ where
 {
     schedule: Schedule,
     previous_datetime: Option<DateTime<Z>>,
-    // In the case of the Daylight Savings Time transition where an hour is
-    // gained, store the time that occurs twice.  Depending on which direction
-    // the iteration goes, this needs to be stored separately to keep the
-    // direction of time (becoming earlier or later) consistent.
-    later_datetime: Option<DateTime<Z>>,
-    earlier_datetime: Option<DateTime<Z>>,
 }
 
 impl<Z> OwnedScheduleIterator<Z>
@@ -515,8 +362,6 @@ where
         Self {
             schedule,
             previous_datetime: Some(starting_datetime),
-            later_datetime: None,
-            earlier_datetime: None,
         }
     }
 }
@@ -530,27 +375,9 @@ where
     fn next(&mut self) -> Option<DateTime<Z>> {
         let previous = self.previous_datetime.take()?;
 
-        if let Some(later) = self.later_datetime.take() {
-            self.previous_datetime = Some(later.clone());
-            Some(later)
-        } else {
-            match self.schedule.next_after(&previous) {
-                LocalResult::Single(next) => {
-                    self.previous_datetime = Some(next.clone());
-                    Some(next)
-                }
-                // Handle an "Ambiguous" time, such as during the end of
-                // Daylight Savings Time, transitioning from BST to GMT, where
-                // for example, in London, 2AM occurs twice when the hour is
-                // moved back during the fall.
-                LocalResult::Ambiguous(earlier, later) => {
-                    self.previous_datetime = Some(earlier.clone());
-                    self.later_datetime = Some(later);
-                    Some(earlier)
-                }
-                LocalResult::None => None,
-            }
-        }
+        let next = self.schedule.next_after(&previous)?;
+        self.previous_datetime = Some(next.clone());
+        Some(next)
     }
 }
 
@@ -558,44 +385,9 @@ impl<Z: TimeZone> DoubleEndedIterator for OwnedScheduleIterator<Z> {
     fn next_back(&mut self) -> Option<Self::Item> {
         let previous = self.previous_datetime.take()?;
 
-        if let Some(earlier) = self.earlier_datetime.take() {
-            self.previous_datetime = Some(earlier.clone());
-            Some(earlier)
-        } else {
-            match self.schedule.prev_from(&previous) {
-                LocalResult::Single(prev) => {
-                    self.previous_datetime = Some(prev.clone());
-                    Some(prev)
-                }
-                // Handle an "Ambiguous" time, such as during the end of
-                // Daylight Savings Time, transitioning from BST to GMT, where
-                // for example, in London, 2AM occurs twice when the hour is
-                // moved back during the fall.
-                LocalResult::Ambiguous(earlier, later) => {
-                    self.previous_datetime = Some(later.clone());
-                    self.earlier_datetime = Some(earlier);
-                    Some(later)
-                }
-                LocalResult::None => None,
-            }
-        }
-    }
-}
-
-fn is_leap_year(year: Ordinal) -> bool {
-    let by_four = year % 4 == 0;
-    let by_hundred = year % 100 == 0;
-    let by_four_hundred = year % 400 == 0;
-    by_four && ((!by_hundred) || by_four_hundred)
-}
-
-fn days_in_month(month: Ordinal, year: Ordinal) -> u32 {
-    let is_leap_year = is_leap_year(year);
-    match month {
-        9 | 4 | 6 | 11 => 30,
-        2 if is_leap_year => 29,
-        2 => 28,
-        _ => 31,
+        let prev = self.schedule.prev_from(&previous)?;
+        self.previous_datetime = Some(prev.clone());
+        Some(prev)
     }
 }
 
@@ -745,20 +537,20 @@ mod test {
 
         let next = schedule.next_after(&Utc::now());
         println!("NEXT AFTER for {} {:?}", expression, next);
-        assert!(next.single().is_some());
+        assert!(next.is_some());
 
         let next2 = schedule.next_after(&next.unwrap());
         println!("NEXT2 AFTER for {} {:?}", expression, next2);
-        assert!(next2.single().is_some());
+        assert!(next2.is_some());
 
         let prev = schedule.prev_from(&next2.unwrap());
         println!("PREV FROM for {} {:?}", expression, prev);
-        assert!(prev.single().is_some());
+        assert!(prev.is_some());
         assert_eq!(prev, next);
 
         let prev2 = schedule.prev_from(&(next2.unwrap() + Duration::nanoseconds(100)));
         println!("PREV2 FROM for {} {:?}", expression, prev2);
-        assert!(prev2.single().is_some());
+        assert!(prev2.is_some());
         assert_eq!(prev2, next2);
     }
 
@@ -773,7 +565,7 @@ mod test {
         let schedule = Schedule::from_str(&expression).unwrap();
         let next = schedule.next_after(&starting_point);
         println!("NEXT AFTER for {} {:?}", expression, next);
-        assert!(next.single().is_some());
+        assert!(next.is_some());
     }
 
     #[test]
@@ -782,7 +574,7 @@ mod test {
         let schedule = Schedule::from_str(expression).unwrap();
         let prev = schedule.prev_from(&Utc::now());
         println!("PREV FROM for {} {:?}", expression, prev);
-        assert!(prev.single().is_some());
+        assert!(prev.is_some());
     }
 
     #[test]
@@ -791,7 +583,7 @@ mod test {
         let schedule = Schedule::from_str(expression).unwrap();
         let next = schedule.next_after(&Utc::now());
         println!("NEXT AFTER for {} {:?}", expression, next);
-        assert!(next.single().is_some());
+        assert!(next.is_some());
     }
 
     #[test]
