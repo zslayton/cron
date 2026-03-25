@@ -24,7 +24,7 @@ where
 {
     pub fn from(after: &DateTime<Z>) -> NextAfterQuery<Z> {
         NextAfterQuery {
-            initial_datetime: after.clone() + Duration::seconds(1),
+            initial_datetime: after.clone(),
             first_month: true,
             first_day_of_month: true,
             first_hour: true,
