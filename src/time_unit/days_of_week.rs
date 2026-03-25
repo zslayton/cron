@@ -2,7 +2,27 @@ use crate::error::*;
 use crate::ordinal::{Ordinal, OrdinalSet};
 use crate::time_unit::TimeUnitField;
 use once_cell::sync::Lazy;
+use phf::phf_map;
 use std::borrow::Cow;
+
+static DAY_OF_WEEK_MAP: phf::Map<&'static str, Ordinal> = phf_map! {
+    "sun" => 1,
+    "sunday" => 1,
+    "mon" => 2,
+    "monday" => 2,
+    "tue" => 3,
+    "tues" => 3,
+    "tuesday" => 3,
+    "wed" => 4,
+    "wednesday" => 4,
+    "thu" => 5,
+    "thurs" => 5,
+    "thursday" => 5,
+    "fri" => 6,
+    "friday" => 6,
+    "sat" => 7,
+    "saturday" => 7,
+};
 
 static ALL: Lazy<OrdinalSet> = Lazy::new(DaysOfWeek::supported_ordinals);
 
@@ -27,24 +47,12 @@ impl TimeUnitField for DaysOfWeek {
         7
     }
     fn ordinal_from_name(name: &str) -> Result<Ordinal, Error> {
-        //TODO: Use phf crate
-        let ordinal = match name.to_lowercase().as_ref() {
-            "sun" | "sunday" => 1,
-            "mon" | "monday" => 2,
-            "tue" | "tues" | "tuesday" => 3,
-            "wed" | "wednesday" => 4,
-            "thu" | "thurs" | "thursday" => 5,
-            "fri" | "friday" => 6,
-            "sat" | "saturday" => 7,
-            _ => {
-                return Err(ErrorKind::Expression(format!(
-                    "'{}' is not a valid day of the week.",
-                    name
-                ))
-                .into())
-            }
-        };
-        Ok(ordinal)
+        DAY_OF_WEEK_MAP
+            .get(name.to_lowercase().as_ref())
+            .copied()
+            .ok_or_else(|| {
+                ErrorKind::Expression(format!("'{}' is not a valid day of the week.", name)).into()
+            })
     }
     fn ordinals(&self) -> &OrdinalSet {
         match &self.ordinals {
