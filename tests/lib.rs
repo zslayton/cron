@@ -669,7 +669,11 @@ mod tests {
                     .map(|dt| dt.to_rfc3339()),
             );
 
-            let expected = case.expected.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+            let expected = case
+                .expected
+                .iter()
+                .map(|x| x.to_string())
+                .collect::<Vec<_>>();
             assert_eq!(actual, expected, "forward case {}", case.name);
         }
     }
