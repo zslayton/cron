@@ -1,5 +1,5 @@
 use chrono::offset::{LocalResult, TimeZone};
-use chrono::{DateTime, Datelike, Timelike, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, Timelike, Utc};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::ops::Bound::{Included, Unbounded};
 
@@ -47,7 +47,6 @@ impl Schedule {
             // It's a future year, the current year's range is irrelevant.
             if year > after.year() as u32 {
                 query.reset_month();
-                query.reset_day_of_month();
             }
             let month_start = query.month_lower_bound();
             if !self.fields.months.ordinals().contains(&month_start) {
@@ -70,13 +69,28 @@ impl Schedule {
                     Included(day_of_month_end),
                 );
 
-                'day_loop: for day_of_month in self
+                let mut day_iter = self
                     .fields
                     .days_of_month
                     .ordinals()
                     .range(day_of_month_range)
                     .cloned()
-                {
+                    .filter(|&day| {
+                        self.fields.days_of_week.is_all()
+                            || NaiveDate::from_ymd_opt(year as i32, month, day)
+                                .map(|d| {
+                                    self.fields
+                                        .days_of_week
+                                        .ordinals()
+                                        .contains(&d.weekday().number_from_sunday())
+                                })
+                                .unwrap_or(false)
+                    })
+                    .peekable();
+                if day_iter.peek() != Some(&day_of_month_start) {
+                    query.reset_day_of_month();
+                }
+                for day_of_month in day_iter {
                     let hour_start = query.hour_lower_bound();
                     if !self.fields.hours.ordinals().contains(&hour_start) {
                         query.reset_hour();
@@ -114,16 +128,6 @@ impl Schedule {
                                     LocalResult::None => continue,
                                     candidate => candidate,
                                 };
-                                if !self.fields.days_of_week.ordinals().contains(
-                                    &candidate
-                                        .clone()
-                                        .latest()
-                                        .unwrap()
-                                        .weekday()
-                                        .number_from_sunday(),
-                                ) {
-                                    continue 'day_loop;
-                                }
                                 return candidate;
                             }
                             query.reset_minute();
@@ -185,14 +189,29 @@ impl Schedule {
                     Included(day_of_month_end),
                 );
 
-                'day_loop: for day_of_month in self
+                let mut day_iter = self
                     .fields
                     .days_of_month
                     .ordinals()
                     .range(day_of_month_range)
                     .rev()
                     .cloned()
-                {
+                    .filter(|&day| {
+                        self.fields.days_of_week.is_all()
+                            || NaiveDate::from_ymd_opt(year as i32, month, day)
+                                .map(|d| {
+                                    self.fields
+                                        .days_of_week
+                                        .ordinals()
+                                        .contains(&d.weekday().number_from_sunday())
+                                })
+                                .unwrap_or(false)
+                    })
+                    .peekable();
+                if day_iter.peek() != Some(&day_of_month_end) {
+                    query.reset_day_of_month();
+                }
+                for day_of_month in day_iter {
                     let hour_start = query.hour_upper_bound();
                     if !self.fields.hours.ordinals().contains(&hour_start) {
                         query.reset_hour();
@@ -249,16 +268,6 @@ impl Schedule {
                                     LocalResult::None => continue,
                                     some => some,
                                 };
-                                if !self.fields.days_of_week.ordinals().contains(
-                                    &candidate
-                                        .clone()
-                                        .latest()
-                                        .unwrap()
-                                        .weekday()
-                                        .number_from_sunday(),
-                                ) {
-                                    continue 'day_loop;
-                                }
                                 return candidate;
                             }
                             query.reset_minute();
