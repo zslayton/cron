@@ -2,7 +2,10 @@
 mod tests {
     use chrono::*;
     use chrono_tz::Tz;
-    use cron::{Schedule, TimeUnitSpec};
+    use cron::{
+        CronScheduleParts, DayOfWeekNumbering, DowDomOperand, Schedule, ScheduleConfig,
+        TimeUnitSpec,
+    };
     use std::ops::Bound::{Excluded, Included};
     use std::str::FromStr;
 
@@ -76,6 +79,141 @@ mod tests {
     fn test_not_enough_fields() {
         let expression = "1 2 3 2019";
         assert!(Schedule::from_str(expression).is_err());
+    }
+
+    #[test]
+    fn test_parse_five_part_with_config() {
+        let config = ScheduleConfig {
+            cron_schedule_parts: CronScheduleParts::Five,
+            ..ScheduleConfig::default()
+        };
+        let schedule = Schedule::from_str_with_config("30 9 * * Mon", config).unwrap();
+        let next = schedule
+            .after(&Utc.with_ymd_and_hms(2024, 1, 1, 9, 29, 59).unwrap())
+            .next()
+            .unwrap();
+        assert_eq!(0, next.second());
+    }
+
+    #[test]
+    fn test_default_config_rejects_five_part() {
+        assert!(Schedule::from_str_with_config("30 9 * * Mon", ScheduleConfig::default()).is_err());
+    }
+
+    #[test]
+    fn test_parse_both_part_modes() {
+        let config = ScheduleConfig {
+            cron_schedule_parts: CronScheduleParts::Both,
+            ..ScheduleConfig::default()
+        };
+        assert!(Schedule::from_str_with_config("0 30 9 * * Mon", config).is_ok());
+        assert!(Schedule::from_str_with_config("30 9 * * Mon", config).is_ok());
+    }
+
+    #[test]
+    fn test_parse_vixie_day_of_week_numbering() {
+        let config = ScheduleConfig {
+            day_of_week_numbering: DayOfWeekNumbering::ZeroToSix,
+            ..ScheduleConfig::default()
+        };
+        let schedule = Schedule::from_str_with_config("0 0 0 * * 0", config).unwrap();
+        let sunday = Utc.with_ymd_and_hms(2024, 1, 7, 0, 0, 0).unwrap();
+        let monday = Utc.with_ymd_and_hms(2024, 1, 8, 0, 0, 0).unwrap();
+        assert!(schedule.includes(sunday));
+        assert!(!schedule.includes(monday));
+    }
+
+    #[test]
+    fn test_default_day_of_week_numbering_rejects_zero() {
+        assert!(Schedule::from_str_with_config("0 0 0 * * 0", ScheduleConfig::default()).is_err());
+    }
+
+    #[test]
+    fn test_builder_interface_custom_parts() {
+        let schedule = Schedule::builder()
+            .allowed_cron_schedule_parts(CronScheduleParts::Both)
+            .parse("30 9 * * Mon")
+            .unwrap();
+        let next = schedule
+            .after(&Utc.with_ymd_and_hms(2024, 1, 1, 9, 29, 59).unwrap())
+            .next()
+            .unwrap();
+        assert_eq!(0, next.second());
+    }
+
+    #[test]
+    fn test_builder_interface_default() {
+        let schedule = Schedule::default().parse("0 30 9 * * Mon").unwrap();
+        let next = schedule
+            .after(&Utc.with_ymd_and_hms(2024, 1, 1, 9, 29, 59).unwrap())
+            .next()
+            .unwrap();
+        assert_eq!(30, next.minute());
+    }
+
+    #[test]
+    fn test_builder_interface_vixie() {
+        let schedule = Schedule::vixie().parse("0 0 0 * * 0").unwrap();
+        let sunday = Utc.with_ymd_and_hms(2024, 1, 7, 0, 0, 0).unwrap();
+        assert!(schedule.includes(sunday));
+    }
+
+    #[test]
+    fn test_days_matching_default_and() {
+        let schedule = Schedule::default().parse("0 0 0 1 * Mon").unwrap();
+        let mon_1st = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let mon_8th = Utc.with_ymd_and_hms(2024, 1, 8, 0, 0, 0).unwrap();
+        let thu_1st = Utc.with_ymd_and_hms(2024, 2, 1, 0, 0, 0).unwrap();
+        assert!(schedule.includes(mon_1st));
+        assert!(!schedule.includes(mon_8th));
+        assert!(!schedule.includes(thu_1st));
+    }
+
+    #[test]
+    fn test_days_matching_or() {
+        let schedule = Schedule::builder()
+            .dow_dom_operand(DowDomOperand::Or)
+            .parse("0 0 0 1 * Mon")
+            .unwrap();
+        let mon_1st = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let mon_8th = Utc.with_ymd_and_hms(2024, 1, 8, 0, 0, 0).unwrap();
+        let thu_1st = Utc.with_ymd_and_hms(2024, 2, 1, 0, 0, 0).unwrap();
+        let tue_2nd = Utc.with_ymd_and_hms(2024, 1, 2, 0, 0, 0).unwrap();
+        assert!(schedule.includes(mon_1st));
+        assert!(schedule.includes(mon_8th));
+        assert!(schedule.includes(thu_1st));
+        assert!(!schedule.includes(tue_2nd));
+    }
+
+    #[test]
+    fn test_vixie_includes_or_days_matching() {
+        let schedule = Schedule::vixie().parse("0 0 0 1 * 1").unwrap();
+        let mon_1st = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let mon_8th = Utc.with_ymd_and_hms(2024, 1, 8, 0, 0, 0).unwrap();
+        let thu_1st = Utc.with_ymd_and_hms(2024, 2, 1, 0, 0, 0).unwrap();
+        assert!(schedule.includes(mon_1st));
+        assert!(schedule.includes(mon_8th));
+        assert!(schedule.includes(thu_1st));
+    }
+
+    #[test]
+    fn test_search_interval_limits_next() {
+        let schedule = Schedule::builder()
+            .search_interval(TimeDelta::days(300))
+            .parse("0 0 0 1 1 *")
+            .unwrap();
+        let start = Utc.with_ymd_and_hms(2024, 1, 2, 0, 0, 0).unwrap();
+        assert!(schedule.after(&start).next().is_none());
+    }
+
+    #[test]
+    fn test_search_interval_limits_prev() {
+        let schedule = Schedule::builder()
+            .search_interval(TimeDelta::days(300))
+            .parse("0 0 0 1 1 *")
+            .unwrap();
+        let start = Utc.with_ymd_and_hms(2024, 12, 31, 0, 0, 0).unwrap();
+        assert!(schedule.after(&start).next_back().is_none());
     }
 
     #[test]
@@ -395,7 +533,7 @@ mod tests {
         let schedule_tz: Tz = "Europe/London".parse().unwrap();
         let dt = schedule_tz.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
         let mut schedule_iter = schedule.after(&dt);
-        let expected_values = [
+        let expected_values = vec![
             schedule_tz.with_ymd_and_hms(2020, 1, 1, 0, 0, 17).unwrap(),
             schedule_tz.with_ymd_and_hms(2020, 1, 1, 0, 0, 34).unwrap(),
             schedule_tz.with_ymd_and_hms(2020, 1, 1, 0, 0, 51).unwrap(),
@@ -448,7 +586,7 @@ mod tests {
         let schedule_tz: Tz = "Europe/London".parse().unwrap();
         let dt = schedule_tz.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
         let mut schedule_iter = schedule.after(&dt);
-        let expected_values = [
+        let expected_values = vec![
             schedule_tz.with_ymd_and_hms(2020, 1, 11, 0, 0, 0).unwrap(),
             schedule_tz.with_ymd_and_hms(2020, 1, 21, 0, 0, 0).unwrap(),
             schedule_tz.with_ymd_and_hms(2020, 1, 31, 0, 0, 0).unwrap(),
@@ -468,7 +606,7 @@ mod tests {
         let schedule_tz: Tz = "Europe/London".parse().unwrap();
         let dt = schedule_tz.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
         let mut schedule_iter = schedule.after(&dt);
-        let expected_values = [
+        let expected_values = vec![
             schedule_tz.with_ymd_and_hms(2020, 2, 1, 0, 0, 0).unwrap(),
             schedule_tz.with_ymd_and_hms(2020, 3, 1, 0, 0, 0).unwrap(),
             schedule_tz.with_ymd_and_hms(2020, 4, 1, 0, 0, 0).unwrap(),
@@ -502,7 +640,7 @@ mod tests {
         let schedule_tz: Tz = "Europe/London".parse().unwrap();
         let dt = schedule_tz.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
         let mut schedule_iter = schedule.after(&dt);
-        let expected_values = [
+        let expected_values = vec![
             schedule_tz.with_ymd_and_hms(2020, 1, 1, 0, 21, 0).unwrap(),
             schedule_tz.with_ymd_and_hms(2020, 1, 1, 0, 42, 0).unwrap(),
             schedule_tz.with_ymd_and_hms(2020, 1, 1, 1, 0, 0).unwrap(),
@@ -554,5 +692,152 @@ mod tests {
         let not_included = schedule_tz.with_ymd_and_hms(2020, 1, 11, 0, 0, 0).unwrap();
         assert!(schedule.includes(included));
         assert!(!schedule.includes(not_included));
+    }
+
+    struct CronIterationTestCase {
+        name: &'static str,
+        timezone: Tz,
+        cron: &'static str,
+        expected: &'static [&'static str],
+    }
+
+    fn parse_expected_in_tz(timezone: Tz, expected: &str) -> DateTime<Tz> {
+        DateTime::parse_from_rfc3339(expected)
+            .unwrap()
+            .with_timezone(&timezone)
+    }
+
+    fn dst_iteration_cases() -> Vec<CronIterationTestCase> {
+        vec![
+            CronIterationTestCase {
+                name: "hourly_fall_back_los_angeles",
+                timezone: "America/Los_Angeles".parse().unwrap(),
+                cron: "0 0 * * * * *",
+                expected: &[
+                    "2022-11-06T01:00:00-07:00",
+                    "2022-11-06T01:00:00-08:00",
+                    "2022-11-06T02:00:00-08:00",
+                    "2022-11-06T03:00:00-08:00",
+                    "2022-11-06T04:00:00-08:00",
+                ],
+            },
+            CronIterationTestCase {
+                name: "hourly_spring_forward_los_angeles",
+                timezone: "America/Los_Angeles".parse().unwrap(),
+                cron: "0 0 * * * * *",
+                expected: &[
+                    "2022-03-13T01:00:00-08:00",
+                    "2022-03-13T03:00:00-07:00",
+                    "2022-03-13T04:00:00-07:00",
+                    "2022-03-13T05:00:00-07:00",
+                ],
+            },
+            CronIterationTestCase {
+                name: "subhourly_fall_back_los_angeles",
+                timezone: "America/Los_Angeles".parse().unwrap(),
+                cron: "0 0/30 * * * * *",
+                expected: &[
+                    "2022-11-06T01:00:00-07:00",
+                    "2022-11-06T01:30:00-07:00",
+                    "2022-11-06T01:00:00-08:00",
+                    "2022-11-06T01:30:00-08:00",
+                    "2022-11-06T02:00:00-08:00",
+                    "2022-11-06T02:30:00-08:00",
+                ],
+            },
+            CronIterationTestCase {
+                name: "subhourly_spring_forward_los_angeles",
+                timezone: "America/Los_Angeles".parse().unwrap(),
+                cron: "0 0/30 * * * * *",
+                expected: &[
+                    "2022-03-13T01:30:00-08:00",
+                    "2022-03-13T03:00:00-07:00",
+                    "2022-03-13T03:30:00-07:00",
+                    "2022-03-13T04:00:00-07:00",
+                ],
+            },
+            CronIterationTestCase {
+                name: "daily_across_fall_back_los_angeles",
+                timezone: "America/Los_Angeles".parse().unwrap(),
+                cron: "0 0 2 * * * *",
+                expected: &["2022-11-06T02:00:00-08:00", "2022-11-07T02:00:00-08:00"],
+            },
+            CronIterationTestCase {
+                name: "daily_across_spring_forward_los_angeles",
+                timezone: "America/Los_Angeles".parse().unwrap(),
+                cron: "0 0 2 * * * *",
+                expected: &["2022-03-14T02:00:00-07:00", "2022-03-15T02:00:00-07:00"],
+            },
+            CronIterationTestCase {
+                name: "monthly_across_spring_forward_los_angeles",
+                timezone: "America/Los_Angeles".parse().unwrap(),
+                cron: "0 0 2 13 * * *",
+                expected: &["2022-04-13T02:00:00-07:00", "2022-05-13T02:00:00-07:00"],
+            },
+            CronIterationTestCase {
+                name: "every_15_minutes_repeats_full_hour_during_fall_back",
+                timezone: "Europe/Berlin".parse().unwrap(),
+                cron: "0 0/15 * * * * *",
+                expected: &[
+                    "2022-10-30T02:00:00+02:00",
+                    "2022-10-30T02:15:00+02:00",
+                    "2022-10-30T02:30:00+02:00",
+                    "2022-10-30T02:45:00+02:00",
+                    "2022-10-30T02:00:00+01:00",
+                    "2022-10-30T02:15:00+01:00",
+                    "2022-10-30T02:30:00+01:00",
+                    "2022-10-30T02:45:00+01:00",
+                    "2022-10-30T03:00:00+01:00",
+                ],
+            },
+        ]
+    }
+
+    #[test]
+    fn test_dst_iteration_cases_forward() {
+        for case in dst_iteration_cases() {
+            let schedule = Schedule::from_str(case.cron).unwrap();
+            let start = parse_expected_in_tz(case.timezone, case.expected[0]);
+
+            let mut actual = vec![start.to_rfc3339()];
+            actual.extend(
+                schedule
+                    .after(&start)
+                    .take(case.expected.len().saturating_sub(1))
+                    .map(|dt| dt.to_rfc3339()),
+            );
+
+            let expected = case
+                .expected
+                .iter()
+                .map(|x| x.to_string())
+                .collect::<Vec<_>>();
+            assert_eq!(actual, expected, "forward case {}", case.name);
+        }
+    }
+
+    #[test]
+    fn test_dst_iteration_cases_backward() {
+        for case in dst_iteration_cases() {
+            let schedule = Schedule::from_str(case.cron).unwrap();
+            let last = parse_expected_in_tz(case.timezone, case.expected[case.expected.len() - 1]);
+
+            let mut actual = vec![last.to_rfc3339()];
+            actual.extend(
+                schedule
+                    .after(&last)
+                    .rev()
+                    .take(case.expected.len().saturating_sub(1))
+                    .map(|dt| dt.to_rfc3339()),
+            );
+
+            let expected_reversed = case
+                .expected
+                .iter()
+                .rev()
+                .map(|x| x.to_string())
+                .collect::<Vec<_>>();
+            assert_eq!(actual, expected_reversed, "backward case {}", case.name);
+        }
     }
 }
