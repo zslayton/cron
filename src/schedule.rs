@@ -1051,5 +1051,4 @@ mod test {
 
         assert_eq!(times.as_slice(), expected_times.as_slice());
     }
-
 }
