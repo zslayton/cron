@@ -395,7 +395,7 @@ mod tests {
         let schedule_tz: Tz = "Europe/London".parse().unwrap();
         let dt = schedule_tz.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
         let mut schedule_iter = schedule.after(&dt);
-        let expected_values = vec![
+        let expected_values = [
             schedule_tz.with_ymd_and_hms(2020, 1, 1, 0, 0, 17).unwrap(),
             schedule_tz.with_ymd_and_hms(2020, 1, 1, 0, 0, 34).unwrap(),
             schedule_tz.with_ymd_and_hms(2020, 1, 1, 0, 0, 51).unwrap(),
@@ -448,7 +448,7 @@ mod tests {
         let schedule_tz: Tz = "Europe/London".parse().unwrap();
         let dt = schedule_tz.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
         let mut schedule_iter = schedule.after(&dt);
-        let expected_values = vec![
+        let expected_values = [
             schedule_tz.with_ymd_and_hms(2020, 1, 11, 0, 0, 0).unwrap(),
             schedule_tz.with_ymd_and_hms(2020, 1, 21, 0, 0, 0).unwrap(),
             schedule_tz.with_ymd_and_hms(2020, 1, 31, 0, 0, 0).unwrap(),
@@ -468,7 +468,7 @@ mod tests {
         let schedule_tz: Tz = "Europe/London".parse().unwrap();
         let dt = schedule_tz.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
         let mut schedule_iter = schedule.after(&dt);
-        let expected_values = vec![
+        let expected_values = [
             schedule_tz.with_ymd_and_hms(2020, 2, 1, 0, 0, 0).unwrap(),
             schedule_tz.with_ymd_and_hms(2020, 3, 1, 0, 0, 0).unwrap(),
             schedule_tz.with_ymd_and_hms(2020, 4, 1, 0, 0, 0).unwrap(),
@@ -502,7 +502,7 @@ mod tests {
         let schedule_tz: Tz = "Europe/London".parse().unwrap();
         let dt = schedule_tz.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
         let mut schedule_iter = schedule.after(&dt);
-        let expected_values = vec![
+        let expected_values = [
             schedule_tz.with_ymd_and_hms(2020, 1, 1, 0, 21, 0).unwrap(),
             schedule_tz.with_ymd_and_hms(2020, 1, 1, 0, 42, 0).unwrap(),
             schedule_tz.with_ymd_and_hms(2020, 1, 1, 1, 0, 0).unwrap(),
