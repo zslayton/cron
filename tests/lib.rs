@@ -502,7 +502,7 @@ mod tests {
             .unwrap();
 
         let mut schedule_iter = schedule.after(&dt);
-        let expected_values = vec![
+        let expected_values = [
             date(2020, 1, 1)
                 .at(0, 0, 17, 0)
                 .to_zoned(schedule_tz.clone())
@@ -542,7 +542,7 @@ mod tests {
             .to_zoned(schedule_tz.clone())
             .unwrap();
         let mut schedule_iter = schedule.after(&dt);
-        let expected_values = vec![
+        let expected_values = [
             date(2020, 3, 1)
                 .at(0, 0, 0, 0)
                 .to_zoned(schedule_tz.clone())
@@ -574,7 +574,7 @@ mod tests {
             .to_zoned(schedule_tz.clone())
             .unwrap();
         let mut schedule_iter = schedule.after(&dt);
-        let expected_values = vec![
+        let expected_values = [
             date(2020, 1, 1)
                 .at(10, 0, 0, 0)
                 .to_zoned(schedule_tz.clone())
@@ -606,7 +606,7 @@ mod tests {
             .to_zoned(schedule_tz.clone())
             .unwrap();
         let mut schedule_iter = schedule.after(&dt);
-        let expected_values = vec![
+        let expected_values = [
             date(2020, 1, 11)
                 .at(0, 0, 0, 0)
                 .to_zoned(schedule_tz.clone())
@@ -650,7 +650,7 @@ mod tests {
             .to_zoned(schedule_tz.clone())
             .unwrap();
         let mut schedule_iter = schedule.after(&dt);
-        let expected_values = vec![
+        let expected_values = [
             date(2020, 2, 1)
                 .at(0, 0, 0, 0)
                 .to_zoned(schedule_tz.clone())
@@ -714,7 +714,7 @@ mod tests {
             .to_zoned(schedule_tz.clone())
             .unwrap();
         let mut schedule_iter = schedule.after(&dt);
-        let expected_values = vec![
+        let expected_values = [
             date(2020, 1, 1)
                 .at(0, 21, 0, 0)
                 .to_zoned(schedule_tz.clone())
@@ -762,7 +762,7 @@ mod tests {
             .to_zoned(schedule_tz.clone())
             .unwrap();
         let mut schedule_iter = schedule.after(&dt);
-        let expected_values = vec![
+        let expected_values = [
             date(2020, 3, 1)
                 .at(0, 0, 0, 0)
                 .to_zoned(schedule_tz.clone())
