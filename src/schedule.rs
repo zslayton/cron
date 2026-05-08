@@ -633,7 +633,8 @@ mod test {
             &[Token::String(
                 "definitively an invalid value for a cron schedule!",
             )],
-            "Invalid expression: Invalid cron expression.",
+            "definitively an invalid value for a cron schedule!\n^\nThe 'Seconds' field does not \
+             support using names. 'definitively' specified.",
         );
     }
 
