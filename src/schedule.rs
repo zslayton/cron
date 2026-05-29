@@ -1,5 +1,6 @@
 use chrono::offset::{LocalResult, TimeZone};
 use chrono::{DateTime, Datelike, NaiveDate, Timelike, Utc};
+use std::cmp::{max, min};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::ops::Bound::{Included, Unbounded};
 
@@ -37,11 +38,22 @@ impl Schedule {
         Z: TimeZone,
     {
         let mut query = NextAfterQuery::from(after);
+        // Ambiguous naive datetimes translate to two local datetimes. This
+        // iteration uses naive datetimes and could skip the second local
+        // datetime, where the second may match the pattern. This deferred
+        // candidate retains that datetime for consideration on subsequent
+        // iterations. For example, during fall back, `0 0/30 * * * * *` must
+        // emit both 01:30 local datetimes.
         let mut deferred_candidate: Option<DateTime<Z>> = None;
+        // Folded time happens during the fall back DST transition where an
+        // offset, typically one hour, is repeated in both timezones. This flag
+        // tells iteration it is starting in the first repeated offset so it
+        // does not get stuck repeating matches from the first fold or skip
+        // matches in the second fold.
         let after_naive = after.naive_local();
         let after_in_first_fold = match after.timezone().from_local_datetime(&after_naive) {
             LocalResult::Ambiguous(first, second) => {
-                let earlier = if first <= second { first } else { second };
+                let earlier = min(first, second);
                 *after == earlier
             }
             _ => false,
@@ -107,6 +119,11 @@ impl Schedule {
                     let hour_range = (Included(hour_start), Included(Hours::inclusive_max()));
 
                     for hour in self.fields.hours.ordinals().range(hour_range).cloned() {
+                        // The first fold is the first repeat of the DST offset,
+                        // typically one hour. Because this iteration is done in
+                        // naive time, it can skip matches after finding one in
+                        // the first fold. For example, `0 0/30 * * * * *` must
+                        // continue from 01:00 to 01:30 in both folds.
                         let fold_hour_scan = after_in_first_fold
                             && year as i32 == after_naive.year()
                             && month == after_naive.month()
@@ -156,28 +173,20 @@ impl Schedule {
                                             continue;
                                         }
                                         if let Some(deferred) = deferred_candidate.take() {
-                                            return Some(if deferred < candidate {
-                                                deferred
-                                            } else {
-                                                candidate
-                                            });
+                                            return Some(min(deferred, candidate));
                                         }
                                         return Some(candidate);
                                     }
                                     LocalResult::Ambiguous(earlier, later) => {
                                         if earlier > *after {
                                             if let Some(deferred) = deferred_candidate.take() {
-                                                return Some(if deferred < earlier {
-                                                    deferred
-                                                } else {
-                                                    earlier
-                                                });
+                                                return Some(min(deferred, earlier));
                                             }
                                             return Some(earlier);
                                         }
                                         if later > *after {
                                             deferred_candidate = Some(match deferred_candidate {
-                                                Some(existing) if existing < later => existing,
+                                                Some(existing) => min(existing, later),
                                                 _ => later,
                                             });
                                         }
@@ -206,11 +215,16 @@ impl Schedule {
         Z: TimeZone,
     {
         let mut query = PrevFromQuery::from(before);
+        // See `next_after` for folded-time details. This is the reverse scan's
+        // deferred candidate for an earlier local datetime that may still be
+        // the previous chronological match.
         let mut deferred_candidate: Option<DateTime<Z>> = None;
+        // See `next_after` for folded-time details. This flag handles starting
+        // from the second fold while scanning backward.
         let before_naive = before.naive_local();
         let before_in_second_fold = match before.timezone().from_local_datetime(&before_naive) {
             LocalResult::Ambiguous(first, second) => {
-                let later = if first <= second { second } else { first };
+                let later = max(first, second);
                 *before == later
             }
             _ => false,
@@ -292,6 +306,9 @@ impl Schedule {
                         .rev()
                         .cloned()
                     {
+                        // See the forward `fold_hour_scan` for folded-time
+                        // details. This is the reverse scan of the repeated
+                        // hour from the second fold into the first.
                         let fold_hour_scan = before_in_second_fold
                             && year as i32 == before_naive.year()
                             && month == before_naive.month()
@@ -353,28 +370,20 @@ impl Schedule {
                                             continue;
                                         }
                                         if let Some(deferred) = deferred_candidate.take() {
-                                            return Some(if deferred > candidate {
-                                                deferred
-                                            } else {
-                                                candidate
-                                            });
+                                            return Some(max(deferred, candidate));
                                         }
                                         return Some(candidate);
                                     }
                                     LocalResult::Ambiguous(earlier, later) => {
                                         if later < *before {
                                             if let Some(deferred) = deferred_candidate.take() {
-                                                return Some(if deferred > later {
-                                                    deferred
-                                                } else {
-                                                    later
-                                                });
+                                                return Some(max(deferred, later));
                                             }
                                             return Some(later);
                                         }
                                         if earlier < *before {
                                             deferred_candidate = Some(match deferred_candidate {
-                                                Some(existing) if existing > earlier => existing,
+                                                Some(existing) => max(existing, earlier),
                                                 _ => earlier,
                                             });
                                         }
