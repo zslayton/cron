@@ -209,10 +209,54 @@ pub(crate) fn ordinal_range_values(
     inclusive_max: Ordinal,
     wraparound_ranges: bool,
 ) -> Option<Vec<Ordinal>> {
-    if start <= end {
-        Some((start..=end).collect())
+    ordinal_range_values_with_step(
+        start,
+        end,
+        inclusive_min,
+        inclusive_max,
+        wraparound_ranges,
+        1,
+    )
+}
+
+pub(crate) fn ordinal_range_values_with_step(
+    start: Ordinal,
+    end: Ordinal,
+    inclusive_min: Ordinal,
+    inclusive_max: Ordinal,
+    wraparound_ranges: bool,
+    step: Ordinal,
+) -> Option<Vec<Ordinal>> {
+    let step = step as usize;
+
+    if wraparound_ranges && start == end {
+        Some((inclusive_min..=inclusive_max).step_by(step).collect())
+    } else if start <= end {
+        Some((start..=end).step_by(step).collect())
     } else if wraparound_ranges {
-        Some((start..=inclusive_max).chain(inclusive_min..=end).collect())
+        let first_segment = (start..=inclusive_max).step_by(step).collect::<Vec<_>>();
+        // Croniter preserves the original range step across the max-to-min boundary by
+        // skipping initial wrapped values when the first segment lands near the field max.
+        let to_skip = first_segment
+            .last()
+            .map(|last| {
+                let step = step as Ordinal;
+                let already_skipped = inclusive_max - last;
+                let current_position = last - inclusive_min;
+                let field_len = inclusive_max - inclusive_min + 1;
+                if current_position + step > field_len && already_skipped < step {
+                    step - already_skipped
+                } else {
+                    0
+                }
+            })
+            .unwrap_or(0);
+        Some(
+            first_segment
+                .into_iter()
+                .chain(((inclusive_min + to_skip)..=end).step_by(step))
+                .collect(),
+        )
     } else {
         None
     }
@@ -363,6 +407,30 @@ where
                     Specifier::Point(start) => {
                         let start = Self::validate_ordinal(*start)?;
                         (start..=Self::inclusive_max()).collect()
+                    }
+                    Specifier::Range(start, end) => {
+                        let start_ordinal =
+                            Self::validate_ordinal(Self::ordinal_from_range_endpoint(start)?)?;
+                        let end_ordinal =
+                            Self::validate_ordinal(Self::ordinal_from_range_endpoint(end)?)?;
+                        return ordinal_range_values_with_step(
+                            start_ordinal,
+                            end_ordinal,
+                            Self::inclusive_min(),
+                            Self::inclusive_max(),
+                            wraparound_ranges,
+                            *step,
+                        )
+                        .map(|ordinals| ordinals.into_iter().collect())
+                        .ok_or_else(|| {
+                            ErrorKind::Expression(format!(
+                                "Invalid range for {}: {}-{}",
+                                Self::name(),
+                                start,
+                                end
+                            ))
+                            .into()
+                        });
                     }
                     specifier => Self::ordinal_values_from_specifier_with_options(
                         specifier,

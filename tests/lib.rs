@@ -191,7 +191,18 @@ mod tests {
     }
 
     #[test]
-    fn test_wraparound_ranges_apply_steps_in_circular_order() {
+    fn test_wraparound_ranges_equal_endpoints_are_full_cycle() {
+        let sunday_to_sunday = Schedule::vixie().parse("0 0 0 * * Sun-Sun").unwrap();
+        let monday_to_monday = Schedule::vixie().parse("0 0 0 * * Mon-Mon").unwrap();
+        let january_to_january = Schedule::vixie().parse("0 0 0 * Jan-Jan *").unwrap();
+
+        assert_eq!(7, sunday_to_sunday.days_of_week().count());
+        assert_eq!(7, monday_to_monday.days_of_week().count());
+        assert_eq!(12, january_to_january.months().count());
+    }
+
+    #[test]
+    fn test_wraparound_ranges_apply_croniter_step_boundary_rules() {
         let schedule = Schedule::builder()
             .wraparound_ranges(true)
             .parse("0 0 22-2/2 * Nov-Mar/2 *")
@@ -207,6 +218,39 @@ mod tests {
         assert!(schedule.months().includes(1));
         assert!(!schedule.months().includes(2));
         assert!(schedule.months().includes(3));
+    }
+
+    #[test]
+    fn test_vixie_wraparound_day_of_week_step_skips_boundary_values() {
+        let schedule = Schedule::vixie().parse("0 0 0 * * Thu-Tue/2").unwrap();
+
+        let monday = Utc.with_ymd_and_hms(2024, 1, 8, 0, 0, 0).unwrap();
+        let tuesday = Utc.with_ymd_and_hms(2024, 1, 9, 0, 0, 0).unwrap();
+        let thursday = Utc.with_ymd_and_hms(2024, 1, 11, 0, 0, 0).unwrap();
+        let friday = Utc.with_ymd_and_hms(2024, 1, 12, 0, 0, 0).unwrap();
+        let saturday = Utc.with_ymd_and_hms(2024, 1, 13, 0, 0, 0).unwrap();
+        let sunday = Utc.with_ymd_and_hms(2024, 1, 14, 0, 0, 0).unwrap();
+
+        assert!(schedule.includes(thursday));
+        assert!(schedule.includes(saturday));
+        assert!(schedule.includes(tuesday));
+        assert!(!schedule.includes(friday));
+        assert!(!schedule.includes(sunday));
+        assert!(!schedule.includes(monday));
+    }
+
+    #[test]
+    fn test_wraparound_month_step_skips_boundary_values() {
+        let schedule = Schedule::vixie().parse("0 0 0 * Apr-Mar/2 *").unwrap();
+
+        assert!(schedule.months().includes(4));
+        assert!(schedule.months().includes(6));
+        assert!(schedule.months().includes(8));
+        assert!(schedule.months().includes(10));
+        assert!(schedule.months().includes(12));
+        assert!(schedule.months().includes(3));
+        assert!(!schedule.months().includes(1));
+        assert!(!schedule.months().includes(2));
     }
 
     #[test]

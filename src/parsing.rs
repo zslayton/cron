@@ -436,6 +436,31 @@ fn zero_indexed_day_of_week_internal_ordinals_from_root_specifier(
                     let start = zero_indexed_day_of_week_from_numeric(*start)?;
                     (start..=6).collect()
                 }
+                Specifier::Range(start, end) => {
+                    let start_ordinal = zero_indexed_day_of_week_from_endpoint(start)?;
+                    let end_ordinal = zero_indexed_day_of_week_from_endpoint(end)?;
+                    return ordinal_range_values_with_step(
+                        start_ordinal,
+                        end_ordinal,
+                        0,
+                        6,
+                        wraparound_ranges,
+                        *step,
+                    )
+                    .map(|ordinals| {
+                        ordinals
+                            .into_iter()
+                            .map(zero_indexed_day_of_week_to_internal_ordinal)
+                            .collect()
+                    })
+                    .ok_or_else(|| {
+                        ErrorKind::Expression(format!(
+                            "Invalid range for Days of Week: {}-{}",
+                            start, end
+                        ))
+                        .into()
+                    });
+                }
                 specifier => {
                     zero_indexed_day_of_week_values_from_specifier(specifier, wraparound_ranges)?
                 }
