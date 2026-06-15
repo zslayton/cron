@@ -1,7 +1,7 @@
 use chrono::offset::TimeZone;
 use chrono::{DateTime, Datelike, Duration, NaiveDate, Timelike};
-use std::ops::Bound;
 use std::ops::Bound::{Included, Unbounded};
+use std::ops::{Bound, RangeInclusive};
 
 use crate::ordinal::Ordinal;
 use crate::schedule::ScheduleFields;
@@ -98,7 +98,7 @@ where
         &self,
         bound: Ordinal,
         day_of_month_end: Ordinal,
-    ) -> (Bound<Ordinal>, Bound<Ordinal>);
+    ) -> RangeInclusive<Ordinal>;
     fn hour_default_bound(&self) -> Ordinal;
     fn hour_range(&self, bound: Ordinal) -> (Bound<Ordinal>, Bound<Ordinal>);
     fn minute_default_bound(&self) -> Ordinal;
@@ -146,19 +146,7 @@ where
         let should_scan_all_days = operand == DowDomOperand::Or && both_restricted;
 
         let base_iter: Box<dyn DoubleEndedIterator<Item = Ordinal> + 'a> = if should_scan_all_days {
-            // TODO: Simplify this bound-to-range conversion when
-            // https://github.com/rust-lang/rust/issues/136903 lands.
-            let start = match range.0 {
-                Included(value) => value,
-                Bound::Excluded(value) => value + 1,
-                Unbounded => DaysOfMonth::inclusive_min(),
-            };
-            let end = match range.1 {
-                Included(value) => value,
-                Bound::Excluded(value) => value.saturating_sub(1),
-                Unbounded => DaysOfMonth::inclusive_max(),
-            };
-            Box::new(start..=end)
+            Box::new(range)
         } else {
             Box::new(fields.days_of_month_ordinals().range(range).copied())
         };
@@ -327,11 +315,8 @@ where
         &self,
         bound: Ordinal,
         day_of_month_end: Ordinal,
-    ) -> (Bound<Ordinal>, Bound<Ordinal>) {
-        (
-            Included(bound.min(day_of_month_end)),
-            Included(day_of_month_end),
-        )
+    ) -> RangeInclusive<Ordinal> {
+        bound.min(day_of_month_end)..=day_of_month_end
     }
 
     fn hour_default_bound(&self) -> Ordinal {
@@ -463,11 +448,8 @@ where
         &self,
         bound: Ordinal,
         day_of_month_end: Ordinal,
-    ) -> (Bound<Ordinal>, Bound<Ordinal>) {
-        (
-            Included(DaysOfMonth::inclusive_min()),
-            Included(bound.min(day_of_month_end)),
-        )
+    ) -> RangeInclusive<Ordinal> {
+        DaysOfMonth::inclusive_min()..=bound.min(day_of_month_end)
     }
 
     fn hour_default_bound(&self) -> Ordinal {
