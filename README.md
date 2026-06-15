@@ -43,7 +43,8 @@ use cron::{CronScheduleParts, DayOfWeekNumbering, DowDomOperand, Schedule};
 
 let schedule = Schedule::builder()
     .allowed_cron_schedule_parts(CronScheduleParts::Both) // 5-part and 6-part expressions
-    .day_of_week_numbering(DayOfWeekNumbering::ZeroToSix) // Vixie-style DOW numbering
+    .day_of_week_numbering(DayOfWeekNumbering::ZeroIndexed) // Vixie-style DOW numbering
+    .wraparound_ranges(true)                       // allow ranges like Nov-Mar
     .dow_dom_operand(DowDomOperand::Or)                   // combine DOM + DOW with OR
     .search_interval(TimeDelta::days(400 * 366))          // bound search window
     .parse("30 9 1 * 1")
@@ -61,13 +62,14 @@ let custom = Schedule::builder()
     .unwrap();
 
 let default = Schedule::default().parse("0 30 9 * * Mon").unwrap();
-let vixie = Schedule::vixie().parse("0 0 0 * * 0").unwrap();
+let vixie = Schedule::vixie().parse("0 0 0 * Nov-Mar 7-mon").unwrap();
 ```
 
 Default config values:
 
 - `cron_schedule_parts`: `CronScheduleParts::Six`
-- `day_of_week_numbering`: `DayOfWeekNumbering::OneToSeven`
+- `day_of_week_numbering`: `DayOfWeekNumbering::OneIndexed`
+- `wraparound_ranges`: `false`
 - `dow_dom_operand`: `DowDomOperand::And`
 - `search_interval`: `400 * 366` days
 

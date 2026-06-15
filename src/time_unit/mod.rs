@@ -16,7 +16,7 @@ pub use self::years::Years;
 
 use crate::error::*;
 use crate::ordinal::{Ordinal, OrdinalSet};
-use crate::specifier::{RootSpecifier, Specifier};
+use crate::specifier::{RangeEndpoint, RootSpecifier, Specifier};
 use std::borrow::Cow;
 use std::collections::btree_set;
 use std::iter;
@@ -202,6 +202,22 @@ where
     }
 }
 
+pub(crate) fn ordinal_range_values(
+    start: Ordinal,
+    end: Ordinal,
+    inclusive_min: Ordinal,
+    inclusive_max: Ordinal,
+    wraparound_ranges: bool,
+) -> Option<Vec<Ordinal>> {
+    if start <= end {
+        Some((start..=end).collect())
+    } else if wraparound_ranges {
+        Some((start..=inclusive_max).chain(inclusive_min..=end).collect())
+    } else {
+        None
+    }
+}
+
 pub trait TimeUnitField
 where
     Self: Sized,
@@ -237,6 +253,14 @@ where
         ))
         .into())
     }
+
+    fn ordinal_from_range_endpoint(endpoint: &RangeEndpoint) -> Result<Ordinal, Error> {
+        match endpoint {
+            RangeEndpoint::Ordinal(ordinal) => Ok(*ordinal),
+            RangeEndpoint::Name(name) => Self::ordinal_from_name(name),
+        }
+    }
+
     fn validate_ordinal(ordinal: Ordinal) -> Result<Ordinal, Error> {
         //println!("validate_ordinal for {} => {}", Self::name(), ordinal);
         match ordinal {
@@ -260,43 +284,65 @@ where
     }
 
     fn ordinals_from_specifier(specifier: &Specifier) -> Result<OrdinalSet, Error> {
+        Self::ordinals_from_specifier_with_options(specifier, false)
+    }
+
+    fn ordinal_values_from_specifier_with_options(
+        specifier: &Specifier,
+        wraparound_ranges: bool,
+    ) -> Result<Vec<Ordinal>, Error> {
         use self::Specifier::*;
         //println!("ordinals_from_specifier for {} => {:?}", Self::name(), specifier);
-        match *specifier {
-            All => Ok(Self::supported_ordinals()),
-            Point(ordinal) => Ok(([ordinal]).iter().cloned().collect()),
+        match specifier {
+            All => Ok((Self::inclusive_min()..=Self::inclusive_max()).collect()),
+            Point(ordinal) => Ok(vec![Self::validate_ordinal(*ordinal)?]),
             Range(start, end) => {
-                match (Self::validate_ordinal(start), Self::validate_ordinal(end)) {
-                    (Ok(start), Ok(end)) if start <= end => Ok((start..end + 1).collect()),
-                    _ => Err(ErrorKind::Expression(format!(
+                let start_ordinal =
+                    Self::validate_ordinal(Self::ordinal_from_range_endpoint(start)?)?;
+                let end_ordinal = Self::validate_ordinal(Self::ordinal_from_range_endpoint(end)?)?;
+                ordinal_range_values(
+                    start_ordinal,
+                    end_ordinal,
+                    Self::inclusive_min(),
+                    Self::inclusive_max(),
+                    wraparound_ranges,
+                )
+                .ok_or_else(|| {
+                    ErrorKind::Expression(format!(
                         "Invalid range for {}: {}-{}",
                         Self::name(),
                         start,
                         end
                     ))
-                    .into()),
-                }
-            }
-            NamedRange(ref start_name, ref end_name) => {
-                let start = Self::ordinal_from_name(start_name)?;
-                let end = Self::ordinal_from_name(end_name)?;
-                match (Self::validate_ordinal(start), Self::validate_ordinal(end)) {
-                    (Ok(start), Ok(end)) if start <= end => Ok((start..end + 1).collect()),
-                    _ => Err(ErrorKind::Expression(format!(
-                        "Invalid named range for {}: {}-{}",
-                        Self::name(),
-                        start_name,
-                        end_name
-                    ))
-                    .into()),
-                }
+                    .into()
+                })
             }
         }
     }
 
+    fn ordinals_from_specifier_with_options(
+        specifier: &Specifier,
+        wraparound_ranges: bool,
+    ) -> Result<OrdinalSet, Error> {
+        Ok(
+            Self::ordinal_values_from_specifier_with_options(specifier, wraparound_ranges)?
+                .into_iter()
+                .collect(),
+        )
+    }
+
     fn ordinals_from_root_specifier(root_specifier: &RootSpecifier) -> Result<OrdinalSet, Error> {
+        Self::ordinals_from_root_specifier_with_options(root_specifier, false)
+    }
+
+    fn ordinals_from_root_specifier_with_options(
+        root_specifier: &RootSpecifier,
+        wraparound_ranges: bool,
+    ) -> Result<OrdinalSet, Error> {
         let ordinals = match root_specifier {
-            RootSpecifier::Specifier(specifier) => Self::ordinals_from_specifier(specifier)?,
+            RootSpecifier::Specifier(specifier) => {
+                Self::ordinals_from_specifier_with_options(specifier, wraparound_ranges)?
+            }
             RootSpecifier::Period(_, 0) => Err(ErrorKind::Expression(
                 "range step cannot be zero".to_string(),
             ))?,
@@ -311,16 +357,19 @@ where
                     .into());
                 }
 
-                let base_set = match start {
+                let base_values = match start {
                     // A point prior to a period implies a range whose start is the specified
                     // point and terminating inclusively with the inclusive max
                     Specifier::Point(start) => {
                         let start = Self::validate_ordinal(*start)?;
                         (start..=Self::inclusive_max()).collect()
                     }
-                    specifier => Self::ordinals_from_specifier(specifier)?,
+                    specifier => Self::ordinal_values_from_specifier_with_options(
+                        specifier,
+                        wraparound_ranges,
+                    )?,
                 };
-                base_set.into_iter().step_by(*step as usize).collect()
+                base_values.into_iter().step_by(*step as usize).collect()
             }
             RootSpecifier::NamedPoint(ref name) => ([Self::ordinal_from_name(name)?])
                 .iter()

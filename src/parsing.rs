@@ -114,6 +114,14 @@ fn point(i: &mut &str) -> winnow::Result<Specifier> {
     ordinal.map(Specifier::Point).parse_next(i)
 }
 
+fn range_endpoint(i: &mut &str) -> winnow::Result<RangeEndpoint> {
+    alt((
+        ordinal.map(RangeEndpoint::Ordinal),
+        name.map(RangeEndpoint::Name),
+    ))
+    .parse_next(i)
+}
+
 fn named_point(i: &mut &str) -> winnow::Result<RootSpecifier> {
     name.map(RootSpecifier::NamedPoint).parse_next(i)
 }
@@ -131,14 +139,15 @@ fn period_with_any(i: &mut &str) -> winnow::Result<RootSpecifier> {
 }
 
 fn range(i: &mut &str) -> winnow::Result<Specifier> {
-    separated_pair(ordinal, "-", ordinal)
+    separated_pair(range_endpoint, "-", range_endpoint)
         .map(|(start, end)| Specifier::Range(start, end))
         .parse_next(i)
 }
 
+#[cfg(test)]
 fn named_range(i: &mut &str) -> winnow::Result<Specifier> {
     separated_pair(name, "-", name)
-        .map(|(start, end)| Specifier::NamedRange(start, end))
+        .map(|(start, end)| Specifier::Range(RangeEndpoint::Name(start), RangeEndpoint::Name(end)))
         .parse_next(i)
 }
 
@@ -151,7 +160,7 @@ fn any(i: &mut &str) -> winnow::Result<Specifier> {
 }
 
 fn specifier(i: &mut &str) -> winnow::Result<Specifier> {
-    alt((all, range, point, named_range)).parse_next(i)
+    alt((all, range, point)).parse_next(i)
 }
 
 fn specifier_with_any(i: &mut &str) -> winnow::Result<Specifier> {
@@ -326,62 +335,143 @@ fn parse_field_with_any_token(token: &str) -> Result<Field, String> {
         .map_err(|parse_error| format!("{parse_error}"))
 }
 
-fn normalize_day_of_week_ordinal(
-    ordinal: Ordinal,
-    numbering: DayOfWeekNumbering,
-) -> Result<Ordinal, Error> {
-    match numbering {
-        DayOfWeekNumbering::OneToSeven => DaysOfWeek::validate_ordinal(ordinal),
-        DayOfWeekNumbering::ZeroToSix => match ordinal {
-            0..=6 => Ok(ordinal + 1),
-            _ => Err(ErrorKind::Expression(format!(
-                "Days of Week must be less than 7. ('{}' specified.)",
-                ordinal
-            ))
-            .into()),
-        },
+fn from_field_with_options<T>(field: Field, wraparound_ranges: bool) -> Result<T, Error>
+where
+    T: TimeUnitField,
+{
+    if field.specifiers.len() == 1
+        && field.specifiers.first().unwrap() == &RootSpecifier::from(Specifier::All)
+    {
+        return Ok(T::all());
+    }
+
+    let mut ordinals = OrdinalSet::new();
+    for specifier in field.specifiers {
+        let specifier_ordinals =
+            T::ordinals_from_root_specifier_with_options(&specifier, wraparound_ranges)?;
+        for ordinal in specifier_ordinals {
+            ordinals.insert(T::validate_ordinal(ordinal)?);
+        }
+    }
+    Ok(T::from_ordinal_set(ordinals))
+}
+
+fn zero_indexed_day_of_week_from_numeric(ordinal: Ordinal) -> Result<Ordinal, Error> {
+    match ordinal {
+        0 | 7 => Ok(0),
+        1..=6 => Ok(ordinal),
+        _ => Err(ErrorKind::Expression(format!(
+            "Days of Week must be between 0 and 7. ('{}' specified.)",
+            ordinal
+        ))
+        .into()),
     }
 }
 
-fn normalize_day_of_week_specifier(
-    specifier: Specifier,
-    numbering: DayOfWeekNumbering,
-) -> Result<Specifier, Error> {
+fn zero_indexed_day_of_week_to_internal_ordinal(ordinal: Ordinal) -> Ordinal {
+    debug_assert!(ordinal <= 6);
+    ordinal + 1
+}
+
+fn zero_indexed_day_of_week_from_name(name: &str) -> Result<Ordinal, Error> {
+    let internal_ordinal = DaysOfWeek::ordinal_from_name(name)?;
+    debug_assert!((1..=7).contains(&internal_ordinal));
+    // The shared day-name map uses the crate's Sunday=1 internal ordinals.
+    // Vixie range expansion uses Sunday=0, so decrement named weekdays into that space.
+    Ok(internal_ordinal - 1)
+}
+
+fn zero_indexed_day_of_week_from_endpoint(endpoint: &RangeEndpoint) -> Result<Ordinal, Error> {
+    match endpoint {
+        RangeEndpoint::Ordinal(ordinal) => zero_indexed_day_of_week_from_numeric(*ordinal),
+        RangeEndpoint::Name(name) => zero_indexed_day_of_week_from_name(name),
+    }
+}
+
+fn zero_indexed_day_of_week_values_from_specifier(
+    specifier: &Specifier,
+    wraparound_ranges: bool,
+) -> Result<Vec<Ordinal>, Error> {
     match specifier {
-        Specifier::All => Ok(Specifier::All),
-        Specifier::Point(ordinal) => Ok(Specifier::Point(normalize_day_of_week_ordinal(
-            ordinal, numbering,
-        )?)),
-        Specifier::Range(start, end) => Ok(Specifier::Range(
-            normalize_day_of_week_ordinal(start, numbering)?,
-            normalize_day_of_week_ordinal(end, numbering)?,
-        )),
-        Specifier::NamedRange(start, end) => Ok(Specifier::NamedRange(start, end)),
+        Specifier::All => Ok((0..=6).collect()),
+        Specifier::Point(ordinal) => Ok(vec![zero_indexed_day_of_week_from_numeric(*ordinal)?]),
+        Specifier::Range(start, end) => {
+            let start_ordinal = zero_indexed_day_of_week_from_endpoint(start)?;
+            let end_ordinal = zero_indexed_day_of_week_from_endpoint(end)?;
+            ordinal_range_values(start_ordinal, end_ordinal, 0, 6, wraparound_ranges).ok_or_else(
+                || {
+                    ErrorKind::Expression(format!(
+                        "Invalid range for Days of Week: {}-{}",
+                        start, end
+                    ))
+                    .into()
+                },
+            )
+        }
     }
 }
 
-fn normalize_day_of_week_field(
-    field: Field,
-    numbering: DayOfWeekNumbering,
-) -> Result<Field, Error> {
-    let specifiers = field
-        .specifiers
-        .into_iter()
-        .map(|root_specifier| {
-            let specifier = match root_specifier {
-                RootSpecifier::Specifier(specifier) => {
-                    RootSpecifier::Specifier(normalize_day_of_week_specifier(specifier, numbering)?)
-                }
-                RootSpecifier::Period(specifier, step) => RootSpecifier::Period(
-                    normalize_day_of_week_specifier(specifier, numbering)?,
+fn zero_indexed_day_of_week_internal_ordinals_from_root_specifier(
+    root_specifier: &RootSpecifier,
+    wraparound_ranges: bool,
+) -> Result<OrdinalSet, Error> {
+    let ordinals = match root_specifier {
+        RootSpecifier::Specifier(specifier) => {
+            zero_indexed_day_of_week_values_from_specifier(specifier, wraparound_ranges)?
+        }
+        RootSpecifier::Period(_, 0) => Err(ErrorKind::Expression(
+            "range step cannot be zero".to_string(),
+        ))?,
+        RootSpecifier::Period(start, step) => {
+            if *step < 1 || *step > 7 {
+                return Err(ErrorKind::Expression(format!(
+                    "Days of Week must be between 1 and 7. ('{}' specified.)",
                     step,
-                ),
-                RootSpecifier::NamedPoint(name) => RootSpecifier::NamedPoint(name),
+                ))
+                .into());
+            }
+
+            let base_values = match start {
+                Specifier::Point(start) => {
+                    let start = zero_indexed_day_of_week_from_numeric(*start)?;
+                    (start..=6).collect()
+                }
+                specifier => {
+                    zero_indexed_day_of_week_values_from_specifier(specifier, wraparound_ranges)?
+                }
             };
-            Ok(specifier)
-        })
-        .collect::<Result<Vec<_>, Error>>()?;
-    Ok(Field { specifiers })
+            base_values.into_iter().step_by(*step as usize).collect()
+        }
+        RootSpecifier::NamedPoint(name) => vec![zero_indexed_day_of_week_from_name(name)?],
+    };
+
+    Ok(ordinals
+        .into_iter()
+        .map(zero_indexed_day_of_week_to_internal_ordinal)
+        .collect())
+}
+
+fn days_of_week_from_field(field: Field, config: ScheduleConfig) -> Result<DaysOfWeek, Error> {
+    if field.specifiers.len() == 1
+        && field.specifiers.first().unwrap() == &RootSpecifier::from(Specifier::All)
+    {
+        return Ok(DaysOfWeek::all());
+    }
+
+    if config.day_of_week_numbering == DayOfWeekNumbering::OneIndexed {
+        return from_field_with_options(field, config.wraparound_ranges);
+    }
+
+    let mut ordinals = OrdinalSet::new();
+    for specifier in field.specifiers {
+        for ordinal in zero_indexed_day_of_week_internal_ordinals_from_root_specifier(
+            &specifier,
+            config.wraparound_ranges,
+        )? {
+            ordinals.insert(DaysOfWeek::validate_ordinal(ordinal)?);
+        }
+    }
+    Ok(DaysOfWeek::from_ordinal_set(ordinals))
 }
 
 fn build_schedule_fields_from_six_part_tokens(
@@ -390,37 +480,51 @@ fn build_schedule_fields_from_six_part_tokens(
 ) -> Result<ScheduleFields, String> {
     let parse_years = |year_token: Option<&str>| -> Result<Years, String> {
         match year_token {
-            Some(token) => Years::from_field(parse_field_token(token)?)
-                .map_err(|parse_error| format!("{parse_error}")),
+            Some(token) => {
+                from_field_with_options(parse_field_token(token)?, config.wraparound_ranges)
+                    .map_err(|parse_error| format!("{parse_error}"))
+            }
             None => Ok(Years::all()),
         }
     };
 
     let parse_days_of_week = |token: &str| -> Result<DaysOfWeek, String> {
-        let field = parse_field_with_any_token(token).and_then(|f| {
-            normalize_day_of_week_field(f, config.day_of_week_numbering).map_err(|e| format!("{e}"))
-        })?;
-        DaysOfWeek::from_field(field).map_err(|parse_error| format!("{parse_error}"))
+        days_of_week_from_field(parse_field_with_any_token(token)?, config)
+            .map_err(|parse_error| format!("{parse_error}"))
     };
 
     let (seconds, minutes, hours, days_of_month, months, days_of_week, years) = match tokens {
         [seconds, minutes, hours, days_of_month, months, days_of_week] => (
-            Seconds::from_field(parse_field_token(seconds)?).map_err(|e| e.to_string())?,
-            Minutes::from_field(parse_field_token(minutes)?).map_err(|e| e.to_string())?,
-            Hours::from_field(parse_field_token(hours)?).map_err(|e| e.to_string())?,
-            DaysOfMonth::from_field(parse_field_with_any_token(days_of_month)?)
+            from_field_with_options(parse_field_token(seconds)?, config.wraparound_ranges)
                 .map_err(|e| e.to_string())?,
-            Months::from_field(parse_field_token(months)?).map_err(|e| e.to_string())?,
+            from_field_with_options(parse_field_token(minutes)?, config.wraparound_ranges)
+                .map_err(|e| e.to_string())?,
+            from_field_with_options(parse_field_token(hours)?, config.wraparound_ranges)
+                .map_err(|e| e.to_string())?,
+            from_field_with_options(
+                parse_field_with_any_token(days_of_month)?,
+                config.wraparound_ranges,
+            )
+            .map_err(|e| e.to_string())?,
+            from_field_with_options(parse_field_token(months)?, config.wraparound_ranges)
+                .map_err(|e| e.to_string())?,
             parse_days_of_week(days_of_week)?,
             Years::all(),
         ),
         [seconds, minutes, hours, days_of_month, months, days_of_week, year] => (
-            Seconds::from_field(parse_field_token(seconds)?).map_err(|e| e.to_string())?,
-            Minutes::from_field(parse_field_token(minutes)?).map_err(|e| e.to_string())?,
-            Hours::from_field(parse_field_token(hours)?).map_err(|e| e.to_string())?,
-            DaysOfMonth::from_field(parse_field_with_any_token(days_of_month)?)
+            from_field_with_options(parse_field_token(seconds)?, config.wraparound_ranges)
                 .map_err(|e| e.to_string())?,
-            Months::from_field(parse_field_token(months)?).map_err(|e| e.to_string())?,
+            from_field_with_options(parse_field_token(minutes)?, config.wraparound_ranges)
+                .map_err(|e| e.to_string())?,
+            from_field_with_options(parse_field_token(hours)?, config.wraparound_ranges)
+                .map_err(|e| e.to_string())?,
+            from_field_with_options(
+                parse_field_with_any_token(days_of_month)?,
+                config.wraparound_ranges,
+            )
+            .map_err(|e| e.to_string())?,
+            from_field_with_options(parse_field_token(months)?, config.wraparound_ranges)
+                .map_err(|e| e.to_string())?,
             parse_days_of_week(days_of_week)?,
             parse_years(Some(year))?,
         ),
@@ -444,35 +548,47 @@ fn build_schedule_fields_from_five_part_tokens(
 ) -> Result<ScheduleFields, String> {
     let parse_years = |year_token: Option<&str>| -> Result<Years, String> {
         match year_token {
-            Some(token) => Years::from_field(parse_field_token(token)?)
-                .map_err(|parse_error| format!("{parse_error}")),
+            Some(token) => {
+                from_field_with_options(parse_field_token(token)?, config.wraparound_ranges)
+                    .map_err(|parse_error| format!("{parse_error}"))
+            }
             None => Ok(Years::all()),
         }
     };
 
     let parse_days_of_week = |token: &str| -> Result<DaysOfWeek, String> {
-        let field = parse_field_with_any_token(token).and_then(|f| {
-            normalize_day_of_week_field(f, config.day_of_week_numbering).map_err(|e| format!("{e}"))
-        })?;
-        DaysOfWeek::from_field(field).map_err(|parse_error| format!("{parse_error}"))
+        days_of_week_from_field(parse_field_with_any_token(token)?, config)
+            .map_err(|parse_error| format!("{parse_error}"))
     };
 
     let (minutes, hours, days_of_month, months, days_of_week, years) = match tokens {
         [minutes, hours, days_of_month, months, days_of_week] => (
-            Minutes::from_field(parse_field_token(minutes)?).map_err(|e| e.to_string())?,
-            Hours::from_field(parse_field_token(hours)?).map_err(|e| e.to_string())?,
-            DaysOfMonth::from_field(parse_field_with_any_token(days_of_month)?)
+            from_field_with_options(parse_field_token(minutes)?, config.wraparound_ranges)
                 .map_err(|e| e.to_string())?,
-            Months::from_field(parse_field_token(months)?).map_err(|e| e.to_string())?,
+            from_field_with_options(parse_field_token(hours)?, config.wraparound_ranges)
+                .map_err(|e| e.to_string())?,
+            from_field_with_options(
+                parse_field_with_any_token(days_of_month)?,
+                config.wraparound_ranges,
+            )
+            .map_err(|e| e.to_string())?,
+            from_field_with_options(parse_field_token(months)?, config.wraparound_ranges)
+                .map_err(|e| e.to_string())?,
             parse_days_of_week(days_of_week)?,
             Years::all(),
         ),
         [minutes, hours, days_of_month, months, days_of_week, year] => (
-            Minutes::from_field(parse_field_token(minutes)?).map_err(|e| e.to_string())?,
-            Hours::from_field(parse_field_token(hours)?).map_err(|e| e.to_string())?,
-            DaysOfMonth::from_field(parse_field_with_any_token(days_of_month)?)
+            from_field_with_options(parse_field_token(minutes)?, config.wraparound_ranges)
                 .map_err(|e| e.to_string())?,
-            Months::from_field(parse_field_token(months)?).map_err(|e| e.to_string())?,
+            from_field_with_options(parse_field_token(hours)?, config.wraparound_ranges)
+                .map_err(|e| e.to_string())?,
+            from_field_with_options(
+                parse_field_with_any_token(days_of_month)?,
+                config.wraparound_ranges,
+            )
+            .map_err(|e| e.to_string())?,
+            from_field_with_options(parse_field_token(months)?, config.wraparound_ranges)
+                .map_err(|e| e.to_string())?,
             parse_days_of_week(days_of_week)?,
             parse_years(Some(year))?,
         ),

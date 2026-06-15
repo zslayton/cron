@@ -113,19 +113,137 @@ mod tests {
     #[test]
     fn test_parse_vixie_day_of_week_numbering() {
         let config = ScheduleConfig {
-            day_of_week_numbering: DayOfWeekNumbering::ZeroToSix,
+            day_of_week_numbering: DayOfWeekNumbering::ZeroIndexed,
             ..ScheduleConfig::default()
         };
         let schedule = Schedule::from_str_with_config("0 0 0 * * 0", config).unwrap();
+        let schedule_with_seven = Schedule::from_str_with_config("0 0 0 * * 7", config).unwrap();
         let sunday = Utc.with_ymd_and_hms(2024, 1, 7, 0, 0, 0).unwrap();
         let monday = Utc.with_ymd_and_hms(2024, 1, 8, 0, 0, 0).unwrap();
         assert!(schedule.includes(sunday));
         assert!(!schedule.includes(monday));
+        assert!(schedule_with_seven.includes(sunday));
+        assert!(!schedule_with_seven.includes(monday));
+        assert!(Schedule::from_str_with_config("0 0 0 * * 8", config).is_err());
     }
 
     #[test]
     fn test_default_day_of_week_numbering_rejects_zero() {
         assert!(Schedule::from_str_with_config("0 0 0 * * 0", ScheduleConfig::default()).is_err());
+    }
+
+    #[test]
+    fn test_default_day_of_week_numbering_treats_seven_as_saturday() {
+        let schedule =
+            Schedule::from_str_with_config("0 0 0 * * 7", ScheduleConfig::default()).unwrap();
+        let saturday = Utc.with_ymd_and_hms(2024, 1, 6, 0, 0, 0).unwrap();
+        let sunday = Utc.with_ymd_and_hms(2024, 1, 7, 0, 0, 0).unwrap();
+        assert!(schedule.includes(saturday));
+        assert!(!schedule.includes(sunday));
+    }
+
+    #[test]
+    fn test_wraparound_ranges_disabled_by_default() {
+        assert!(Schedule::builder().parse("0 0 0 * Nov-Mar *").is_err());
+        assert!(Schedule::builder().parse("0 0 22-2 * * *").is_err());
+        assert!(Schedule::builder().parse("0 0 0 * * Fri-Mon").is_err());
+    }
+
+    #[test]
+    fn test_wraparound_ranges_all_fields() {
+        let schedule = Schedule::builder()
+            .wraparound_ranges(true)
+            .parse("55-2 55-2 22-2 28-3 Nov-Mar 6-2 2099-1971")
+            .unwrap();
+
+        assert!(schedule.seconds().includes(55));
+        assert!(schedule.seconds().includes(0));
+        assert!(schedule.seconds().includes(2));
+        assert!(!schedule.seconds().includes(3));
+        assert!(schedule.minutes().includes(55));
+        assert!(schedule.minutes().includes(0));
+        assert!(schedule.minutes().includes(2));
+        assert!(!schedule.minutes().includes(3));
+        assert!(schedule.hours().includes(22));
+        assert!(schedule.hours().includes(0));
+        assert!(schedule.hours().includes(2));
+        assert!(!schedule.hours().includes(3));
+        assert!(schedule.days_of_month().includes(28));
+        assert!(schedule.days_of_month().includes(31));
+        assert!(schedule.days_of_month().includes(1));
+        assert!(schedule.days_of_month().includes(3));
+        assert!(!schedule.days_of_month().includes(4));
+        assert!(schedule.months().includes(11));
+        assert!(schedule.months().includes(12));
+        assert!(schedule.months().includes(1));
+        assert!(schedule.months().includes(3));
+        assert!(!schedule.months().includes(4));
+        assert!(schedule.days_of_week().includes(6));
+        assert!(schedule.days_of_week().includes(7));
+        assert!(schedule.days_of_week().includes(1));
+        assert!(schedule.days_of_week().includes(2));
+        assert!(!schedule.days_of_week().includes(3));
+        assert!(schedule.years().includes(2099));
+        assert!(schedule.years().includes(2100));
+        assert!(schedule.years().includes(1970));
+        assert!(schedule.years().includes(1971));
+        assert!(!schedule.years().includes(1972));
+    }
+
+    #[test]
+    fn test_wraparound_ranges_apply_steps_in_circular_order() {
+        let schedule = Schedule::builder()
+            .wraparound_ranges(true)
+            .parse("0 0 22-2/2 * Nov-Mar/2 *")
+            .unwrap();
+
+        assert!(schedule.hours().includes(22));
+        assert!(!schedule.hours().includes(23));
+        assert!(schedule.hours().includes(0));
+        assert!(!schedule.hours().includes(1));
+        assert!(schedule.hours().includes(2));
+        assert!(schedule.months().includes(11));
+        assert!(!schedule.months().includes(12));
+        assert!(schedule.months().includes(1));
+        assert!(!schedule.months().includes(2));
+        assert!(schedule.months().includes(3));
+    }
+
+    #[test]
+    fn test_vixie_preset_accepts_full_quirks() {
+        let sunday_zero = Schedule::vixie().parse("0 0 0 * * 0").unwrap();
+        let sunday_seven = Schedule::vixie().parse("0 0 0 * * 7").unwrap();
+        let sunday_alias_period = Schedule::vixie().parse("0 0 0 * * 7/2").unwrap();
+        let seven_to_monday = Schedule::vixie().parse("0 0 0 * * 7-mon").unwrap();
+        let friday_to_monday = Schedule::vixie().parse("0 0 0 * * Fri-Mon").unwrap();
+        let november_to_march = Schedule::vixie().parse("0 0 0 * Nov-Mar *").unwrap();
+
+        let friday = Utc.with_ymd_and_hms(2024, 1, 5, 0, 0, 0).unwrap();
+        let saturday = Utc.with_ymd_and_hms(2024, 1, 6, 0, 0, 0).unwrap();
+        let sunday = Utc.with_ymd_and_hms(2024, 1, 7, 0, 0, 0).unwrap();
+        let monday = Utc.with_ymd_and_hms(2024, 1, 8, 0, 0, 0).unwrap();
+        let tuesday = Utc.with_ymd_and_hms(2024, 1, 9, 0, 0, 0).unwrap();
+        let thursday = Utc.with_ymd_and_hms(2024, 1, 11, 0, 0, 0).unwrap();
+
+        assert!(sunday_zero.includes(sunday));
+        assert!(sunday_seven.includes(sunday));
+        assert!(sunday_alias_period.includes(sunday));
+        assert!(!sunday_alias_period.includes(monday));
+        assert!(sunday_alias_period.includes(tuesday));
+        assert!(sunday_alias_period.includes(thursday));
+        assert!(seven_to_monday.includes(sunday));
+        assert!(seven_to_monday.includes(monday));
+        assert!(!seven_to_monday.includes(tuesday));
+        assert!(friday_to_monday.includes(friday));
+        assert!(friday_to_monday.includes(saturday));
+        assert!(friday_to_monday.includes(sunday));
+        assert!(friday_to_monday.includes(monday));
+        assert!(!friday_to_monday.includes(tuesday));
+        assert!(november_to_march.months().includes(11));
+        assert!(november_to_march.months().includes(12));
+        assert!(november_to_march.months().includes(1));
+        assert!(november_to_march.months().includes(3));
+        assert!(!november_to_march.months().includes(4));
     }
 
     #[test]

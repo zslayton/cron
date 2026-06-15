@@ -15,9 +15,9 @@ pub enum CronScheduleParts {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DayOfWeekNumbering {
     /// Sunday=1 through Saturday=7.
-    OneToSeven,
-    /// Sunday=0 through Saturday=6.
-    ZeroToSix,
+    OneIndexed,
+    /// Sunday=0 or 7, Monday=1 through Saturday=6.
+    ZeroIndexed,
 }
 
 /// Controls how day-of-month and day-of-week fields are combined.
@@ -34,6 +34,7 @@ pub enum DowDomOperand {
 pub struct ScheduleConfig {
     pub cron_schedule_parts: CronScheduleParts,
     pub day_of_week_numbering: DayOfWeekNumbering,
+    pub wraparound_ranges: bool,
     pub dow_dom_operand: DowDomOperand,
     pub search_interval: TimeDelta,
 }
@@ -42,7 +43,8 @@ impl Default for ScheduleConfig {
     fn default() -> Self {
         Self {
             cron_schedule_parts: CronScheduleParts::Six,
-            day_of_week_numbering: DayOfWeekNumbering::OneToSeven,
+            day_of_week_numbering: DayOfWeekNumbering::OneIndexed,
+            wraparound_ranges: false,
             dow_dom_operand: DowDomOperand::And,
             search_interval: TimeDelta::days(400 * 366),
         }

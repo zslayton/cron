@@ -41,10 +41,11 @@ impl Schedule {
         Schedule::builder()
     }
 
-    /// Returns a parser builder configured for Vixie day-of-week numbering (0-6).
+    /// Returns a parser builder configured for Vixie cron behavior.
     pub fn vixie() -> ScheduleConfigBuilder {
         Schedule::builder()
-            .day_of_week_numbering(DayOfWeekNumbering::ZeroToSix)
+            .day_of_week_numbering(DayOfWeekNumbering::ZeroIndexed)
+            .wraparound_ranges(true)
             .dow_dom_operand(DowDomOperand::Or)
     }
 
@@ -301,6 +302,11 @@ impl ScheduleConfigBuilder {
 
     pub fn day_of_week_numbering(mut self, numbering: DayOfWeekNumbering) -> Self {
         self.config.day_of_week_numbering = numbering;
+        self
+    }
+
+    pub fn wraparound_ranges(mut self, wraparound_ranges: bool) -> Self {
+        self.config.wraparound_ranges = wraparound_ranges;
         self
     }
 
