@@ -177,7 +177,7 @@ where
     T: TimeUnitField,
 {
     fn includes(&self, ordinal: Ordinal) -> bool {
-        self.ordinals().contains(&ordinal)
+        self.contains_ordinal(ordinal)
     }
     fn iter(&self) -> OrdinalIter<'_> {
         OrdinalIter {
@@ -197,8 +197,7 @@ where
     }
 
     fn is_all(&self) -> bool {
-        let max_supported_ordinals = Self::inclusive_max() - Self::inclusive_min() + 1;
-        self.ordinals().len() == max_supported_ordinals as usize
+        self.has_all_ordinals()
     }
 }
 
@@ -271,6 +270,15 @@ where
     fn inclusive_min() -> Ordinal;
     fn inclusive_max() -> Ordinal;
     fn ordinals(&self) -> &OrdinalSet;
+
+    fn contains_ordinal(&self, ordinal: Ordinal) -> bool {
+        self.ordinals().contains(&ordinal)
+    }
+
+    fn has_all_ordinals(&self) -> bool {
+        let max_supported_ordinals = Self::inclusive_max() - Self::inclusive_min() + 1;
+        self.ordinals().len() == max_supported_ordinals as usize
+    }
 
     fn from_ordinal(ordinal: Ordinal) -> Self {
         Self::from_ordinal_set(iter::once(ordinal).collect())

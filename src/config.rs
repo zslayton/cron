@@ -7,8 +7,14 @@ pub enum CronScheduleParts {
     Five,
     /// Accept only 6-part expressions: second minute hour day-of-month month day-of-week.
     Six,
-    /// Accept both 5-part and 6-part expressions.
-    Both,
+    /// Accept only 7-part expressions: second minute hour day-of-month month day-of-week year.
+    Seven,
+    /// Accept 5- or 6-part expressions.
+    FiveOrSix,
+    /// Accept 6- or 7-part expressions.
+    SixOrSeven,
+    /// Accept 5-, 6-, or 7-part expressions.
+    All,
 }
 
 /// Controls accepted day-of-week numeric notation in cron expressions.
@@ -52,7 +58,7 @@ pub struct ScheduleConfig {
 impl Default for ScheduleConfig {
     fn default() -> Self {
         Self {
-            cron_schedule_parts: CronScheduleParts::Six,
+            cron_schedule_parts: CronScheduleParts::SixOrSeven,
             day_of_week_numbering: DayOfWeekNumbering::OneIndexed,
             wraparound_ranges: false,
             dow_dom_operand: DowDomOperand::And,

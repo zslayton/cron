@@ -25,6 +25,7 @@ where
             if year == self.initial_datetime().year() as u32 {
                 return self.initial_datetime().month();
             }
+            self.reset_day_of_month();
         }
         default
     }
@@ -90,7 +91,7 @@ pub(crate) trait Query<Z>: Cursor<Z>
 where
     Z: TimeZone,
 {
-    fn year_range(&self) -> (Bound<Ordinal>, Bound<Ordinal>);
+    fn year_range(&self, search_interval: Duration) -> (Bound<Ordinal>, Bound<Ordinal>);
     fn month_default_bound(&self) -> Ordinal;
     fn month_range(&self, bound: Ordinal) -> (Bound<Ordinal>, Bound<Ordinal>);
     fn day_of_month_default_bound(&self) -> Ordinal;
@@ -109,11 +110,24 @@ where
     fn preceeds_reference_datetime(&self, candidate: &DateTime<Z>) -> bool;
     fn preferred_candidate(&self, lhs: DateTime<Z>, rhs: DateTime<Z>) -> DateTime<Z>;
 
-    fn years<'a>(&self, fields: &'a ScheduleFields) -> Box<dyn Iterator<Item = &'a Ordinal> + 'a> {
-        order_iter(
-            self.is_reversed(),
-            fields.years_ordinals().range(self.year_range()),
-        )
+    fn years<'a>(
+        &self,
+        fields: &'a ScheduleFields,
+        search_interval: Duration,
+    ) -> Box<dyn Iterator<Item = Ordinal> + 'a> {
+        let Some((start, end)) = ordinal_bounds(self.year_range(search_interval)) else {
+            return Box::new(std::iter::empty());
+        };
+
+        if start > end {
+            return Box::new(std::iter::empty());
+        }
+
+        if fields.years_are_unrestricted() {
+            return order_iter(self.is_reversed(), start..=end);
+        }
+
+        order_iter(self.is_reversed(), fields.years_between(start, end))
     }
 
     fn months<'a>(
@@ -232,6 +246,26 @@ where
     }
 }
 
+fn ordinal_bounds(range: (Bound<Ordinal>, Bound<Ordinal>)) -> Option<(Ordinal, Ordinal)> {
+    Some((lower_ordinal_bound(range.0)?, upper_ordinal_bound(range.1)?))
+}
+
+fn lower_ordinal_bound(bound: Bound<Ordinal>) -> Option<Ordinal> {
+    match bound {
+        Included(ordinal) => Some(ordinal),
+        Bound::Excluded(ordinal) => ordinal.checked_add(1),
+        Unbounded => Some(0),
+    }
+}
+
+fn upper_ordinal_bound(bound: Bound<Ordinal>) -> Option<Ordinal> {
+    match bound {
+        Included(ordinal) => Some(ordinal),
+        Bound::Excluded(ordinal) => ordinal.checked_sub(1),
+        Unbounded => Some(i32::MAX as Ordinal),
+    }
+}
+
 pub struct NextAfterQuery<Z>
 where
     Z: TimeZone,
@@ -295,8 +329,15 @@ impl<Z> Query<Z> for NextAfterQuery<Z>
 where
     Z: TimeZone,
 {
-    fn year_range(&self) -> (Bound<Ordinal>, Bound<Ordinal>) {
-        (Included(self.initial_datetime.year() as u32), Unbounded)
+    fn year_range(&self, search_interval: Duration) -> (Bound<Ordinal>, Bound<Ordinal>) {
+        let upper = self
+            .initial_datetime
+            .clone()
+            .checked_add_signed(search_interval)
+            .map(|datetime| Included(datetime.year() as u32))
+            .unwrap_or(Unbounded);
+
+        (Included(self.initial_datetime.year() as u32), upper)
     }
 
     fn month_default_bound(&self) -> Ordinal {
@@ -428,8 +469,15 @@ impl<Z> Query<Z> for PrevFromQuery<Z>
 where
     Z: TimeZone,
 {
-    fn year_range(&self) -> (Bound<Ordinal>, Bound<Ordinal>) {
-        (Unbounded, Included(self.initial_datetime.year() as u32))
+    fn year_range(&self, search_interval: Duration) -> (Bound<Ordinal>, Bound<Ordinal>) {
+        let lower = self
+            .initial_datetime
+            .clone()
+            .checked_sub_signed(search_interval)
+            .map(|datetime| Included(datetime.year() as u32))
+            .unwrap_or(Unbounded);
+
+        (lower, Included(self.initial_datetime.year() as u32))
     }
 
     fn month_default_bound(&self) -> Ordinal {

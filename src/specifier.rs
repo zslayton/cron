@@ -1,7 +1,7 @@
 use crate::ordinal::*;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RangeEndpoint {
     Ordinal(Ordinal),
     Name(String),
@@ -16,7 +16,7 @@ impl Display for RangeEndpoint {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Specifier {
     All,
     Point(Ordinal),
@@ -30,7 +30,7 @@ pub enum Specifier {
 // - named range: 'Mon-Thurs/2'
 //
 // Without this separation we would end up with invalid combinations such as 'Mon/2'
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RootSpecifier {
     Specifier(Specifier),
     Period(Specifier, u32),

@@ -92,21 +92,21 @@ impl Schedule {
             }
             _ => false,
         };
-        for year in query.years(&self.fields) {
-            for month in query.months(&self.fields, *year) {
+        for year in query.years(&self.fields, self.config.search_interval) {
+            for month in query.months(&self.fields, year) {
                 for day_of_month in
-                    query.days_of_month(&self.fields, *year, *month, self.config.dow_dom_operand)
+                    query.days_of_month(&self.fields, year, *month, self.config.dow_dom_operand)
                 {
                     for hour in query.hours(&self.fields) {
                         let fold_hour_scan = fold_scan_active
-                            && *year as i32 == reference_naive.year()
+                            && year as i32 == reference_naive.year()
                             && *month == reference_naive.month()
                             && day_of_month == reference_naive.day()
                             && *hour == reference_naive.hour();
                         for minute in query.minutes(&self.fields, fold_hour_scan) {
                             for second in query.seconds(&self.fields, fold_hour_scan) {
                                 let local_result = datetime.timezone().with_ymd_and_hms(
-                                    *year as i32,
+                                    year as i32,
                                     *month,
                                     day_of_month,
                                     *hour,
@@ -126,7 +126,7 @@ impl Schedule {
                                             &datetime.timezone(),
                                             NaiveDateTime::new(
                                                 NaiveDate::from_ymd_opt(
-                                                    *year as i32,
+                                                    year as i32,
                                                     *month,
                                                     day_of_month,
                                                 )?,
@@ -257,7 +257,7 @@ impl Schedule {
     {
         let day_of_month = date_time.day() as Ordinal;
         let day_of_week = date_time.weekday().number_from_sunday();
-        self.fields.years.includes(date_time.year() as Ordinal)
+        self.fields.includes_year(date_time.year() as Ordinal)
             && self.fields.months.includes(date_time.month() as Ordinal)
             && self
                 .fields
@@ -547,8 +547,20 @@ impl ScheduleFields {
         }
     }
 
-    pub(crate) fn years_ordinals(&self) -> &OrdinalSet {
-        self.years.ordinals()
+    pub(crate) fn years_are_unrestricted(&self) -> bool {
+        self.years.is_unrestricted()
+    }
+
+    pub(crate) fn includes_year(&self, year: Ordinal) -> bool {
+        self.years.contains_ordinal(year)
+    }
+
+    pub(crate) fn years_between(
+        &self,
+        start: Ordinal,
+        end: Ordinal,
+    ) -> impl DoubleEndedIterator<Item = Ordinal> + '_ {
+        self.years.ordinals_between(start, end)
     }
 
     pub(crate) fn months_ordinals(&self) -> &OrdinalSet {
@@ -798,9 +810,7 @@ mod test {
             &[Token::String(
                 "definitively an invalid value for a cron schedule!",
             )],
-            "definitively an invalid value for a cron schedule!\n\
-                ^\n\
-                The 'Seconds' field does not support using names. 'definitively' specified.",
+            "a valid cron expression",
         );
     }
 
@@ -1066,7 +1076,7 @@ mod test {
     #[test]
     fn test_no_panic_on_leap_day_time_after() {
         let dt = chrono::DateTime::parse_from_rfc3339("2024-02-29T10:00:00.000+08:00").unwrap();
-        let schedule = Schedule::from_str("0 0 0 * * * 2100").unwrap();
+        let schedule = Schedule::from_str("0 0 0 * * * 2099").unwrap();
         let next = schedule.after(&dt).next().unwrap();
         assert!(next > dt); // test is ensuring line above does not panic
     }

@@ -101,13 +101,105 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_both_part_modes() {
+    fn test_parse_five_or_six_part_modes() {
         let config = ScheduleConfig {
-            cron_schedule_parts: CronScheduleParts::Both,
+            cron_schedule_parts: CronScheduleParts::FiveOrSix,
             ..ScheduleConfig::default()
         };
         assert!(Schedule::from_str_with_config("0 30 9 * * Mon", config).is_ok());
         assert!(Schedule::from_str_with_config("30 9 * * Mon", config).is_ok());
+        assert!(Schedule::from_str_with_config("0 30 9 * * Mon 2024", config).is_err());
+    }
+
+    #[test]
+    fn test_configured_year_field_modes_iterate_datetimes() {
+        for cron_schedule_parts in [
+            CronScheduleParts::Seven,
+            CronScheduleParts::SixOrSeven,
+            CronScheduleParts::All,
+        ] {
+            let schedule = Schedule::builder()
+                .allowed_cron_schedule_parts(cron_schedule_parts)
+                .parse("0 0 0 1 1 * 2020/2")
+                .unwrap();
+            let start = Utc.with_ymd_and_hms(2019, 12, 31, 23, 59, 59).unwrap();
+            let actual = schedule.after(&start).take(3).collect::<Vec<_>>();
+
+            assert_eq!(
+                actual,
+                vec![
+                    Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap(),
+                    Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
+                    Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+                ]
+            );
+        }
+
+        assert!(Schedule::builder()
+            .allowed_cron_schedule_parts(CronScheduleParts::Six)
+            .parse("0 0 0 1 1 * 2020")
+            .is_err());
+    }
+
+    #[test]
+    fn test_configured_year_field_iterates_past_2099() {
+        let schedule = Schedule::builder()
+            .allowed_cron_schedule_parts(CronScheduleParts::Seven)
+            .parse("0 0 0 1 1 * 2100/2")
+            .unwrap();
+        let start = Utc.with_ymd_and_hms(2099, 12, 31, 23, 59, 59).unwrap();
+        let actual = schedule.after(&start).take(3).collect::<Vec<_>>();
+
+        assert_eq!(
+            actual,
+            vec![
+                Utc.with_ymd_and_hms(2100, 1, 1, 0, 0, 0).unwrap(),
+                Utc.with_ymd_and_hms(2102, 1, 1, 0, 0, 0).unwrap(),
+                Utc.with_ymd_and_hms(2104, 1, 1, 0, 0, 0).unwrap(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_configured_year_wraparound_iterates_datetimes() {
+        let schedule = Schedule::builder()
+            .allowed_cron_schedule_parts(CronScheduleParts::Seven)
+            .wraparound_ranges(true)
+            .parse("0 0 0 1 1 * 2098-1971")
+            .unwrap();
+        let start = Utc.with_ymd_and_hms(1969, 12, 31, 23, 59, 59).unwrap();
+        let actual = schedule.after(&start).take(3).collect::<Vec<_>>();
+
+        assert_eq!(
+            actual,
+            vec![
+                Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap(),
+                Utc.with_ymd_and_hms(1971, 1, 1, 0, 0, 0).unwrap(),
+                Utc.with_ymd_and_hms(2098, 1, 1, 0, 0, 0).unwrap(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_unrestricted_years_continue_past_supported_year_field_max() {
+        let schedule = Schedule::from_str("0 0 0 1 1 *").unwrap();
+        let start = Utc.with_ymd_and_hms(2099, 1, 2, 0, 0, 0).unwrap();
+        let expected = Utc.with_ymd_and_hms(2100, 1, 1, 0, 0, 0).unwrap();
+
+        assert_eq!(Some(expected), schedule.after(&start).next());
+        assert!(schedule.includes(expected));
+        assert!(schedule.years().includes(2100));
+    }
+
+    #[test]
+    fn test_unrestricted_years_are_bounded_by_search_interval() {
+        let schedule = Schedule::builder()
+            .search_interval(TimeDelta::days(300))
+            .parse("0 0 0 1 1 *")
+            .unwrap();
+        let start = Utc.with_ymd_and_hms(2099, 1, 2, 0, 0, 0).unwrap();
+
+        assert_eq!(None, schedule.after(&start).next());
     }
 
     #[test]
@@ -293,7 +385,7 @@ mod tests {
     #[test]
     fn test_builder_interface_custom_parts() {
         let schedule = Schedule::builder()
-            .allowed_cron_schedule_parts(CronScheduleParts::Both)
+            .allowed_cron_schedule_parts(CronScheduleParts::FiveOrSix)
             .parse("30 9 * * Mon")
             .unwrap();
         let next = schedule

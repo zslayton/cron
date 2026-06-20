@@ -1,5 +1,5 @@
 use winnow::ascii::{alpha1, digit1, multispace0};
-use winnow::combinator::{alt, delimited, eof, opt, separated, separated_pair, terminated};
+use winnow::combinator::{alt, delimited, eof, separated, separated_pair, terminated};
 use winnow::prelude::*;
 
 use std::borrow::Cow;
@@ -60,42 +60,9 @@ impl FromStr for Schedule {
     }
 }
 
-fn parse_with_defaults(i: &mut &str) -> winnow::Result<ScheduleFields> {
-    schedule.parse_next(i)
-}
-
 #[derive(Debug, PartialEq)]
 pub struct Field {
     pub specifiers: Vec<RootSpecifier>, // TODO: expose iterator?
-}
-
-trait FromField
-where
-    Self: Sized,
-{
-    //TODO: Replace with std::convert::TryFrom when stable
-    fn from_field(field: Field) -> Result<Self, Error>;
-}
-
-impl<T> FromField for T
-where
-    T: TimeUnitField,
-{
-    fn from_field(field: Field) -> Result<T, Error> {
-        if field.specifiers.len() == 1
-            && field.specifiers.first().unwrap() == &RootSpecifier::from(Specifier::All)
-        {
-            return Ok(T::all());
-        }
-        let mut ordinals = OrdinalSet::new();
-        for specifier in field.specifiers {
-            let specifier_ordinals: OrdinalSet = T::ordinals_from_root_specifier(&specifier)?;
-            for ordinal in specifier_ordinals {
-                ordinals.insert(T::validate_ordinal(ordinal)?);
-            }
-        }
-        Ok(T::from_ordinal_set(ordinals))
-    }
 }
 
 fn ordinal(i: &mut &str) -> winnow::Result<u32> {
@@ -283,46 +250,6 @@ fn shorthand(i: &mut &str) -> winnow::Result<ScheduleFields> {
     delimited(multispace0, keywords, multispace0).parse_next(i)
 }
 
-fn longhand(i: &mut &str) -> winnow::Result<ScheduleFields> {
-    let seconds = field.try_map(Seconds::from_field);
-    let minutes = field.try_map(Minutes::from_field);
-    let hours = field.try_map(Hours::from_field);
-    let days_of_month = field_with_any.try_map(DaysOfMonth::from_field);
-    let months = field.try_map(Months::from_field);
-    let days_of_week = field_with_any.try_map(DaysOfWeek::from_field);
-    let years = opt(field.try_map(Years::from_field));
-    let fields = (
-        seconds,
-        minutes,
-        hours,
-        days_of_month,
-        months,
-        days_of_week,
-        years,
-    );
-
-    terminated(fields, eof)
-        .map(
-            |(seconds, minutes, hours, days_of_month, months, days_of_week, years)| {
-                let years = years.unwrap_or_else(Years::all);
-                ScheduleFields::new(
-                    seconds,
-                    minutes,
-                    hours,
-                    days_of_month,
-                    months,
-                    days_of_week,
-                    years,
-                )
-            },
-        )
-        .parse_next(i)
-}
-
-fn schedule(i: &mut &str) -> winnow::Result<ScheduleFields> {
-    alt((shorthand, longhand)).parse_next(i)
-}
-
 fn parse_field_token(token: &str) -> Result<Field, String> {
     terminated(field, eof)
         .parse(token)
@@ -499,26 +426,20 @@ fn days_of_week_from_field(field: Field, config: ScheduleConfig) -> Result<DaysO
     Ok(DaysOfWeek::from_ordinal_set(ordinals))
 }
 
+fn years_from_field(field: Field, config: ScheduleConfig) -> Result<Years, Error> {
+    Years::from_root_specifiers(field.specifiers, config.wraparound_ranges)
+}
+
 fn build_schedule_fields_from_six_part_tokens(
     tokens: &[&str],
     config: ScheduleConfig,
 ) -> Result<ScheduleFields, String> {
-    let parse_years = |year_token: Option<&str>| -> Result<Years, String> {
-        match year_token {
-            Some(token) => {
-                from_field_with_options(parse_field_token(token)?, config.wraparound_ranges)
-                    .map_err(|parse_error| format!("{parse_error}"))
-            }
-            None => Ok(Years::all()),
-        }
-    };
-
     let parse_days_of_week = |token: &str| -> Result<DaysOfWeek, String> {
         days_of_week_from_field(parse_field_with_any_token(token)?, config)
             .map_err(|parse_error| format!("{parse_error}"))
     };
 
-    let (seconds, minutes, hours, days_of_month, months, days_of_week, years) = match tokens {
+    let (seconds, minutes, hours, days_of_month, months, days_of_week) = match tokens {
         [seconds, minutes, hours, days_of_month, months, days_of_week] => (
             from_field_with_options(parse_field_token(seconds)?, config.wraparound_ranges)
                 .map_err(|e| e.to_string())?,
@@ -534,24 +455,6 @@ fn build_schedule_fields_from_six_part_tokens(
             from_field_with_options(parse_field_token(months)?, config.wraparound_ranges)
                 .map_err(|e| e.to_string())?,
             parse_days_of_week(days_of_week)?,
-            Years::all(),
-        ),
-        [seconds, minutes, hours, days_of_month, months, days_of_week, year] => (
-            from_field_with_options(parse_field_token(seconds)?, config.wraparound_ranges)
-                .map_err(|e| e.to_string())?,
-            from_field_with_options(parse_field_token(minutes)?, config.wraparound_ranges)
-                .map_err(|e| e.to_string())?,
-            from_field_with_options(parse_field_token(hours)?, config.wraparound_ranges)
-                .map_err(|e| e.to_string())?,
-            from_field_with_options(
-                parse_field_with_any_token(days_of_month)?,
-                config.wraparound_ranges,
-            )
-            .map_err(|e| e.to_string())?,
-            from_field_with_options(parse_field_token(months)?, config.wraparound_ranges)
-                .map_err(|e| e.to_string())?,
-            parse_days_of_week(days_of_week)?,
-            parse_years(Some(year))?,
         ),
         _ => return Err("a valid cron expression".to_owned()),
     };
@@ -563,7 +466,36 @@ fn build_schedule_fields_from_six_part_tokens(
         days_of_month,
         months,
         days_of_week,
-        years,
+        Years::all(),
+    ))
+}
+
+fn build_schedule_fields_from_seven_part_tokens(
+    tokens: &[&str],
+    config: ScheduleConfig,
+) -> Result<ScheduleFields, String> {
+    let [seconds, minutes, hours, days_of_month, months, days_of_week, years] = tokens else {
+        return Err("a valid cron expression".to_owned());
+    };
+
+    Ok(ScheduleFields::new(
+        from_field_with_options(parse_field_token(seconds)?, config.wraparound_ranges)
+            .map_err(|e| e.to_string())?,
+        from_field_with_options(parse_field_token(minutes)?, config.wraparound_ranges)
+            .map_err(|e| e.to_string())?,
+        from_field_with_options(parse_field_token(hours)?, config.wraparound_ranges)
+            .map_err(|e| e.to_string())?,
+        from_field_with_options(
+            parse_field_with_any_token(days_of_month)?,
+            config.wraparound_ranges,
+        )
+        .map_err(|e| e.to_string())?,
+        from_field_with_options(parse_field_token(months)?, config.wraparound_ranges)
+            .map_err(|e| e.to_string())?,
+        days_of_week_from_field(parse_field_with_any_token(days_of_week)?, config)
+            .map_err(|parse_error| format!("{parse_error}"))?,
+        years_from_field(parse_field_token(years)?, config)
+            .map_err(|parse_error| format!("{parse_error}"))?,
     ))
 }
 
@@ -571,22 +503,12 @@ fn build_schedule_fields_from_five_part_tokens(
     tokens: &[&str],
     config: ScheduleConfig,
 ) -> Result<ScheduleFields, String> {
-    let parse_years = |year_token: Option<&str>| -> Result<Years, String> {
-        match year_token {
-            Some(token) => {
-                from_field_with_options(parse_field_token(token)?, config.wraparound_ranges)
-                    .map_err(|parse_error| format!("{parse_error}"))
-            }
-            None => Ok(Years::all()),
-        }
-    };
-
     let parse_days_of_week = |token: &str| -> Result<DaysOfWeek, String> {
         days_of_week_from_field(parse_field_with_any_token(token)?, config)
             .map_err(|parse_error| format!("{parse_error}"))
     };
 
-    let (minutes, hours, days_of_month, months, days_of_week, years) = match tokens {
+    let (minutes, hours, days_of_month, months, days_of_week) = match tokens {
         [minutes, hours, days_of_month, months, days_of_week] => (
             from_field_with_options(parse_field_token(minutes)?, config.wraparound_ranges)
                 .map_err(|e| e.to_string())?,
@@ -600,22 +522,6 @@ fn build_schedule_fields_from_five_part_tokens(
             from_field_with_options(parse_field_token(months)?, config.wraparound_ranges)
                 .map_err(|e| e.to_string())?,
             parse_days_of_week(days_of_week)?,
-            Years::all(),
-        ),
-        [minutes, hours, days_of_month, months, days_of_week, year] => (
-            from_field_with_options(parse_field_token(minutes)?, config.wraparound_ranges)
-                .map_err(|e| e.to_string())?,
-            from_field_with_options(parse_field_token(hours)?, config.wraparound_ranges)
-                .map_err(|e| e.to_string())?,
-            from_field_with_options(
-                parse_field_with_any_token(days_of_month)?,
-                config.wraparound_ranges,
-            )
-            .map_err(|e| e.to_string())?,
-            from_field_with_options(parse_field_token(months)?, config.wraparound_ranges)
-                .map_err(|e| e.to_string())?,
-            parse_days_of_week(days_of_week)?,
-            parse_years(Some(year))?,
         ),
         _ => return Err("a valid cron expression".to_owned()),
     };
@@ -627,7 +533,7 @@ fn build_schedule_fields_from_five_part_tokens(
         days_of_month,
         months,
         days_of_week,
-        years,
+        Years::all(),
     ))
 }
 
@@ -635,12 +541,6 @@ fn schedule_with_config(
     expression: &str,
     config: ScheduleConfig,
 ) -> Result<ScheduleFields, String> {
-    if config == ScheduleConfig::default() {
-        return parse_with_defaults
-            .parse(expression)
-            .map_err(|parse_error| format!("{parse_error}"));
-    }
-
     if let Ok(fields) = terminated(shorthand, eof).parse(expression) {
         return Ok(fields);
     }
@@ -650,38 +550,31 @@ fn schedule_with_config(
         return Err("a valid cron expression".to_owned());
     }
 
-    let parse_six = || match tokens.len() {
-        6 | 7 => build_schedule_fields_from_six_part_tokens(tokens.as_slice(), config),
-        _ => Err("a valid cron expression".to_owned()),
-    };
-
-    let parse_five = || match tokens.len() {
-        5 | 6 => build_schedule_fields_from_five_part_tokens(tokens.as_slice(), config),
-        _ => Err("a valid cron expression".to_owned()),
-    };
-
-    match config.cron_schedule_parts {
-        CronScheduleParts::Six => parse_six(),
-        CronScheduleParts::Five => parse_five(),
-        CronScheduleParts::Both => {
-            if tokens.len() == 6 {
-                parse_six().or_else(|_| parse_five())
-            } else if matches!(tokens.len(), 7 | 5) {
-                if tokens.len() == 7 {
-                    parse_six()
-                } else {
-                    parse_five()
-                }
-            } else {
-                Err("a valid cron expression".to_owned())
-            }
+    match (tokens.len(), config.cron_schedule_parts) {
+        (5, CronScheduleParts::Five | CronScheduleParts::FiveOrSix | CronScheduleParts::All) => {
+            build_schedule_fields_from_five_part_tokens(tokens.as_slice(), config)
         }
+        (
+            6,
+            CronScheduleParts::Six
+            | CronScheduleParts::FiveOrSix
+            | CronScheduleParts::SixOrSeven
+            | CronScheduleParts::All,
+        ) => build_schedule_fields_from_six_part_tokens(tokens.as_slice(), config),
+        (7, CronScheduleParts::Seven | CronScheduleParts::SixOrSeven | CronScheduleParts::All) => {
+            build_schedule_fields_from_seven_part_tokens(tokens.as_slice(), config)
+        }
+        _ => Err("a valid cron expression".to_owned()),
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+
+    fn parse_schedule(expression: &str) -> Result<Schedule, Error> {
+        Schedule::from_str(expression)
+    }
 
     #[test]
     fn test_nom_valid_number() {
@@ -868,142 +761,142 @@ mod test {
     #[test]
     fn test_nom_valid_schedule() {
         let expression = "* * * * * *";
-        schedule.parse(expression).unwrap();
+        parse_schedule(expression).unwrap();
     }
 
     #[test]
     fn test_nom_invalid_schedule() {
         let expression = "* * * *";
-        assert!(schedule.parse(expression).is_err());
+        assert!(parse_schedule(expression).is_err());
     }
 
     #[test]
     fn test_nom_valid_seconds_list() {
         let expression = "0,20,40 * * * * *";
-        schedule.parse(expression).unwrap();
+        parse_schedule(expression).unwrap();
     }
 
     #[test]
     fn test_nom_valid_seconds_range() {
         let expression = "0-40 * * * * *";
-        schedule.parse(expression).unwrap();
+        parse_schedule(expression).unwrap();
     }
 
     #[test]
     fn test_nom_valid_seconds_mix() {
         let expression = "0-5,58 * * * * *";
-        schedule.parse(expression).unwrap();
+        parse_schedule(expression).unwrap();
     }
 
     #[test]
     fn test_nom_invalid_seconds_range() {
         let expression = "0-65 * * * * *";
-        assert!(schedule.parse(expression).is_err());
+        assert!(parse_schedule(expression).is_err());
     }
 
     #[test]
     fn test_nom_invalid_seconds_list() {
         let expression = "103,12 * * * * *";
-        assert!(schedule.parse(expression).is_err());
+        assert!(parse_schedule(expression).is_err());
     }
 
     #[test]
     fn test_nom_invalid_seconds_mix() {
         let expression = "0-5,102 * * * * *";
-        assert!(schedule.parse(expression).is_err());
+        assert!(parse_schedule(expression).is_err());
     }
 
     #[test]
     fn test_nom_valid_days_of_week_list() {
         let expression = "* * * * * MON,WED,FRI";
-        schedule.parse(expression).unwrap();
+        parse_schedule(expression).unwrap();
     }
 
     #[test]
     fn test_nom_invalid_days_of_week_list() {
         let expression = "* * * * * MON,TURTLE";
-        assert!(schedule.parse(expression).is_err());
+        assert!(parse_schedule(expression).is_err());
     }
 
     #[test]
     fn test_nom_valid_days_of_week_range() {
         let expression = "* * * * * MON-FRI";
-        schedule.parse(expression).unwrap();
+        parse_schedule(expression).unwrap();
     }
 
     #[test]
     fn test_nom_invalid_days_of_week_range() {
         let expression = "* * * * * BEAR-OWL";
-        assert!(schedule.parse(expression).is_err());
+        assert!(parse_schedule(expression).is_err());
     }
 
     #[test]
     fn test_nom_invalid_period_with_range_specifier() {
         let expression = "10-12/10-12 * * * * ?";
-        assert!(schedule.parse(expression).is_err());
+        assert!(parse_schedule(expression).is_err());
     }
 
     #[test]
     fn test_nom_valid_days_of_month_any() {
         let expression = "* * * ? * *";
-        schedule.parse(expression).unwrap();
+        parse_schedule(expression).unwrap();
     }
 
     #[test]
     fn test_nom_valid_days_of_week_any() {
         let expression = "* * * * * ?";
-        schedule.parse(expression).unwrap();
+        parse_schedule(expression).unwrap();
     }
 
     #[test]
     fn test_nom_valid_days_of_month_any_days_of_week_specific() {
         let expression = "* * * ? * Mon,Thu";
-        schedule.parse(expression).unwrap();
+        parse_schedule(expression).unwrap();
     }
 
     #[test]
     fn test_nom_valid_days_of_week_any_days_of_month_specific() {
         let expression = "* * * 1,2 * ?";
-        schedule.parse(expression).unwrap();
+        parse_schedule(expression).unwrap();
     }
 
     #[test]
     fn test_nom_valid_dom_and_dow_any() {
         let expression = "* * * ? * ?";
-        schedule.parse(expression).unwrap();
+        parse_schedule(expression).unwrap();
     }
 
     #[test]
     fn test_nom_invalid_other_fields_any() {
         let expression = "? * * * * *";
-        assert!(schedule.parse(expression).is_err());
+        assert!(parse_schedule(expression).is_err());
 
         let expression = "* ? * * * *";
-        assert!(schedule.parse(expression).is_err());
+        assert!(parse_schedule(expression).is_err());
 
         let expression = "* * ? * * *";
-        assert!(schedule.parse(expression).is_err());
+        assert!(parse_schedule(expression).is_err());
 
         let expression = "* * * * ? *";
-        assert!(schedule.parse(expression).is_err());
+        assert!(parse_schedule(expression).is_err());
     }
 
     #[test]
     fn test_nom_invalid_trailing_characters() {
         let expression = "* * * * * *foo *";
-        assert!(schedule.parse(expression).is_err());
+        assert!(parse_schedule(expression).is_err());
 
         let expression = "* * * * * * * foo";
-        assert!(schedule.parse(expression).is_err());
+        assert!(parse_schedule(expression).is_err());
     }
 
     /// Issue #86
     #[test]
     fn shorthand_must_match_whole_input() {
         let expression = "@dailyBla";
-        assert!(schedule.parse(expression).is_err());
+        assert!(parse_schedule(expression).is_err());
         let expression = " @dailyBla ";
-        assert!(schedule.parse(expression).is_err());
+        assert!(parse_schedule(expression).is_err());
     }
 
     #[test]
@@ -1047,9 +940,8 @@ mod test {
             "* * * */32 * *",
             "* * * * */13 *",
             "1,2,3/60 * * * * *",
-            "0 0 0 1 1 ? 2020-2040/2200",
         ] {
-            assert!(schedule.parse(invalid_expression).is_err());
+            assert!(parse_schedule(invalid_expression).is_err());
         }
 
         for valid_expression in [
@@ -1061,8 +953,9 @@ mod test {
             "* * * * */10 *",
             "1,2,3/5 * * * * *",
             "0 0 0 1 1 ? 2020-2040/10",
+            "0 0 0 1 1 ? 2020-2040/2200",
         ] {
-            assert!(schedule.parse(valid_expression).is_ok());
+            assert!(parse_schedule(valid_expression).is_ok());
         }
     }
 }

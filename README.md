@@ -44,7 +44,7 @@ use cron::{
 };
 
 let schedule = Schedule::builder()
-    .allowed_cron_schedule_parts(CronScheduleParts::Both) // 5-part and 6-part expressions
+    .allowed_cron_schedule_parts(CronScheduleParts::All) // 5-, 6-, or 7-part expressions
     .day_of_week_numbering(DayOfWeekNumbering::ZeroIndexed) // Vixie-style DOW numbering
     .wraparound_ranges(true)                       // allow ranges like Nov-Mar
     .dow_dom_operand(DowDomOperand::Or)                   // combine DOM + DOW with OR
@@ -60,8 +60,13 @@ Convenience constructors:
 use cron::{CronScheduleParts, Schedule};
 
 let custom = Schedule::builder()
-    .allowed_cron_schedule_parts(CronScheduleParts::Both)
+    .allowed_cron_schedule_parts(CronScheduleParts::FiveOrSix)
     .parse("30 9 * * Mon")
+    .unwrap();
+
+let with_year = Schedule::builder()
+    .allowed_cron_schedule_parts(CronScheduleParts::Seven)
+    .parse("0 0 0 1 1 * 2020/2")
     .unwrap();
 
 let default = Schedule::default().parse("0 30 9 * * Mon").unwrap();
@@ -70,12 +75,14 @@ let vixie = Schedule::vixie().parse("0 0 0 * Nov-Mar 7-mon").unwrap();
 
 Default config values:
 
-- `cron_schedule_parts`: `CronScheduleParts::Six`
+- `cron_schedule_parts`: `CronScheduleParts::SixOrSeven`
 - `day_of_week_numbering`: `DayOfWeekNumbering::OneIndexed`
 - `wraparound_ranges`: `false`
 - `dow_dom_operand`: `DowDomOperand::And`
 - `nonexistent_time_behavior`: `NonexistentTimeBehavior::Skip`
 - `search_interval`: `400 * 366` days
+
+The optional year field is the seventh field. Open-ended year searches are bounded by the configured `search_interval`.
 
 ## License
 
