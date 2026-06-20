@@ -261,6 +261,23 @@ pub(crate) fn ordinal_range_values_with_step(
     }
 }
 
+fn is_leap_year(year: Ordinal) -> bool {
+    let by_four = year.is_multiple_of(4);
+    let by_hundred = year.is_multiple_of(100);
+    let by_four_hundred = year.is_multiple_of(400);
+    by_four && ((!by_hundred) || by_four_hundred)
+}
+
+pub(crate) fn days_in_month(month: Ordinal, year: Ordinal) -> Ordinal {
+    let is_leap_year = is_leap_year(year);
+    match month {
+        9 | 4 | 6 | 11 => 30,
+        2 if is_leap_year => 29,
+        2 => 28,
+        _ => 31,
+    }
+}
+
 pub trait TimeUnitField
 where
     Self: Sized,
@@ -451,6 +468,14 @@ where
                 .iter()
                 .cloned()
                 .collect::<OrdinalSet>(),
+            _ => {
+                return Err(ErrorKind::Expression(format!(
+                    "Root specifier not supported for {}: {:?}",
+                    Self::name(),
+                    root_specifier
+                ))
+                .into())
+            }
         };
         Ok(ordinals)
     }

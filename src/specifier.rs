@@ -35,6 +35,11 @@ pub enum RootSpecifier {
     Specifier(Specifier),
     Period(Specifier, u32),
     NamedPoint(String),
+    LastDayOfMonth,
+    NearestWeekday(Ordinal),
+    LastWeekdayOfMonth(RangeEndpoint),
+    NthWeekdayOfMonth(RangeEndpoint, Ordinal),
+    NthWeekdayRangeOfMonth(RangeEndpoint, RangeEndpoint, Ordinal),
 }
 
 impl From<Specifier> for RootSpecifier {

@@ -54,6 +54,9 @@ impl Schedule {
         Schedule::builder()
             .day_of_week_numbering(DayOfWeekNumbering::ZeroIndexed)
             .wraparound_ranges(true)
+            .last_specifiers(true)
+            .nearest_weekday(true)
+            .nth_weekday_of_month(true)
             .dow_dom_operand(DowDomOperand::Or)
     }
 
@@ -259,9 +262,13 @@ impl Schedule {
         let day_of_week = date_time.weekday().number_from_sunday();
         self.fields.includes_year(date_time.year() as Ordinal)
             && self.fields.months.includes(date_time.month() as Ordinal)
-            && self
-                .fields
-                .day_matches(day_of_month, day_of_week, self.config.dow_dom_operand)
+            && self.fields.day_matches(
+                date_time.year() as Ordinal,
+                date_time.month() as Ordinal,
+                day_of_month,
+                day_of_week,
+                self.config.dow_dom_operand,
+            )
             && self.fields.hours.includes(date_time.hour() as Ordinal)
             && self.fields.minutes.includes(date_time.minute() as Ordinal)
             && self.fields.seconds.includes(date_time.second() as Ordinal)
@@ -356,6 +363,26 @@ impl ScheduleConfigBuilder {
 
     pub fn wraparound_ranges(mut self, wraparound_ranges: bool) -> Self {
         self.config.wraparound_ranges = wraparound_ranges;
+        self
+    }
+
+    pub fn last_specifiers(mut self, last_specifiers: bool) -> Self {
+        self.config.last_specifiers = last_specifiers;
+        self
+    }
+
+    pub fn nearest_weekday(mut self, nearest_weekday: bool) -> Self {
+        self.config.nearest_weekday = nearest_weekday;
+        self
+    }
+
+    pub fn nth_weekday_of_month(mut self, nth_weekday_of_month: bool) -> Self {
+        self.config.nth_weekday_of_month = nth_weekday_of_month;
+        self
+    }
+
+    pub fn random_fields(mut self, random_fields: bool) -> Self {
+        self.config.random_fields = random_fields;
         self
     }
 
@@ -567,8 +594,12 @@ impl ScheduleFields {
         self.months.ordinals()
     }
 
-    pub(crate) fn days_of_month_ordinals(&self) -> &OrdinalSet {
-        self.days_of_month.ordinals()
+    pub(crate) fn days_of_month_ordinals_for_month(
+        &self,
+        year: Ordinal,
+        month: Ordinal,
+    ) -> OrdinalSet {
+        self.days_of_month.days_for_month(year, month)
     }
 
     pub(crate) fn hours_ordinals(&self) -> &OrdinalSet {
@@ -597,22 +628,36 @@ impl ScheduleFields {
         self.days_of_month.is_all()
     }
 
-    pub(crate) fn includes_day_of_month(&self, day_of_month: Ordinal) -> bool {
-        self.days_of_month.ordinals().contains(&day_of_month)
+    pub(crate) fn includes_day_of_month(
+        &self,
+        year: Ordinal,
+        month: Ordinal,
+        day_of_month: Ordinal,
+    ) -> bool {
+        self.days_of_month.matches(year, month, day_of_month)
     }
 
-    pub(crate) fn includes_day_of_week(&self, day_of_week: Ordinal) -> bool {
-        self.days_of_week.ordinals().contains(&day_of_week)
+    pub(crate) fn includes_day_of_week(
+        &self,
+        year: Ordinal,
+        month: Ordinal,
+        day_of_month: Ordinal,
+        day_of_week: Ordinal,
+    ) -> bool {
+        self.days_of_week
+            .matches(year, month, day_of_month, day_of_week)
     }
 
     pub(crate) fn day_matches(
         &self,
+        year: Ordinal,
+        month: Ordinal,
         day_of_month: Ordinal,
         day_of_week: Ordinal,
         operand: DowDomOperand,
     ) -> bool {
-        let dom_matches = self.includes_day_of_month(day_of_month);
-        let dow_matches = self.includes_day_of_week(day_of_week);
+        let dom_matches = self.includes_day_of_month(year, month, day_of_month);
+        let dow_matches = self.includes_day_of_week(year, month, day_of_month, day_of_week);
         let both_restricted = !self.days_of_month_is_all() && !self.days_of_week_is_all();
         if both_restricted {
             match operand {

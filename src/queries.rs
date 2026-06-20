@@ -5,7 +5,9 @@ use std::ops::{Bound, RangeInclusive};
 
 use crate::ordinal::Ordinal;
 use crate::schedule::ScheduleFields;
-use crate::time_unit::{DaysOfMonth, Hours, Minutes, Months, Seconds, TimeUnitField};
+use crate::time_unit::{
+    days_in_month, DaysOfMonth, Hours, Minutes, Months, Seconds, TimeUnitField,
+};
 use crate::DowDomOperand;
 
 pub(crate) trait Cursor<Z>
@@ -158,16 +160,19 @@ where
         let range = self.day_of_month_range(bound, day_of_month_end);
         let both_restricted = !fields.days_of_month_is_all() && !fields.days_of_week_is_all();
         let should_scan_all_days = operand == DowDomOperand::Or && both_restricted;
+        let days_of_month = fields.days_of_month_ordinals_for_month(year, month);
 
-        let base_iter: Box<dyn DoubleEndedIterator<Item = Ordinal> + 'a> = if should_scan_all_days {
-            Box::new(range)
+        let base_values = if should_scan_all_days {
+            range.collect::<Vec<_>>()
         } else {
-            Box::new(fields.days_of_month_ordinals().range(range).copied())
+            days_of_month.range(range).copied().collect::<Vec<_>>()
         };
 
-        let iter = base_iter.filter(move |day| {
+        let iter = base_values.into_iter().filter(move |day| {
             NaiveDate::from_ymd_opt(year as i32, month, *day)
-                .map(|d| fields.day_matches(*day, d.weekday().number_from_sunday(), operand))
+                .map(|d| {
+                    fields.day_matches(year, month, *day, d.weekday().number_from_sunday(), operand)
+                })
                 .unwrap_or(false)
         });
 
@@ -538,22 +543,5 @@ where
         } else {
             rhs
         }
-    }
-}
-
-fn is_leap_year(year: Ordinal) -> bool {
-    let by_four = year.is_multiple_of(4);
-    let by_hundred = year.is_multiple_of(100);
-    let by_four_hundred = year.is_multiple_of(400);
-    by_four && ((!by_hundred) || by_four_hundred)
-}
-
-fn days_in_month(month: Ordinal, year: Ordinal) -> u32 {
-    let is_leap_year = is_leap_year(year);
-    match month {
-        9 | 4 | 6 | 11 => 30,
-        2 if is_leap_year => 29,
-        2 => 28,
-        _ => 31,
     }
 }

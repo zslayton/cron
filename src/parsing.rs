@@ -1,10 +1,15 @@
 use winnow::ascii::{alpha1, digit1, multispace0};
-use winnow::combinator::{alt, delimited, eof, separated, separated_pair, terminated};
+use winnow::combinator::{
+    alt, delimited, eof, opt, preceded, separated, separated_pair, terminated,
+};
 use winnow::prelude::*;
 
 use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 use std::str::{self, FromStr};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::config::{CronScheduleParts, DayOfWeekNumbering};
 use crate::error::{Error, ErrorKind};
@@ -13,6 +18,8 @@ use crate::schedule::{Schedule, ScheduleFields};
 use crate::specifier::*;
 use crate::time_unit::*;
 use crate::ScheduleConfig;
+
+static RANDOM_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 impl TryFrom<Cow<'_, str>> for Schedule {
     type Error = Error;
@@ -93,6 +100,69 @@ fn named_point(i: &mut &str) -> winnow::Result<RootSpecifier> {
     name.map(RootSpecifier::NamedPoint).parse_next(i)
 }
 
+fn literal_l(i: &mut &str) -> winnow::Result<()> {
+    alt(("L", "l")).map(|_| ()).parse_next(i)
+}
+
+fn literal_w(i: &mut &str) -> winnow::Result<()> {
+    alt(("W", "w")).map(|_| ()).parse_next(i)
+}
+
+fn raw_ordinal(i: &mut &str) -> winnow::Result<Ordinal> {
+    digit1.try_map(u32::from_str).parse_next(i)
+}
+
+fn raw_name(i: &mut &str) -> winnow::Result<String> {
+    alpha1.map(ToOwned::to_owned).parse_next(i)
+}
+
+fn raw_range_endpoint(i: &mut &str) -> winnow::Result<RangeEndpoint> {
+    alt((
+        raw_ordinal.map(RangeEndpoint::Ordinal),
+        raw_name.map(RangeEndpoint::Name),
+    ))
+    .parse_next(i)
+}
+
+fn raw_range_endpoint_pair(i: &mut &str) -> winnow::Result<(RangeEndpoint, RangeEndpoint)> {
+    separated_pair(raw_range_endpoint, "-", raw_range_endpoint).parse_next(i)
+}
+
+fn dom_last_day(i: &mut &str) -> winnow::Result<RootSpecifier> {
+    literal_l
+        .map(|_| RootSpecifier::LastDayOfMonth)
+        .parse_next(i)
+}
+
+fn nearest_weekday(i: &mut &str) -> winnow::Result<RootSpecifier> {
+    alt((
+        terminated(raw_ordinal, literal_w),
+        preceded(literal_w, raw_ordinal),
+    ))
+    .map(RootSpecifier::NearestWeekday)
+    .parse_next(i)
+}
+
+fn last_weekday_of_month(i: &mut &str) -> winnow::Result<RootSpecifier> {
+    alt((
+        preceded(literal_l, raw_range_endpoint),
+        terminated(raw_range_endpoint, literal_l),
+        literal_l.map(|_| RangeEndpoint::Name("sat".to_owned())),
+    ))
+    .map(RootSpecifier::LastWeekdayOfMonth)
+    .parse_next(i)
+}
+
+fn nth_weekday_of_month(i: &mut &str) -> winnow::Result<RootSpecifier> {
+    alt((
+        separated_pair(raw_range_endpoint_pair, "#", raw_ordinal)
+            .map(|((start, end), nth)| RootSpecifier::NthWeekdayRangeOfMonth(start, end, nth)),
+        separated_pair(raw_range_endpoint, "#", raw_ordinal)
+            .map(|(day, nth)| RootSpecifier::NthWeekdayOfMonth(day, nth)),
+    ))
+    .parse_next(i)
+}
+
 fn period(i: &mut &str) -> winnow::Result<RootSpecifier> {
     separated_pair(specifier, "/", ordinal)
         .map(|(start, step)| RootSpecifier::Period(start, step))
@@ -147,6 +217,28 @@ fn root_specifier_with_any(i: &mut &str) -> winnow::Result<RootSpecifier> {
     .parse_next(i)
 }
 
+fn dom_root_specifier_with_any(i: &mut &str) -> winnow::Result<RootSpecifier> {
+    alt((
+        nearest_weekday,
+        dom_last_day,
+        period_with_any,
+        specifier_with_any.map(RootSpecifier::from),
+        named_point,
+    ))
+    .parse_next(i)
+}
+
+fn dow_root_specifier_with_any(i: &mut &str) -> winnow::Result<RootSpecifier> {
+    alt((
+        last_weekday_of_month,
+        nth_weekday_of_month,
+        period_with_any,
+        specifier_with_any.map(RootSpecifier::from),
+        named_point,
+    ))
+    .parse_next(i)
+}
+
 fn root_specifier_list(i: &mut &str) -> winnow::Result<Vec<RootSpecifier>> {
     let list = separated(1.., root_specifier, ",");
     let single_item = root_specifier.map(|spec| vec![spec]);
@@ -159,6 +251,18 @@ fn root_specifier_list_with_any(i: &mut &str) -> winnow::Result<Vec<RootSpecifie
     delimited(multispace0, alt((list, single_item)), multispace0).parse_next(i)
 }
 
+fn dom_root_specifier_list_with_any(i: &mut &str) -> winnow::Result<Vec<RootSpecifier>> {
+    let list = separated(1.., dom_root_specifier_with_any, ",");
+    let single_item = dom_root_specifier_with_any.map(|spec| vec![spec]);
+    delimited(multispace0, alt((list, single_item)), multispace0).parse_next(i)
+}
+
+fn dow_root_specifier_list_with_any(i: &mut &str) -> winnow::Result<Vec<RootSpecifier>> {
+    let list = separated(1.., dow_root_specifier_with_any, ",");
+    let single_item = dow_root_specifier_with_any.map(|spec| vec![spec]);
+    delimited(multispace0, alt((list, single_item)), multispace0).parse_next(i)
+}
+
 fn field(i: &mut &str) -> winnow::Result<Field> {
     let specifiers = root_specifier_list.parse_next(i)?;
     Ok(Field { specifiers })
@@ -166,6 +270,16 @@ fn field(i: &mut &str) -> winnow::Result<Field> {
 
 fn field_with_any(i: &mut &str) -> winnow::Result<Field> {
     let specifiers = root_specifier_list_with_any.parse_next(i)?;
+    Ok(Field { specifiers })
+}
+
+fn dom_field_with_any(i: &mut &str) -> winnow::Result<Field> {
+    let specifiers = dom_root_specifier_list_with_any.parse_next(i)?;
+    Ok(Field { specifiers })
+}
+
+fn dow_field_with_any(i: &mut &str) -> winnow::Result<Field> {
+    let specifiers = dow_root_specifier_list_with_any.parse_next(i)?;
     Ok(Field { specifiers })
 }
 
@@ -256,10 +370,167 @@ fn parse_field_token(token: &str) -> Result<Field, String> {
         .map_err(|parse_error| format!("{parse_error}"))
 }
 
-fn parse_field_with_any_token(token: &str) -> Result<Field, String> {
-    terminated(field_with_any, eof)
-        .parse(token)
-        .map_err(|parse_error| format!("{parse_error}"))
+#[derive(Clone, Copy)]
+struct RandomFieldBounds {
+    inclusive_min: Ordinal,
+    inclusive_max: Ordinal,
+    croniter_index: u32,
+}
+
+fn parse_field_token_with_config(
+    token: &str,
+    config: ScheduleConfig,
+    bounds: RandomFieldBounds,
+) -> Result<Field, String> {
+    let token = expand_random_field(token, config, bounds)?;
+    parse_field_token(&token)
+}
+
+fn parse_dom_field_with_any_token(token: &str, config: ScheduleConfig) -> Result<Field, String> {
+    let token = expand_random_field(token, config, random_bounds::<DaysOfMonth>(2))?;
+    let result = terminated(dom_field_with_any, eof)
+        .parse(token.as_str())
+        .map_err(|parse_error| format!("{parse_error}"));
+    result
+}
+
+fn parse_dow_field_with_any_token(token: &str, config: ScheduleConfig) -> Result<Field, String> {
+    let bounds = match config.day_of_week_numbering {
+        DayOfWeekNumbering::OneIndexed => random_bounds::<DaysOfWeek>(4),
+        DayOfWeekNumbering::ZeroIndexed => RandomFieldBounds {
+            inclusive_min: 0,
+            inclusive_max: 6,
+            croniter_index: 4,
+        },
+    };
+    let token = expand_random_field(token, config, bounds)?;
+    let result = terminated(dow_field_with_any, eof)
+        .parse(token.as_str())
+        .map_err(|parse_error| format!("{parse_error}"));
+    result
+}
+
+fn random_bounds<T>(croniter_index: u32) -> RandomFieldBounds
+where
+    T: TimeUnitField,
+{
+    RandomFieldBounds {
+        inclusive_min: T::inclusive_min(),
+        inclusive_max: T::inclusive_max(),
+        croniter_index,
+    }
+}
+
+#[derive(Debug)]
+struct RandomExpression {
+    range: Option<(Ordinal, Ordinal)>,
+    step: Option<Ordinal>,
+}
+
+fn expand_random_field(
+    token: &str,
+    config: ScheduleConfig,
+    bounds: RandomFieldBounds,
+) -> Result<String, String> {
+    let Some(random_expression) = parse_random_expression(token)? else {
+        return Ok(token.to_owned());
+    };
+
+    if !config.random_fields {
+        return Err("random field specifiers are not enabled".to_owned());
+    }
+
+    let range = random_expression
+        .range
+        .unwrap_or((bounds.inclusive_min, bounds.inclusive_max));
+    if range.0 >= range.1 {
+        return Err("random range end must be greater than range begin".to_owned());
+    }
+    if range.0 < bounds.inclusive_min || range.1 > bounds.inclusive_max {
+        return Err(format!(
+            "random range must be between {} and {}",
+            bounds.inclusive_min, bounds.inclusive_max
+        ));
+    }
+
+    match random_expression.step {
+        Some(0) => Err(format!("Bad expression: {token}")),
+        Some(step) => {
+            let random_end = range
+                .0
+                .checked_add(step - 1)
+                .ok_or_else(|| format!("Bad expression: {token}"))?;
+            if random_end > range.1 {
+                return Err(format!("Bad expression: {token}"));
+            }
+            let start = random_ordinal(range.0, random_end, bounds.croniter_index);
+            Ok(format!("{start}-{}/{step}", range.1))
+        }
+        None => Ok(random_ordinal(range.0, range.1, bounds.croniter_index).to_string()),
+    }
+}
+
+fn parse_random_expression(token: &str) -> Result<Option<RandomExpression>, String> {
+    let lowercase = token.to_ascii_lowercase();
+    let Some(mut rest) = lowercase.strip_prefix('r') else {
+        return Ok(None);
+    };
+
+    let mut range = None;
+    if let Some(after_open) = rest.strip_prefix('(') {
+        let Some(end_range) = after_open.find(')') else {
+            return Err(format!("Bad expression: {token}"));
+        };
+        let (range_token, after_range) = after_open.split_at(end_range);
+        let Some((begin, end)) = range_token.split_once('-') else {
+            return Err(format!("Bad expression: {token}"));
+        };
+        range = Some((
+            begin
+                .parse::<Ordinal>()
+                .map_err(|_| format!("Bad expression: {token}"))?,
+            end.parse::<Ordinal>()
+                .map_err(|_| format!("Bad expression: {token}"))?,
+        ));
+        rest = &after_range[1..];
+    }
+
+    let step = if let Some(after_slash) = rest.strip_prefix('/') {
+        rest = "";
+        Some(
+            after_slash
+                .parse::<Ordinal>()
+                .map_err(|_| format!("Bad expression: {token}"))?,
+        )
+    } else {
+        None
+    };
+
+    if !rest.is_empty() {
+        return Err(format!("Bad expression: {token}"));
+    }
+
+    Ok(Some(RandomExpression { range, step }))
+}
+
+fn random_ordinal(inclusive_min: Ordinal, inclusive_max: Ordinal, croniter_index: u32) -> Ordinal {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    let mut seed = (nanos as u64)
+        ^ ((nanos >> 64) as u64)
+        ^ RANDOM_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ^ (u64::from(croniter_index) << 32)
+        ^ u64::from(inclusive_min)
+        ^ (u64::from(inclusive_max) << 16);
+    seed = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    seed = (seed ^ (seed >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    seed = (seed ^ (seed >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    seed ^= seed >> 31;
+
+    let span = u64::from(inclusive_max - inclusive_min + 1);
+    inclusive_min + (seed % span) as Ordinal
 }
 
 fn from_field_with_options<T>(field: Field, wraparound_ranges: bool) -> Result<T, Error>
@@ -281,6 +552,55 @@ where
         }
     }
     Ok(T::from_ordinal_set(ordinals))
+}
+
+fn ensure_enabled(enabled: bool, feature: &str) -> Result<(), Error> {
+    if enabled {
+        Ok(())
+    } else {
+        Err(ErrorKind::Expression(format!("{feature} specifiers are not enabled")).into())
+    }
+}
+
+fn days_of_month_from_field(field: Field, config: ScheduleConfig) -> Result<DaysOfMonth, Error> {
+    if field.specifiers.len() == 1
+        && field.specifiers.first().unwrap() == &RootSpecifier::from(Specifier::All)
+    {
+        return Ok(DaysOfMonth::all());
+    }
+
+    let mut ordinals = OrdinalSet::new();
+    let mut last_day_of_month = false;
+    let mut nearest_weekdays = OrdinalSet::new();
+
+    for specifier in field.specifiers {
+        match specifier {
+            RootSpecifier::LastDayOfMonth => {
+                ensure_enabled(config.last_specifiers, "last day-of-month")?;
+                last_day_of_month = true;
+            }
+            RootSpecifier::NearestWeekday(day) => {
+                ensure_enabled(config.nearest_weekday, "nearest weekday")?;
+                nearest_weekdays.insert(DaysOfMonth::validate_ordinal(day)?);
+            }
+            specifier => {
+                let specifier_ordinals = DaysOfMonth::ordinals_from_root_specifier_with_options(
+                    &specifier,
+                    config.wraparound_ranges,
+                    config.last_specifiers,
+                )?;
+                for ordinal in specifier_ordinals {
+                    ordinals.insert(DaysOfMonth::validate_ordinal(ordinal)?);
+                }
+            }
+        }
+    }
+
+    Ok(DaysOfMonth::from_parts(
+        Some(ordinals),
+        last_day_of_month,
+        nearest_weekdays,
+    ))
 }
 
 fn zero_indexed_day_of_week_from_numeric(ordinal: Ordinal) -> Result<Ordinal, Error> {
@@ -395,12 +715,93 @@ fn zero_indexed_day_of_week_internal_ordinals_from_root_specifier(
             base_values.into_iter().step_by(*step as usize).collect()
         }
         RootSpecifier::NamedPoint(name) => vec![zero_indexed_day_of_week_from_name(name)?],
+        _ => {
+            return Err(ErrorKind::Expression(format!(
+                "Root specifier not supported for Days of Week: {:?}",
+                root_specifier
+            ))
+            .into())
+        }
     };
 
     Ok(ordinals
         .into_iter()
         .map(zero_indexed_day_of_week_to_internal_ordinal)
         .collect())
+}
+
+fn day_of_week_from_endpoint(
+    endpoint: &RangeEndpoint,
+    config: ScheduleConfig,
+) -> Result<Ordinal, Error> {
+    match config.day_of_week_numbering {
+        DayOfWeekNumbering::OneIndexed => {
+            DaysOfWeek::validate_ordinal(DaysOfWeek::ordinal_from_range_endpoint(endpoint)?)
+        }
+        DayOfWeekNumbering::ZeroIndexed => Ok(zero_indexed_day_of_week_to_internal_ordinal(
+            zero_indexed_day_of_week_from_endpoint(endpoint)?,
+        )),
+    }
+}
+
+fn day_of_week_values_from_range(
+    start: &RangeEndpoint,
+    end: &RangeEndpoint,
+    config: ScheduleConfig,
+) -> Result<Vec<Ordinal>, Error> {
+    match config.day_of_week_numbering {
+        DayOfWeekNumbering::OneIndexed => {
+            let start_ordinal =
+                DaysOfWeek::validate_ordinal(DaysOfWeek::ordinal_from_range_endpoint(start)?)?;
+            let end_ordinal =
+                DaysOfWeek::validate_ordinal(DaysOfWeek::ordinal_from_range_endpoint(end)?)?;
+            ordinal_range_values(
+                start_ordinal,
+                end_ordinal,
+                DaysOfWeek::inclusive_min(),
+                DaysOfWeek::inclusive_max(),
+                config.wraparound_ranges,
+            )
+            .ok_or_else(|| {
+                ErrorKind::Expression(format!("Invalid range for Days of Week: {start}-{end}"))
+                    .into()
+            })
+        }
+        DayOfWeekNumbering::ZeroIndexed => {
+            let start_ordinal = zero_indexed_day_of_week_from_endpoint(start)?;
+            let end_ordinal = zero_indexed_day_of_week_from_endpoint(end)?;
+            ordinal_range_values(start_ordinal, end_ordinal, 0, 6, config.wraparound_ranges)
+                .map(|ordinals| {
+                    ordinals
+                        .into_iter()
+                        .map(zero_indexed_day_of_week_to_internal_ordinal)
+                        .collect()
+                })
+                .ok_or_else(|| {
+                    ErrorKind::Expression(format!("Invalid range for Days of Week: {start}-{end}"))
+                        .into()
+                })
+        }
+    }
+}
+
+fn insert_nth_weekday(
+    nth_weekdays: &mut BTreeMap<Ordinal, BTreeSet<Ordinal>>,
+    day_of_week: Ordinal,
+    occurrence: Ordinal,
+) -> Result<(), Error> {
+    if !(1..=5).contains(&occurrence) {
+        return Err(ErrorKind::Expression(format!(
+            "Occurrence of a weekday must be between 1 and 5 inclusive. ('{}' specified.)",
+            occurrence
+        ))
+        .into());
+    }
+    nth_weekdays
+        .entry(day_of_week)
+        .or_default()
+        .insert(occurrence);
+    Ok(())
 }
 
 fn days_of_week_from_field(field: Field, config: ScheduleConfig) -> Result<DaysOfWeek, Error> {
@@ -410,20 +811,52 @@ fn days_of_week_from_field(field: Field, config: ScheduleConfig) -> Result<DaysO
         return Ok(DaysOfWeek::all());
     }
 
-    if config.day_of_week_numbering == DayOfWeekNumbering::OneIndexed {
-        return from_field_with_options(field, config.wraparound_ranges);
-    }
-
     let mut ordinals = OrdinalSet::new();
+    let mut last_weekdays = OrdinalSet::new();
+    let mut nth_weekdays = BTreeMap::new();
+
     for specifier in field.specifiers {
-        for ordinal in zero_indexed_day_of_week_internal_ordinals_from_root_specifier(
-            &specifier,
-            config.wraparound_ranges,
-        )? {
-            ordinals.insert(DaysOfWeek::validate_ordinal(ordinal)?);
+        match specifier {
+            RootSpecifier::LastWeekdayOfMonth(day_of_week) => {
+                ensure_enabled(config.last_specifiers, "last weekday-of-month")?;
+                last_weekdays.insert(day_of_week_from_endpoint(&day_of_week, config)?);
+            }
+            RootSpecifier::NthWeekdayOfMonth(day_of_week, occurrence) => {
+                ensure_enabled(config.nth_weekday_of_month, "nth weekday-of-month")?;
+                let day_of_week = day_of_week_from_endpoint(&day_of_week, config)?;
+                insert_nth_weekday(&mut nth_weekdays, day_of_week, occurrence)?;
+            }
+            RootSpecifier::NthWeekdayRangeOfMonth(start, end, occurrence) => {
+                ensure_enabled(config.nth_weekday_of_month, "nth weekday-of-month")?;
+                for day_of_week in day_of_week_values_from_range(&start, &end, config)? {
+                    insert_nth_weekday(&mut nth_weekdays, day_of_week, occurrence)?;
+                }
+            }
+            specifier => {
+                let specifier_ordinals =
+                    if config.day_of_week_numbering == DayOfWeekNumbering::OneIndexed {
+                        DaysOfWeek::ordinals_from_root_specifier_with_options(
+                            &specifier,
+                            config.wraparound_ranges,
+                        )?
+                    } else {
+                        zero_indexed_day_of_week_internal_ordinals_from_root_specifier(
+                            &specifier,
+                            config.wraparound_ranges,
+                        )?
+                    };
+                for ordinal in specifier_ordinals {
+                    ordinals.insert(DaysOfWeek::validate_ordinal(ordinal)?);
+                }
+            }
         }
     }
-    Ok(DaysOfWeek::from_ordinal_set(ordinals))
+
+    Ok(DaysOfWeek::from_parts(
+        Some(ordinals),
+        last_weekdays,
+        nth_weekdays,
+    ))
 }
 
 fn years_from_field(field: Field, config: ScheduleConfig) -> Result<Years, Error> {
@@ -434,27 +867,80 @@ fn build_schedule_fields_from_six_part_tokens(
     tokens: &[&str],
     config: ScheduleConfig,
 ) -> Result<ScheduleFields, String> {
+    let parse_years = |year_token: Option<&str>| -> Result<Years, String> {
+        match year_token {
+            Some(token) => from_field_with_options(
+                parse_field_token_with_config(token, config, random_bounds::<Years>(6))?,
+                config.wraparound_ranges,
+            )
+            .map_err(|parse_error| format!("{parse_error}")),
+            None => Ok(Years::all()),
+        }
+    };
+
     let parse_days_of_week = |token: &str| -> Result<DaysOfWeek, String> {
-        days_of_week_from_field(parse_field_with_any_token(token)?, config)
+        days_of_week_from_field(parse_dow_field_with_any_token(token, config)?, config)
             .map_err(|parse_error| format!("{parse_error}"))
     };
 
-    let (seconds, minutes, hours, days_of_month, months, days_of_week) = match tokens {
+    let (seconds, minutes, hours, days_of_month, months, days_of_week, years) = match tokens {
         [seconds, minutes, hours, days_of_month, months, days_of_week] => (
-            from_field_with_options(parse_field_token(seconds)?, config.wraparound_ranges)
-                .map_err(|e| e.to_string())?,
-            from_field_with_options(parse_field_token(minutes)?, config.wraparound_ranges)
-                .map_err(|e| e.to_string())?,
-            from_field_with_options(parse_field_token(hours)?, config.wraparound_ranges)
-                .map_err(|e| e.to_string())?,
             from_field_with_options(
-                parse_field_with_any_token(days_of_month)?,
+                parse_field_token_with_config(seconds, config, random_bounds::<Seconds>(5))?,
                 config.wraparound_ranges,
             )
             .map_err(|e| e.to_string())?,
-            from_field_with_options(parse_field_token(months)?, config.wraparound_ranges)
-                .map_err(|e| e.to_string())?,
+            from_field_with_options(
+                parse_field_token_with_config(minutes, config, random_bounds::<Minutes>(0))?,
+                config.wraparound_ranges,
+            )
+            .map_err(|e| e.to_string())?,
+            from_field_with_options(
+                parse_field_token_with_config(hours, config, random_bounds::<Hours>(1))?,
+                config.wraparound_ranges,
+            )
+            .map_err(|e| e.to_string())?,
+            days_of_month_from_field(
+                parse_dom_field_with_any_token(days_of_month, config)?,
+                config,
+            )
+            .map_err(|e| e.to_string())?,
+            from_field_with_options(
+                parse_field_token_with_config(months, config, random_bounds::<Months>(3))?,
+                config.wraparound_ranges,
+            )
+            .map_err(|e| e.to_string())?,
             parse_days_of_week(days_of_week)?,
+            Years::all(),
+        ),
+        [seconds, minutes, hours, days_of_month, months, days_of_week, year] => (
+            from_field_with_options(
+                parse_field_token_with_config(seconds, config, random_bounds::<Seconds>(5))?,
+                config.wraparound_ranges,
+            )
+            .map_err(|e| e.to_string())?,
+            from_field_with_options(
+                parse_field_token_with_config(minutes, config, random_bounds::<Minutes>(0))?,
+                config.wraparound_ranges,
+            )
+            .map_err(|e| e.to_string())?,
+            from_field_with_options(
+                parse_field_token_with_config(hours, config, random_bounds::<Hours>(1))?,
+                config.wraparound_ranges,
+            )
+            .map_err(|e| e.to_string())?,
+            days_of_month_from_field(
+                parse_dom_field_with_any_token(days_of_month, config)?,
+                config,
+            )
+            .map_err(|e| e.to_string())?,
+            from_field_with_options(
+                parse_field_token_with_config(months, config, random_bounds::<Months>(3))?,
+                config.wraparound_ranges,
+            )
+            .map_err(|e| e.to_string())?,
+            parse_days_of_week(days_of_week)?,
+            parse_years(Some(year))?,
         ),
         _ => return Err("a valid cron expression".to_owned()),
     };
@@ -466,7 +952,7 @@ fn build_schedule_fields_from_six_part_tokens(
         days_of_month,
         months,
         days_of_week,
-        Years::all(),
+        years,
     ))
 }
 
@@ -479,23 +965,41 @@ fn build_schedule_fields_from_seven_part_tokens(
     };
 
     Ok(ScheduleFields::new(
-        from_field_with_options(parse_field_token(seconds)?, config.wraparound_ranges)
-            .map_err(|e| e.to_string())?,
-        from_field_with_options(parse_field_token(minutes)?, config.wraparound_ranges)
-            .map_err(|e| e.to_string())?,
-        from_field_with_options(parse_field_token(hours)?, config.wraparound_ranges)
-            .map_err(|e| e.to_string())?,
         from_field_with_options(
-            parse_field_with_any_token(days_of_month)?,
+            parse_field_token_with_config(seconds, config, random_bounds::<Seconds>(5))?,
             config.wraparound_ranges,
         )
         .map_err(|e| e.to_string())?,
-        from_field_with_options(parse_field_token(months)?, config.wraparound_ranges)
-            .map_err(|e| e.to_string())?,
-        days_of_week_from_field(parse_field_with_any_token(days_of_week)?, config)
-            .map_err(|parse_error| format!("{parse_error}"))?,
-        years_from_field(parse_field_token(years)?, config)
-            .map_err(|parse_error| format!("{parse_error}"))?,
+        from_field_with_options(
+            parse_field_token_with_config(minutes, config, random_bounds::<Minutes>(0))?,
+            config.wraparound_ranges,
+        )
+        .map_err(|e| e.to_string())?,
+        from_field_with_options(
+            parse_field_token_with_config(hours, config, random_bounds::<Hours>(1))?,
+            config.wraparound_ranges,
+        )
+        .map_err(|e| e.to_string())?,
+        days_of_month_from_field(
+            parse_dom_field_with_any_token(days_of_month, config)?,
+            config,
+        )
+        .map_err(|e| e.to_string())?,
+        from_field_with_options(
+            parse_field_token_with_config(months, config, random_bounds::<Months>(3))?,
+            config.wraparound_ranges,
+        )
+        .map_err(|e| e.to_string())?,
+        days_of_week_from_field(
+            parse_dow_field_with_any_token(days_of_week, config)?,
+            config,
+        )
+        .map_err(|parse_error| format!("{parse_error}"))?,
+        years_from_field(
+            parse_field_token_with_config(years, config, random_bounds::<Years>(6))?,
+            config,
+        )
+        .map_err(|parse_error| format!("{parse_error}"))?,
     ))
 }
 
@@ -503,25 +1007,70 @@ fn build_schedule_fields_from_five_part_tokens(
     tokens: &[&str],
     config: ScheduleConfig,
 ) -> Result<ScheduleFields, String> {
+    let parse_years = |year_token: Option<&str>| -> Result<Years, String> {
+        match year_token {
+            Some(token) => from_field_with_options(
+                parse_field_token_with_config(token, config, random_bounds::<Years>(6))?,
+                config.wraparound_ranges,
+            )
+            .map_err(|parse_error| format!("{parse_error}")),
+            None => Ok(Years::all()),
+        }
+    };
+
     let parse_days_of_week = |token: &str| -> Result<DaysOfWeek, String> {
-        days_of_week_from_field(parse_field_with_any_token(token)?, config)
+        days_of_week_from_field(parse_dow_field_with_any_token(token, config)?, config)
             .map_err(|parse_error| format!("{parse_error}"))
     };
 
-    let (minutes, hours, days_of_month, months, days_of_week) = match tokens {
+    let (minutes, hours, days_of_month, months, days_of_week, years) = match tokens {
         [minutes, hours, days_of_month, months, days_of_week] => (
-            from_field_with_options(parse_field_token(minutes)?, config.wraparound_ranges)
-                .map_err(|e| e.to_string())?,
-            from_field_with_options(parse_field_token(hours)?, config.wraparound_ranges)
-                .map_err(|e| e.to_string())?,
             from_field_with_options(
-                parse_field_with_any_token(days_of_month)?,
+                parse_field_token_with_config(minutes, config, random_bounds::<Minutes>(0))?,
                 config.wraparound_ranges,
             )
             .map_err(|e| e.to_string())?,
-            from_field_with_options(parse_field_token(months)?, config.wraparound_ranges)
-                .map_err(|e| e.to_string())?,
+            from_field_with_options(
+                parse_field_token_with_config(hours, config, random_bounds::<Hours>(1))?,
+                config.wraparound_ranges,
+            )
+            .map_err(|e| e.to_string())?,
+            days_of_month_from_field(
+                parse_dom_field_with_any_token(days_of_month, config)?,
+                config,
+            )
+            .map_err(|e| e.to_string())?,
+            from_field_with_options(
+                parse_field_token_with_config(months, config, random_bounds::<Months>(3))?,
+                config.wraparound_ranges,
+            )
+            .map_err(|e| e.to_string())?,
             parse_days_of_week(days_of_week)?,
+            Years::all(),
+        ),
+        [minutes, hours, days_of_month, months, days_of_week, year] => (
+            from_field_with_options(
+                parse_field_token_with_config(minutes, config, random_bounds::<Minutes>(0))?,
+                config.wraparound_ranges,
+            )
+            .map_err(|e| e.to_string())?,
+            from_field_with_options(
+                parse_field_token_with_config(hours, config, random_bounds::<Hours>(1))?,
+                config.wraparound_ranges,
+            )
+            .map_err(|e| e.to_string())?,
+            days_of_month_from_field(
+                parse_dom_field_with_any_token(days_of_month, config)?,
+                config,
+            )
+            .map_err(|e| e.to_string())?,
+            from_field_with_options(
+                parse_field_token_with_config(months, config, random_bounds::<Months>(3))?,
+                config.wraparound_ranges,
+            )
+            .map_err(|e| e.to_string())?,
+            parse_days_of_week(days_of_week)?,
+            parse_years(Some(year))?,
         ),
         _ => return Err("a valid cron expression".to_owned()),
     };
@@ -533,7 +1082,7 @@ fn build_schedule_fields_from_five_part_tokens(
         days_of_month,
         months,
         days_of_week,
-        Years::all(),
+        years,
     ))
 }
 

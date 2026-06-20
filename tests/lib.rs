@@ -383,6 +383,146 @@ mod tests {
     }
 
     #[test]
+    fn test_special_specifiers_are_separately_configurable() {
+        assert!(Schedule::builder().parse("0 0 0 l * *").is_err());
+        assert!(Schedule::builder().parse("0 0 0 15w * *").is_err());
+        assert!(Schedule::builder().parse("0 0 0 * * mon#2").is_err());
+        assert!(Schedule::builder().parse("R 0 0 * * *").is_err());
+
+        assert!(Schedule::builder()
+            .last_specifiers(true)
+            .parse("0 0 0 l * *")
+            .is_ok());
+        assert!(Schedule::builder()
+            .last_specifiers(true)
+            .parse("0 0 0 15w * *")
+            .is_err());
+        assert!(Schedule::builder()
+            .nearest_weekday(true)
+            .parse("0 0 0 15w * *")
+            .is_ok());
+        assert!(Schedule::builder()
+            .nth_weekday_of_month(true)
+            .parse("0 0 0 * * mon#2")
+            .is_ok());
+        assert!(Schedule::builder()
+            .random_fields(true)
+            .parse("R 0 0 * * *")
+            .is_ok());
+    }
+
+    #[test]
+    fn test_last_day_of_month_specifier() {
+        let schedule = Schedule::builder()
+            .last_specifiers(true)
+            .parse("0 0 0 l * *")
+            .unwrap();
+        let mut events = schedule.after(&Utc.with_ymd_and_hms(2025, 1, 30, 0, 0, 0).unwrap());
+
+        assert_eq!(
+            Utc.with_ymd_and_hms(2025, 1, 31, 0, 0, 0).unwrap(),
+            events.next().unwrap()
+        );
+        assert_eq!(
+            Utc.with_ymd_and_hms(2025, 2, 28, 0, 0, 0).unwrap(),
+            events.next().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_nearest_weekday_specifier() {
+        let first_weekday = Schedule::builder()
+            .nearest_weekday(true)
+            .parse("0 0 0 1w * *")
+            .unwrap();
+        let mut events = first_weekday.after(&Utc.with_ymd_and_hms(2025, 2, 28, 0, 0, 0).unwrap());
+        assert_eq!(
+            Utc.with_ymd_and_hms(2025, 3, 3, 0, 0, 0).unwrap(),
+            events.next().unwrap()
+        );
+
+        let last_weekday = Schedule::builder()
+            .nearest_weekday(true)
+            .parse("0 0 0 w31 8 *")
+            .unwrap();
+        let mut events = last_weekday.after(&Utc.with_ymd_and_hms(2025, 8, 1, 0, 0, 0).unwrap());
+        assert_eq!(
+            Utc.with_ymd_and_hms(2025, 8, 29, 0, 0, 0).unwrap(),
+            events.next().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_nth_and_last_weekday_specifiers() {
+        let third_monday = Schedule::builder()
+            .nth_weekday_of_month(true)
+            .parse("0 0 0 * 6 mon#3")
+            .unwrap();
+        let mut events = third_monday.after(&Utc.with_ymd_and_hms(2025, 6, 12, 0, 0, 0).unwrap());
+        assert_eq!(
+            Utc.with_ymd_and_hms(2025, 6, 16, 0, 0, 0).unwrap(),
+            events.next().unwrap()
+        );
+
+        let last_friday = Schedule::vixie().parse("0 0 0 * 6 l5").unwrap();
+        let mut events = last_friday.after(&Utc.with_ymd_and_hms(2025, 6, 12, 0, 0, 0).unwrap());
+        assert_eq!(
+            Utc.with_ymd_and_hms(2025, 6, 27, 0, 0, 0).unwrap(),
+            events.next().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_random_field_specifier_expands_at_parse_time() {
+        let schedule = Schedule::builder()
+            .random_fields(true)
+            .parse("R(10-12) R(20-22) R(3-5) R(1-3) R(4-6) R(2-4) R(2025-2027)")
+            .unwrap();
+
+        assert_eq!(1, schedule.seconds().count());
+        assert_eq!(1, schedule.minutes().count());
+        assert_eq!(1, schedule.hours().count());
+        assert_eq!(1, schedule.days_of_month().count());
+        assert_eq!(1, schedule.months().count());
+        assert_eq!(1, schedule.days_of_week().count());
+        assert_eq!(1, schedule.years().count());
+        assert!(schedule
+            .seconds()
+            .iter()
+            .all(|value| (10..=12).contains(&value)));
+        assert!(schedule
+            .minutes()
+            .iter()
+            .all(|value| (20..=22).contains(&value)));
+        assert!(schedule
+            .hours()
+            .iter()
+            .all(|value| (3..=5).contains(&value)));
+        assert!(schedule
+            .days_of_month()
+            .iter()
+            .all(|value| (1..=3).contains(&value)));
+        assert!(schedule
+            .months()
+            .iter()
+            .all(|value| (4..=6).contains(&value)));
+        assert!(schedule
+            .days_of_week()
+            .iter()
+            .all(|value| (2..=4).contains(&value)));
+        assert!(schedule
+            .years()
+            .iter()
+            .all(|value| (2025..=2027).contains(&value)));
+
+        let stepped = Schedule::builder()
+            .random_fields(true)
+            .parse("R/15 0 0 * * *")
+            .unwrap();
+        assert_eq!(4, stepped.seconds().count());
+    }
+
+    #[test]
     fn test_builder_interface_custom_parts() {
         let schedule = Schedule::builder()
             .allowed_cron_schedule_parts(CronScheduleParts::FiveOrSix)
