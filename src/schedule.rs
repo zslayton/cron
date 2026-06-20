@@ -1,5 +1,7 @@
-use chrono::offset::{LocalResult, TimeZone};
-use chrono::{DateTime, Datelike, TimeDelta, Timelike, Utc};
+use chrono::offset::{LocalResult, Offset, TimeZone};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, TimeDelta, Timelike, Utc};
+use chrono_tz::GapInfo;
+use std::any::Any;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 #[cfg(feature = "serde")]
@@ -14,7 +16,13 @@ use crate::error::Error;
 use crate::ordinal::*;
 use crate::queries::*;
 use crate::time_unit::*;
-use crate::{CronScheduleParts, DayOfWeekNumbering, DowDomOperand, ScheduleConfig};
+use crate::{
+    CronScheduleParts, DayOfWeekNumbering, DowDomOperand, NonexistentTimeBehavior, ScheduleConfig,
+};
+
+// This is an offset probe, not the local gap search span. A nonexistent local
+// time's corresponding UTC transition can be shifted by the zone's UTC offset.
+const NONEXISTENT_OFFSET_PROBE_SECONDS: i64 = 18 * 60 * 60;
 
 impl From<Schedule> for String {
     fn from(schedule: Schedule) -> String {
@@ -59,21 +67,21 @@ impl Schedule {
 
     fn next_after<Z>(&self, after: &DateTime<Z>) -> Option<DateTime<Z>>
     where
-        Z: TimeZone,
+        Z: TimeZone + 'static,
     {
         self.find_with_query(NextAfterQuery::from(after), after)
     }
 
     fn prev_from<Z>(&self, before: &DateTime<Z>) -> Option<DateTime<Z>>
     where
-        Z: TimeZone,
+        Z: TimeZone + 'static,
     {
         self.find_with_query(PrevFromQuery::from(before), before)
     }
 
     fn find_with_query<Z, Q>(&self, mut query: Q, datetime: &DateTime<Z>) -> Option<DateTime<Z>>
     where
-        Z: TimeZone,
+        Z: TimeZone + 'static,
         Q: Query<Z>,
     {
         let mut deferred_candidate: Option<DateTime<Z>> = None;
@@ -106,7 +114,44 @@ impl Schedule {
                                     *second,
                                 );
                                 match local_result {
-                                    LocalResult::None => continue,
+                                    LocalResult::None => {
+                                        if self.config.nonexistent_time_behavior
+                                            == NonexistentTimeBehavior::Skip
+                                        {
+                                            continue;
+                                        }
+
+                                        let Some(candidate) = next_existent_datetime(
+                                            &datetime.timezone(),
+                                            NaiveDateTime::new(
+                                                NaiveDate::from_ymd_opt(
+                                                    *year as i32,
+                                                    *month,
+                                                    day_of_month,
+                                                )?,
+                                                NaiveTime::from_hms_opt(*hour, *minute, *second)?,
+                                            ),
+                                        ) else {
+                                            continue;
+                                        };
+
+                                        if !query.preceeds_reference_datetime(&candidate) {
+                                            continue;
+                                        }
+                                        if !self.within_search_interval(
+                                            datetime,
+                                            &candidate,
+                                            query.is_reversed(),
+                                        ) {
+                                            return deferred_candidate;
+                                        }
+                                        if let Some(deferred) = deferred_candidate.take() {
+                                            return Some(
+                                                query.preferred_candidate(deferred, candidate),
+                                            );
+                                        }
+                                        return Some(candidate);
+                                    }
                                     LocalResult::Single(candidate) => {
                                         if !query.preceeds_reference_datetime(&candidate) {
                                             continue;
@@ -179,26 +224,29 @@ impl Schedule {
     /// the current time if applicable.
     pub fn upcoming<Z>(&self, timezone: Z) -> ScheduleIterator<'_, Z>
     where
-        Z: TimeZone,
+        Z: TimeZone + 'static,
     {
         self.after(&timezone.from_utc_datetime(&Utc::now().naive_utc()))
     }
 
     /// The same, but with an iterator with a static ownership
-    pub fn upcoming_owned<Z: TimeZone>(&self, timezone: Z) -> OwnedScheduleIterator<Z> {
+    pub fn upcoming_owned<Z: TimeZone + 'static>(&self, timezone: Z) -> OwnedScheduleIterator<Z> {
         self.after_owned(timezone.from_utc_datetime(&Utc::now().naive_utc()))
     }
 
     /// Like the `upcoming` method, but allows you to specify a start time other than the present.
     pub fn after<Z>(&self, after: &DateTime<Z>) -> ScheduleIterator<'_, Z>
     where
-        Z: TimeZone,
+        Z: TimeZone + 'static,
     {
         ScheduleIterator::new(self, after)
     }
 
     /// The same, but with a static ownership.
-    pub fn after_owned<Z: TimeZone>(&self, after: DateTime<Z>) -> OwnedScheduleIterator<Z> {
+    pub fn after_owned<Z: TimeZone + 'static>(
+        &self,
+        after: DateTime<Z>,
+    ) -> OwnedScheduleIterator<Z> {
         OwnedScheduleIterator::new(self.clone(), after)
     }
 
@@ -324,12 +372,133 @@ impl ScheduleConfigBuilder {
         self
     }
 
+    pub fn nonexistent_time_behavior(mut self, behavior: NonexistentTimeBehavior) -> Self {
+        self.config.nonexistent_time_behavior = behavior;
+        self
+    }
+
     pub fn parse(self, expression: &str) -> Result<Schedule, Error> {
         Schedule::from_str_with_config(expression, self.config)
     }
 
     pub fn config(&self) -> ScheduleConfig {
         self.config
+    }
+}
+
+fn next_existent_datetime<Z>(timezone: &Z, nonexistent: NaiveDateTime) -> Option<DateTime<Z>>
+where
+    Z: TimeZone + 'static,
+{
+    if let Some(candidate) = next_existent_chrono_tz_datetime(timezone, nonexistent) {
+        return Some(candidate);
+    }
+
+    let before_probe =
+        nonexistent.checked_sub_signed(TimeDelta::seconds(NONEXISTENT_OFFSET_PROBE_SECONDS))?;
+    let after_probe =
+        nonexistent.checked_add_signed(TimeDelta::seconds(NONEXISTENT_OFFSET_PROBE_SECONDS))?;
+    let before_offset = timezone
+        .offset_from_utc_datetime(&before_probe)
+        .fix()
+        .local_minus_utc();
+    let after_offset = timezone
+        .offset_from_utc_datetime(&after_probe)
+        .fix()
+        .local_minus_utc();
+
+    // A nonexistent local time should come from a forward offset transition. If the generic
+    // fallback cannot observe that across its probes, it cannot infer the gap boundary.
+    if after_offset <= before_offset {
+        return None;
+    }
+
+    let mut lower = nonexistent.checked_sub_signed(TimeDelta::seconds(i64::from(after_offset)))?;
+    let mut upper = nonexistent.checked_sub_signed(TimeDelta::seconds(i64::from(before_offset)))?;
+    let upper_local = timezone.from_utc_datetime(&upper).naive_local();
+
+    if let Some(candidate) = likely_gap_end_datetime(timezone, nonexistent, upper_local) {
+        return Some(candidate);
+    }
+
+    // Chrono's generic `TimeZone` exposes offsets but not transition tables. For a forward
+    // transition, the surrounding offsets bracket the UTC instant where local time jumps over
+    // `nonexistent`, so search that small UTC interval for the first existent local time after it.
+    while upper.signed_duration_since(lower) > TimeDelta::seconds(1) {
+        let midpoint = lower.checked_add_signed(upper.signed_duration_since(lower) / 2)?;
+        if timezone.from_utc_datetime(&midpoint).naive_local() > nonexistent {
+            upper = midpoint;
+        } else {
+            lower = midpoint;
+        }
+    }
+
+    let candidate = timezone.from_utc_datetime(&upper);
+    (candidate.naive_local() > nonexistent).then_some(candidate)
+}
+
+fn next_existent_chrono_tz_datetime<Z>(
+    timezone: &Z,
+    nonexistent: NaiveDateTime,
+) -> Option<DateTime<Z>>
+where
+    Z: TimeZone + 'static,
+{
+    // `chrono_tz::Tz` exposes transition metadata, but stable Rust cannot specialize the generic
+    // `TimeZone` path. Use a safe runtime downcast when the concrete timezone is exactly `Tz`.
+    let chrono_tz = (timezone as &dyn Any).downcast_ref::<chrono_tz::Tz>()?;
+    GapInfo::new(&nonexistent, chrono_tz)?
+        .end
+        .map(|candidate| candidate.with_timezone(timezone))
+}
+
+fn likely_gap_end_datetime<Z>(
+    timezone: &Z,
+    nonexistent: NaiveDateTime,
+    upper_local: NaiveDateTime,
+) -> Option<DateTime<Z>>
+where
+    Z: TimeZone,
+{
+    for interval_seconds in [60 * 60, 15 * 60] {
+        let mut boundary = next_local_boundary(nonexistent, interval_seconds)?;
+        while boundary <= upper_local {
+            if let Some(candidate) = gap_end_at_boundary(timezone, boundary) {
+                return Some(candidate);
+            }
+            boundary = boundary.checked_add_signed(TimeDelta::seconds(interval_seconds))?;
+        }
+    }
+
+    None
+}
+
+fn next_local_boundary(datetime: NaiveDateTime, interval_seconds: i64) -> Option<NaiveDateTime> {
+    let day_start = datetime.date().and_hms_opt(0, 0, 0)?;
+    let seconds_from_midnight = i64::from(datetime.time().num_seconds_from_midnight());
+    let next_boundary_seconds = ((seconds_from_midnight / interval_seconds) + 1) * interval_seconds;
+
+    day_start.checked_add_signed(TimeDelta::seconds(next_boundary_seconds))
+}
+
+fn gap_end_at_boundary<Z>(timezone: &Z, boundary: NaiveDateTime) -> Option<DateTime<Z>>
+where
+    Z: TimeZone,
+{
+    let previous_second = boundary.checked_sub_signed(TimeDelta::seconds(1))?;
+    if !matches!(
+        timezone.from_local_datetime(&previous_second),
+        LocalResult::None
+    ) {
+        return None;
+    }
+
+    match timezone.from_local_datetime(&boundary) {
+        LocalResult::Single(candidate) => Some(candidate),
+        LocalResult::Ambiguous(earlier, later) => {
+            Some(if earlier < later { earlier } else { later })
+        }
+        LocalResult::None => None,
     }
 }
 
@@ -439,7 +608,7 @@ impl ScheduleFields {
 
 pub struct ScheduleIterator<'a, Z>
 where
-    Z: TimeZone,
+    Z: TimeZone + 'static,
 {
     schedule: &'a Schedule,
     previous_datetime: Option<DateTime<Z>>,
@@ -448,7 +617,7 @@ where
 
 impl<'a, Z> ScheduleIterator<'a, Z>
 where
-    Z: TimeZone,
+    Z: TimeZone + 'static,
 {
     fn new(schedule: &'a Schedule, starting_datetime: &DateTime<Z>) -> Self {
         ScheduleIterator {
@@ -460,7 +629,7 @@ where
 
 impl<Z> Iterator for ScheduleIterator<'_, Z>
 where
-    Z: TimeZone,
+    Z: TimeZone + 'static,
 {
     type Item = DateTime<Z>;
 
@@ -475,7 +644,7 @@ where
 
 impl<Z> DoubleEndedIterator for ScheduleIterator<'_, Z>
 where
-    Z: TimeZone,
+    Z: TimeZone + 'static,
 {
     fn next_back(&mut self) -> Option<Self::Item> {
         let previous = self.previous_datetime.take()?;
@@ -489,7 +658,7 @@ where
 /// A `ScheduleIterator` with a static lifetime.
 pub struct OwnedScheduleIterator<Z>
 where
-    Z: TimeZone,
+    Z: TimeZone + 'static,
 {
     schedule: Schedule,
     previous_datetime: Option<DateTime<Z>>,
@@ -497,7 +666,7 @@ where
 
 impl<Z> OwnedScheduleIterator<Z>
 where
-    Z: TimeZone,
+    Z: TimeZone + 'static,
 {
     pub fn new(schedule: Schedule, starting_datetime: DateTime<Z>) -> Self {
         Self {
@@ -509,7 +678,7 @@ where
 
 impl<Z> Iterator for OwnedScheduleIterator<Z>
 where
-    Z: TimeZone,
+    Z: TimeZone + 'static,
 {
     type Item = DateTime<Z>;
 
@@ -522,7 +691,7 @@ where
     }
 }
 
-impl<Z: TimeZone> DoubleEndedIterator for OwnedScheduleIterator<Z> {
+impl<Z: TimeZone + 'static> DoubleEndedIterator for OwnedScheduleIterator<Z> {
     fn next_back(&mut self) -> Option<Self::Item> {
         let previous = self.previous_datetime.take()?;
 
@@ -868,6 +1037,23 @@ mod test {
         let schedule = Schedule::from_str("* * * * * Sat,Sun *").unwrap();
         let prev = schedule.after(&dt).nth_back(1).unwrap();
         assert!(prev < dt); // test is ensuring line above does not panic
+    }
+
+    #[test]
+    fn test_chrono_tz_next_existent_fast_path() {
+        use chrono::NaiveDate;
+        use chrono_tz::America::Los_Angeles;
+
+        let nonexistent = NaiveDate::from_ymd_opt(2022, 3, 13)
+            .unwrap()
+            .and_hms_opt(2, 30, 0)
+            .unwrap();
+        let candidate = next_existent_chrono_tz_datetime(&Los_Angeles, nonexistent).unwrap();
+
+        assert_eq!(
+            candidate,
+            Los_Angeles.with_ymd_and_hms(2022, 3, 13, 3, 0, 0).unwrap()
+        );
     }
 
     #[test]

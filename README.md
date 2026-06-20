@@ -39,13 +39,16 @@ If you need custom behavior, use the builder:
 
 ```rust
 use chrono::TimeDelta;
-use cron::{CronScheduleParts, DayOfWeekNumbering, DowDomOperand, Schedule};
+use cron::{
+    CronScheduleParts, DayOfWeekNumbering, DowDomOperand, NonexistentTimeBehavior, Schedule,
+};
 
 let schedule = Schedule::builder()
     .allowed_cron_schedule_parts(CronScheduleParts::Both) // 5-part and 6-part expressions
     .day_of_week_numbering(DayOfWeekNumbering::ZeroIndexed) // Vixie-style DOW numbering
     .wraparound_ranges(true)                       // allow ranges like Nov-Mar
     .dow_dom_operand(DowDomOperand::Or)                   // combine DOM + DOW with OR
+    .nonexistent_time_behavior(NonexistentTimeBehavior::NextExistent) // map skipped local times
     .search_interval(TimeDelta::days(400 * 366))          // bound search window
     .parse("30 9 1 * 1")
     .unwrap();
@@ -71,6 +74,7 @@ Default config values:
 - `day_of_week_numbering`: `DayOfWeekNumbering::OneIndexed`
 - `wraparound_ranges`: `false`
 - `dow_dom_operand`: `DowDomOperand::And`
+- `nonexistent_time_behavior`: `NonexistentTimeBehavior::Skip`
 - `search_interval`: `400 * 366` days
 
 ## License

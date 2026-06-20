@@ -44,7 +44,9 @@ mod schedule;
 mod specifier;
 mod time_unit;
 
-pub use crate::config::{CronScheduleParts, DayOfWeekNumbering, DowDomOperand, ScheduleConfig};
+pub use crate::config::{
+    CronScheduleParts, DayOfWeekNumbering, DowDomOperand, NonexistentTimeBehavior, ScheduleConfig,
+};
 pub use crate::schedule::{
     OwnedScheduleIterator, Schedule, ScheduleConfigBuilder, ScheduleIterator,
 };

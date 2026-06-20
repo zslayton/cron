@@ -29,6 +29,15 @@ pub enum DowDomOperand {
     Or,
 }
 
+/// Controls how nonexistent local times are handled during schedule iteration.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NonexistentTimeBehavior {
+    /// Skip scheduled local times that do not exist in the configured time zone.
+    Skip,
+    /// Return the next existent time after a scheduled local time that does not exist.
+    NextExistent,
+}
+
 /// Parsing and interpretation configuration for cron schedules.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ScheduleConfig {
@@ -36,6 +45,7 @@ pub struct ScheduleConfig {
     pub day_of_week_numbering: DayOfWeekNumbering,
     pub wraparound_ranges: bool,
     pub dow_dom_operand: DowDomOperand,
+    pub nonexistent_time_behavior: NonexistentTimeBehavior,
     pub search_interval: TimeDelta,
 }
 
@@ -46,6 +56,7 @@ impl Default for ScheduleConfig {
             day_of_week_numbering: DayOfWeekNumbering::OneIndexed,
             wraparound_ranges: false,
             dow_dom_operand: DowDomOperand::And,
+            nonexistent_time_behavior: NonexistentTimeBehavior::Skip,
             search_interval: TimeDelta::days(400 * 366),
         }
     }

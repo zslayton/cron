@@ -3,8 +3,8 @@ mod tests {
     use chrono::*;
     use chrono_tz::Tz;
     use cron::{
-        CronScheduleParts, DayOfWeekNumbering, DowDomOperand, Schedule, ScheduleConfig,
-        TimeUnitSpec,
+        CronScheduleParts, DayOfWeekNumbering, DowDomOperand, NonexistentTimeBehavior, Schedule,
+        ScheduleConfig, TimeUnitSpec,
     };
     use std::ops::Bound::{Excluded, Included};
     use std::str::FromStr;
@@ -1001,5 +1001,77 @@ mod tests {
                 .collect::<Vec<_>>();
             assert_eq!(actual, expected_reversed, "backward case {}", case.name);
         }
+    }
+
+    #[test]
+    fn test_nonexistent_time_next_existent_forward() {
+        let timezone: Tz = "America/Los_Angeles".parse().unwrap();
+        let schedule = Schedule::builder()
+            .nonexistent_time_behavior(NonexistentTimeBehavior::NextExistent)
+            .parse("0 0 2 * * * *")
+            .unwrap();
+        let start = parse_expected_in_tz(timezone, "2022-03-13T01:59:59-08:00");
+
+        let actual = schedule
+            .after(&start)
+            .take(3)
+            .map(|dt| dt.to_rfc3339())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            actual,
+            vec![
+                "2022-03-13T03:00:00-07:00",
+                "2022-03-14T02:00:00-07:00",
+                "2022-03-15T02:00:00-07:00",
+            ]
+        );
+    }
+
+    #[test]
+    fn test_subhour_nonexistent_time_next_existent_forward() {
+        let timezone: Tz = "America/Los_Angeles".parse().unwrap();
+        let schedule = Schedule::builder()
+            .nonexistent_time_behavior(NonexistentTimeBehavior::NextExistent)
+            .parse("0 30 2 * * * *")
+            .unwrap();
+        let start = parse_expected_in_tz(timezone, "2022-03-13T01:59:59-08:00");
+
+        let actual = schedule
+            .after(&start)
+            .take(2)
+            .map(|dt| dt.to_rfc3339())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            actual,
+            vec!["2022-03-13T03:00:00-07:00", "2022-03-14T02:30:00-07:00",]
+        );
+    }
+
+    #[test]
+    fn test_nonexistent_time_next_existent_backward() {
+        let timezone: Tz = "America/Los_Angeles".parse().unwrap();
+        let schedule = Schedule::builder()
+            .nonexistent_time_behavior(NonexistentTimeBehavior::NextExistent)
+            .parse("0 0 2 * * * *")
+            .unwrap();
+        let start = parse_expected_in_tz(timezone, "2022-03-14T02:00:00-07:00");
+
+        let actual = schedule
+            .after(&start)
+            .rev()
+            .take(3)
+            .map(|dt| dt.to_rfc3339())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            actual,
+            vec![
+                "2022-03-13T03:00:00-07:00",
+                "2022-03-12T02:00:00-08:00",
+                "2022-03-11T02:00:00-08:00",
+            ]
+        );
     }
 }
