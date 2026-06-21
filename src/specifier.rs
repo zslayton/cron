@@ -23,6 +23,25 @@ pub enum Specifier {
     Range(RangeEndpoint, RangeEndpoint),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RandomSpecifier {
+    pub range: Option<(Ordinal, Ordinal)>,
+    pub step: Option<Ordinal>,
+}
+
+impl Display for RandomSpecifier {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "R")?;
+        if let Some((start, end)) = self.range {
+            write!(f, "({start}-{end})")?;
+        }
+        if let Some(step) = self.step {
+            write!(f, "/{step}")?;
+        }
+        Ok(())
+    }
+}
+
 // Separating out a root specifier allows for a higher tiered specifier, allowing us to achieve
 // periods with base values that are more advanced than an ordinal:
 // - all: '*/2'
@@ -40,6 +59,7 @@ pub enum RootSpecifier {
     LastWeekdayOfMonth(RangeEndpoint),
     NthWeekdayOfMonth(RangeEndpoint, Ordinal),
     NthWeekdayRangeOfMonth(RangeEndpoint, RangeEndpoint, Ordinal),
+    Random(RandomSpecifier),
 }
 
 impl From<Specifier> for RootSpecifier {
