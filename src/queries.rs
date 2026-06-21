@@ -162,13 +162,17 @@ where
         let should_scan_all_days = operand == DowDomOperand::Or && both_restricted;
         let days_of_month = fields.days_of_month_ordinals_for_month(year, month);
 
-        let base_values = if should_scan_all_days {
-            range.collect::<Vec<_>>()
+        let base_iter: Box<dyn DoubleEndedIterator<Item = Ordinal> + 'a> = if should_scan_all_days {
+            Box::new(range)
         } else {
-            days_of_month.range(range).copied().collect::<Vec<_>>()
+            Box::new(
+                days_of_month
+                    .into_iter()
+                    .filter(move |day| range.contains(day)),
+            )
         };
 
-        let iter = base_values.into_iter().filter(move |day| {
+        let iter = base_iter.filter(move |day| {
             NaiveDate::from_ymd_opt(year as i32, month, *day)
                 .map(|d| {
                     fields.day_matches(year, month, *day, d.weekday().number_from_sunday(), operand)
