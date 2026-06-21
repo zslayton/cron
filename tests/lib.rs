@@ -9,6 +9,28 @@ mod tests {
     use std::ops::Bound::{Excluded, Included};
     use std::str::FromStr;
 
+    fn utc(year: i32, month: u32, day: u32, hour: u32, minute: u32, second: u32) -> DateTime<Utc> {
+        Utc.with_ymd_and_hms(year, month, day, hour, minute, second)
+            .unwrap()
+    }
+
+    fn next_events(schedule: &Schedule, start: DateTime<Utc>, count: usize) -> Vec<DateTime<Utc>> {
+        schedule.after(&start).take(count).collect()
+    }
+
+    fn prev_events(schedule: &Schedule, start: DateTime<Utc>, count: usize) -> Vec<DateTime<Utc>> {
+        let mut events = schedule.after(&start);
+        (0..count).map(|_| events.next_back().unwrap()).collect()
+    }
+
+    fn assert_next_events(schedule: &Schedule, start: DateTime<Utc>, expected: &[DateTime<Utc>]) {
+        assert_eq!(expected, next_events(schedule, start, expected.len()));
+    }
+
+    fn assert_prev_events(schedule: &Schedule, start: DateTime<Utc>, expected: &[DateTime<Utc>]) {
+        assert_eq!(expected, prev_events(schedule, start, expected.len()));
+    }
+
     #[test]
     fn test_readme() {
         let expression = "0   30   9,12,15     1,15       May-Aug  Mon,Wed,Fri  2018/2";
@@ -417,15 +439,24 @@ mod tests {
             .last_specifiers(true)
             .parse("0 0 0 l * *")
             .unwrap();
-        let mut events = schedule.after(&Utc.with_ymd_and_hms(2025, 1, 30, 0, 0, 0).unwrap());
 
-        assert_eq!(
-            Utc.with_ymd_and_hms(2025, 1, 31, 0, 0, 0).unwrap(),
-            events.next().unwrap()
+        assert_next_events(
+            &schedule,
+            utc(2025, 2, 15, 0, 0, 0),
+            &[
+                utc(2025, 2, 28, 0, 0, 0),
+                utc(2025, 3, 31, 0, 0, 0),
+                utc(2025, 4, 30, 0, 0, 0),
+            ],
         );
-        assert_eq!(
-            Utc.with_ymd_and_hms(2025, 2, 28, 0, 0, 0).unwrap(),
-            events.next().unwrap()
+        assert_prev_events(
+            &schedule,
+            utc(2025, 3, 15, 0, 0, 0),
+            &[
+                utc(2025, 2, 28, 0, 0, 0),
+                utc(2025, 1, 31, 0, 0, 0),
+                utc(2024, 12, 31, 0, 0, 0),
+            ],
         );
     }
 
@@ -435,20 +466,38 @@ mod tests {
             .nearest_weekday(true)
             .parse("0 0 0 1w * *")
             .unwrap();
-        let mut events = first_weekday.after(&Utc.with_ymd_and_hms(2025, 2, 28, 0, 0, 0).unwrap());
-        assert_eq!(
-            Utc.with_ymd_and_hms(2025, 3, 3, 0, 0, 0).unwrap(),
-            events.next().unwrap()
+        assert_next_events(
+            &first_weekday,
+            utc(2025, 3, 2, 0, 0, 0),
+            &[
+                utc(2025, 3, 3, 0, 0, 0),
+                utc(2025, 4, 1, 0, 0, 0),
+                utc(2025, 5, 1, 0, 0, 0),
+            ],
+        );
+        assert_prev_events(
+            &first_weekday,
+            utc(2025, 3, 2, 0, 0, 0),
+            &[
+                utc(2025, 2, 3, 0, 0, 0),
+                utc(2025, 1, 1, 0, 0, 0),
+                utc(2024, 12, 2, 0, 0, 0),
+            ],
         );
 
-        let last_weekday = Schedule::builder()
+        let clamped_weekday = Schedule::builder()
             .nearest_weekday(true)
-            .parse("0 0 0 w31 8 *")
+            .parse("0 0 0 w31 2 *")
             .unwrap();
-        let mut events = last_weekday.after(&Utc.with_ymd_and_hms(2025, 8, 1, 0, 0, 0).unwrap());
-        assert_eq!(
-            Utc.with_ymd_and_hms(2025, 8, 29, 0, 0, 0).unwrap(),
-            events.next().unwrap()
+        assert_next_events(
+            &clamped_weekday,
+            utc(2025, 1, 1, 0, 0, 0),
+            &[utc(2025, 2, 28, 0, 0, 0), utc(2026, 2, 27, 0, 0, 0)],
+        );
+        assert_prev_events(
+            &clamped_weekday,
+            utc(2026, 3, 1, 0, 0, 0),
+            &[utc(2026, 2, 27, 0, 0, 0), utc(2025, 2, 28, 0, 0, 0)],
         );
     }
 
@@ -458,17 +507,38 @@ mod tests {
             .nth_weekday_of_month(true)
             .parse("0 0 0 * 6 mon#3")
             .unwrap();
-        let mut events = third_monday.after(&Utc.with_ymd_and_hms(2025, 6, 12, 0, 0, 0).unwrap());
-        assert_eq!(
-            Utc.with_ymd_and_hms(2025, 6, 16, 0, 0, 0).unwrap(),
-            events.next().unwrap()
+        assert_next_events(
+            &third_monday,
+            utc(2025, 6, 12, 0, 0, 0),
+            &[utc(2025, 6, 16, 0, 0, 0), utc(2026, 6, 15, 0, 0, 0)],
+        );
+        assert_prev_events(
+            &third_monday,
+            utc(2025, 6, 12, 0, 0, 0),
+            &[utc(2024, 6, 17, 0, 0, 0), utc(2023, 6, 19, 0, 0, 0)],
         );
 
-        let last_friday = Schedule::vixie().parse("0 0 0 * 6 l5").unwrap();
-        let mut events = last_friday.after(&Utc.with_ymd_and_hms(2025, 6, 12, 0, 0, 0).unwrap());
-        assert_eq!(
-            Utc.with_ymd_and_hms(2025, 6, 27, 0, 0, 0).unwrap(),
-            events.next().unwrap()
+        let last_friday = Schedule::builder()
+            .last_specifiers(true)
+            .parse("0 0 0 * * Lfri")
+            .unwrap();
+        assert_next_events(
+            &last_friday,
+            utc(2025, 6, 12, 0, 0, 0),
+            &[
+                utc(2025, 6, 27, 0, 0, 0),
+                utc(2025, 7, 25, 0, 0, 0),
+                utc(2025, 8, 29, 0, 0, 0),
+            ],
+        );
+        assert_prev_events(
+            &last_friday,
+            utc(2025, 6, 12, 0, 0, 0),
+            &[
+                utc(2025, 5, 30, 0, 0, 0),
+                utc(2025, 4, 25, 0, 0, 0),
+                utc(2025, 3, 28, 0, 0, 0),
+            ],
         );
     }
 
@@ -476,50 +546,56 @@ mod tests {
     fn test_random_field_specifier_expands_at_parse_time() {
         let schedule = Schedule::builder()
             .random_fields(true)
-            .parse("R(10-12) R(20-22) R(3-5) R(1-3) R(4-6) R(2-4) R(2025-2027)")
+            .parse("R(10-12) R(20-22) R(3-5) R(1-3) R(4-6) * R(2025-2027)")
             .unwrap();
 
-        assert_eq!(1, schedule.seconds().count());
-        assert_eq!(1, schedule.minutes().count());
-        assert_eq!(1, schedule.hours().count());
-        assert_eq!(1, schedule.days_of_month().count());
-        assert_eq!(1, schedule.months().count());
-        assert_eq!(1, schedule.days_of_week().count());
-        assert_eq!(1, schedule.years().count());
-        assert!(schedule
-            .seconds()
+        let next = schedule.after(&utc(2024, 1, 1, 0, 0, 0)).next().unwrap();
+        let prev = schedule
+            .after(&utc(2028, 1, 1, 0, 0, 0))
+            .next_back()
+            .unwrap();
+        assert_eq!(next, prev);
+        assert!((10..=12).contains(&next.second()));
+        assert!((20..=22).contains(&next.minute()));
+        assert!((3..=5).contains(&next.hour()));
+        assert!((1..=3).contains(&next.day()));
+        assert!((4..=6).contains(&next.month()));
+        assert!((2025..=2027).contains(&next.year()));
+
+        let day_of_week = Schedule::builder()
+            .random_fields(true)
+            .parse("0 0 0 * 4 R(2-4) 2025")
+            .unwrap();
+        let april_forward = next_events(&day_of_week, utc(2025, 3, 31, 23, 59, 59), 5)
+            .into_iter()
+            .take_while(|event| event.month() == 4)
+            .collect::<Vec<_>>();
+        let mut april_backward = Vec::new();
+        let mut events = day_of_week.after(&utc(2025, 5, 1, 0, 0, 0));
+        while let Some(event) = events.next_back() {
+            if event.month() != 4 {
+                break;
+            }
+            april_backward.push(event);
+        }
+        april_backward.reverse();
+        assert!(!april_forward.is_empty());
+        assert_eq!(april_forward, april_backward);
+        assert!(april_forward
             .iter()
-            .all(|value| (10..=12).contains(&value)));
-        assert!(schedule
-            .minutes()
-            .iter()
-            .all(|value| (20..=22).contains(&value)));
-        assert!(schedule
-            .hours()
-            .iter()
-            .all(|value| (3..=5).contains(&value)));
-        assert!(schedule
-            .days_of_month()
-            .iter()
-            .all(|value| (1..=3).contains(&value)));
-        assert!(schedule
-            .months()
-            .iter()
-            .all(|value| (4..=6).contains(&value)));
-        assert!(schedule
-            .days_of_week()
-            .iter()
-            .all(|value| (2..=4).contains(&value)));
-        assert!(schedule
-            .years()
-            .iter()
-            .all(|value| (2025..=2027).contains(&value)));
+            .all(|event| (2..=4).contains(&event.weekday().number_from_sunday())));
 
         let stepped = Schedule::builder()
             .random_fields(true)
             .parse("R/15 0 0 * * *")
             .unwrap();
-        assert_eq!(4, stepped.seconds().count());
+        let forward = next_events(&stepped, utc(2024, 12, 31, 23, 59, 59), 4);
+        let mut backward = prev_events(&stepped, utc(2025, 1, 1, 0, 1, 0), 4);
+        backward.reverse();
+        assert_eq!(forward, backward);
+        assert!(forward
+            .windows(2)
+            .all(|events| events[1] - events[0] == TimeDelta::seconds(15)));
     }
 
     #[test]
