@@ -134,6 +134,30 @@ mod tests {
     }
 
     #[test]
+    fn test_invalid_day_of_month_month_combinations_are_rejected() {
+        let five_part = ScheduleConfig {
+            cron_schedule_parts: CronScheduleParts::Five,
+            ..ScheduleConfig::default()
+        };
+
+        assert!(Schedule::from_str_with_config("0 0 31 2 *", five_part).is_err());
+        assert!(Schedule::from_str_with_config("0 0 31 4 *", five_part).is_err());
+        assert!(Schedule::from_str_with_config("0 0 31 1,2 *", five_part).is_ok());
+        assert!(Schedule::from_str_with_config("0 0 29 2 *", five_part).is_ok());
+
+        assert!(Schedule::from_str("0 0 0 31 2 *").is_err());
+        assert!(Schedule::vixie().parse("0 0 0 31 2 mon").is_ok());
+    }
+
+    #[test]
+    fn test_invalid_leap_day_year_combinations_are_rejected() {
+        assert!(Schedule::from_str("0 0 0 29 2 * 2024").is_ok());
+        assert!(Schedule::from_str("0 0 0 29 2 * 2024,2025").is_ok());
+        assert!(Schedule::from_str("0 0 0 29 2 * 2025").is_err());
+        assert!(Schedule::from_str("0 0 0 29 2 * 2025-2026").is_err());
+    }
+
+    #[test]
     fn test_configured_year_field_modes_iterate_datetimes() {
         for cron_schedule_parts in [
             CronScheduleParts::Seven,

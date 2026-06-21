@@ -11,7 +11,7 @@ use std::str::{self, FromStr};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::config::{CronScheduleParts, DayOfWeekNumbering};
+use crate::config::{CronScheduleParts, DayOfWeekNumbering, DowDomOperand};
 use crate::error::{Error, ErrorKind};
 use crate::ordinal::*;
 use crate::schedule::{Schedule, ScheduleFields};
@@ -1016,6 +1016,31 @@ fn build_schedule_fields_from_five_part_tokens(
     ))
 }
 
+fn validate_day_of_month(fields: &ScheduleFields, config: ScheduleConfig) -> Result<(), String> {
+    if fields.days_of_month_is_all() || fields.days_of_month_has_special_specifiers() {
+        return Ok(());
+    }
+    if config.dow_dom_operand == DowDomOperand::Or && !fields.days_of_week_is_all() {
+        return Ok(());
+    }
+
+    let has_valid_date = fields.months_ordinals().iter().any(|month| {
+        fields.years_ordinals().iter().any(|year| {
+            let last_day = days_in_month(*month, *year);
+            fields
+                .days_of_month_ordinals()
+                .iter()
+                .any(|day| *day <= last_day)
+        })
+    });
+
+    if has_valid_date {
+        Ok(())
+    } else {
+        Err("day-of-month values do not occur in the selected month/year set".to_owned())
+    }
+}
+
 fn schedule_with_config(
     expression: &str,
     config: ScheduleConfig,
@@ -1029,7 +1054,7 @@ fn schedule_with_config(
         return Err("a valid cron expression".to_owned());
     }
 
-    match (tokens.len(), config.cron_schedule_parts) {
+    let fields = match (tokens.len(), config.cron_schedule_parts) {
         (5, CronScheduleParts::Five | CronScheduleParts::FiveOrSix | CronScheduleParts::All) => {
             build_schedule_fields_from_five_part_tokens(tokens.as_slice(), config)
         }
@@ -1044,7 +1069,9 @@ fn schedule_with_config(
             build_schedule_fields_from_seven_part_tokens(tokens.as_slice(), config)
         }
         _ => Err("a valid cron expression".to_owned()),
-    }
+    }?;
+    validate_day_of_month(&fields, config)?;
+    Ok(fields)
 }
 
 #[cfg(test)]
