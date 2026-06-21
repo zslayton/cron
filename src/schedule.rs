@@ -117,6 +117,7 @@ impl Schedule {
                                     LocalResult::None => {
                                         if self.config.nonexistent_time_behavior
                                             == NonexistentTimeBehavior::Skip
+                                            || self.fields.is_hourly_or_more_frequent()
                                         {
                                             continue;
                                         }
@@ -568,6 +569,12 @@ impl ScheduleFields {
 
     pub(crate) fn seconds_ordinals(&self) -> &OrdinalSet {
         self.seconds.ordinals()
+    }
+
+    pub(crate) fn is_hourly_or_more_frequent(&self) -> bool {
+        self.hours.is_all()
+            || self.minutes.ordinals().len() > 1
+            || self.seconds.ordinals().len() > 1
     }
 
     pub(crate) fn days_of_week_is_all(&self) -> bool {
