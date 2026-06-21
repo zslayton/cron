@@ -4,7 +4,7 @@ use crate::specifier::{RangeEndpoint, RootSpecifier, Specifier};
 use crate::time_unit::{
     days_in_month, ordinal_range_values, ordinal_range_values_with_step, TimeUnitField,
 };
-use chrono::{Datelike, NaiveDate};
+use chrono::{Datelike, NaiveDate, Weekday};
 use once_cell::sync::Lazy;
 use std::borrow::Cow;
 
@@ -235,18 +235,26 @@ impl DaysOfMonth {
 
 fn nearest_weekday_for_month(year: Ordinal, month: Ordinal, day: Ordinal) -> Ordinal {
     let last_day = days_in_month(month, year);
+
+    // Croniter clamps an out-of-range `nW` request to the last day of the
+    // month first, so `31W` in February is resolved from Feb 28/29 rather
+    // than rejected or rolled into March.
     let day = day.min(last_day);
     let weekday = NaiveDate::from_ymd_opt(year as i32, month, day)
         .expect("day of month must be valid")
-        .weekday()
-        .number_from_monday();
+        .weekday();
 
     match weekday {
-        1..=5 => day,
-        6 if day == 1 => day + 2,
-        6 => day - 1,
-        7 if day == last_day => day - 2,
-        7 => day + 1,
-        _ => unreachable!("chrono weekday is always in 1..=7"),
+        Weekday::Mon | Weekday::Tue | Weekday::Wed | Weekday::Thu | Weekday::Fri => day,
+        // Saturdays normally resolve to the preceding Friday. If the first of
+        // the month is Saturday, Friday would be in the previous month, so use
+        // the following Monday instead.
+        Weekday::Sat if day == 1 => day + 2,
+        Weekday::Sat => day - 1,
+        // Sundays normally resolve to the following Monday. If the last day of
+        // the month is Sunday, Monday would be in the next month, so use the
+        // preceding Friday instead.
+        Weekday::Sun if day == last_day => day - 2,
+        Weekday::Sun => day + 1,
     }
 }
