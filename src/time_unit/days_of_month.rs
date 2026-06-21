@@ -72,32 +72,22 @@ impl DaysOfMonth {
             && self.ordinals().len() == (Self::inclusive_max() - Self::inclusive_min() + 1) as usize
     }
 
-    pub(crate) fn days_for_month(&self, year: Ordinal, month: Ordinal) -> OrdinalSet {
-        let last_day = days_in_month(month, year);
-        let mut days = self
-            .ordinals()
-            .iter()
-            .copied()
-            .filter(|day| *day <= last_day)
-            .collect::<OrdinalSet>();
-
-        if self.last_day_of_month {
-            days.insert(last_day);
-        }
-
-        for nearest_weekday in &self.nearest_weekdays {
-            days.insert(nearest_weekday_for_month(
-                year,
-                month,
-                (*nearest_weekday).min(last_day),
-            ));
-        }
-
-        days
-    }
-
     pub(crate) fn matches(&self, year: Ordinal, month: Ordinal, day: Ordinal) -> bool {
-        self.days_for_month(year, month).contains(&day)
+        let last_day = days_in_month(month, year);
+        if day > last_day {
+            return false;
+        }
+
+        // `L` and `W` are month-relative rather than stable ordinals:
+        // `L` becomes the current month's final day, and each `nW` may move
+        // to the nearest weekday without crossing the month boundary. Query
+        // iteration scans at most 31 days when these are present and calls
+        // this predicate directly instead of building a per-month set.
+        self.ordinals().contains(&day)
+            || (self.last_day_of_month && day == last_day)
+            || self.nearest_weekdays.iter().any(|nearest_weekday| {
+                day == nearest_weekday_for_month(year, month, *nearest_weekday)
+            })
     }
 
     pub(crate) fn ordinals_from_root_specifier_with_options(

@@ -594,12 +594,12 @@ impl ScheduleFields {
         self.months.ordinals()
     }
 
-    pub(crate) fn days_of_month_ordinals_for_month(
-        &self,
-        year: Ordinal,
-        month: Ordinal,
-    ) -> OrdinalSet {
-        self.days_of_month.days_for_month(year, month)
+    pub(crate) fn days_of_month_ordinals(&self) -> &OrdinalSet {
+        self.days_of_month.ordinals()
+    }
+
+    pub(crate) fn days_of_month_has_special_specifiers(&self) -> bool {
+        self.days_of_month.has_special_specifiers()
     }
 
     pub(crate) fn hours_ordinals(&self) -> &OrdinalSet {
