@@ -555,4 +555,151 @@ mod tests {
         assert!(schedule.includes(included));
         assert!(!schedule.includes(not_included));
     }
+
+    struct CronIterationTestCase {
+        name: &'static str,
+        timezone: Tz,
+        cron: &'static str,
+        expected: &'static [&'static str],
+    }
+
+    fn parse_expected_in_tz(timezone: Tz, expected: &str) -> DateTime<Tz> {
+        DateTime::parse_from_rfc3339(expected)
+            .unwrap()
+            .with_timezone(&timezone)
+    }
+
+    fn dst_iteration_cases() -> Vec<CronIterationTestCase> {
+        vec![
+            CronIterationTestCase {
+                name: "hourly_fall_back_los_angeles",
+                timezone: "America/Los_Angeles".parse().unwrap(),
+                cron: "0 0 * * * * *",
+                expected: &[
+                    "2022-11-06T01:00:00-07:00",
+                    "2022-11-06T01:00:00-08:00",
+                    "2022-11-06T02:00:00-08:00",
+                    "2022-11-06T03:00:00-08:00",
+                    "2022-11-06T04:00:00-08:00",
+                ],
+            },
+            CronIterationTestCase {
+                name: "hourly_spring_forward_los_angeles",
+                timezone: "America/Los_Angeles".parse().unwrap(),
+                cron: "0 0 * * * * *",
+                expected: &[
+                    "2022-03-13T01:00:00-08:00",
+                    "2022-03-13T03:00:00-07:00",
+                    "2022-03-13T04:00:00-07:00",
+                    "2022-03-13T05:00:00-07:00",
+                ],
+            },
+            CronIterationTestCase {
+                name: "subhourly_fall_back_los_angeles",
+                timezone: "America/Los_Angeles".parse().unwrap(),
+                cron: "0 0/30 * * * * *",
+                expected: &[
+                    "2022-11-06T01:00:00-07:00",
+                    "2022-11-06T01:30:00-07:00",
+                    "2022-11-06T01:00:00-08:00",
+                    "2022-11-06T01:30:00-08:00",
+                    "2022-11-06T02:00:00-08:00",
+                    "2022-11-06T02:30:00-08:00",
+                ],
+            },
+            CronIterationTestCase {
+                name: "subhourly_spring_forward_los_angeles",
+                timezone: "America/Los_Angeles".parse().unwrap(),
+                cron: "0 0/30 * * * * *",
+                expected: &[
+                    "2022-03-13T01:30:00-08:00",
+                    "2022-03-13T03:00:00-07:00",
+                    "2022-03-13T03:30:00-07:00",
+                    "2022-03-13T04:00:00-07:00",
+                ],
+            },
+            CronIterationTestCase {
+                name: "daily_across_fall_back_los_angeles",
+                timezone: "America/Los_Angeles".parse().unwrap(),
+                cron: "0 0 2 * * * *",
+                expected: &["2022-11-06T02:00:00-08:00", "2022-11-07T02:00:00-08:00"],
+            },
+            CronIterationTestCase {
+                name: "daily_across_spring_forward_los_angeles",
+                timezone: "America/Los_Angeles".parse().unwrap(),
+                cron: "0 0 2 * * * *",
+                expected: &["2022-03-14T02:00:00-07:00", "2022-03-15T02:00:00-07:00"],
+            },
+            CronIterationTestCase {
+                name: "monthly_across_spring_forward_los_angeles",
+                timezone: "America/Los_Angeles".parse().unwrap(),
+                cron: "0 0 2 13 * * *",
+                expected: &["2022-04-13T02:00:00-07:00", "2022-05-13T02:00:00-07:00"],
+            },
+            CronIterationTestCase {
+                name: "every_15_minutes_repeats_full_hour_during_fall_back",
+                timezone: "Europe/Berlin".parse().unwrap(),
+                cron: "0 0/15 * * * * *",
+                expected: &[
+                    "2022-10-30T02:00:00+02:00",
+                    "2022-10-30T02:15:00+02:00",
+                    "2022-10-30T02:30:00+02:00",
+                    "2022-10-30T02:45:00+02:00",
+                    "2022-10-30T02:00:00+01:00",
+                    "2022-10-30T02:15:00+01:00",
+                    "2022-10-30T02:30:00+01:00",
+                    "2022-10-30T02:45:00+01:00",
+                    "2022-10-30T03:00:00+01:00",
+                ],
+            },
+        ]
+    }
+
+    #[test]
+    fn test_dst_iteration_cases_forward() {
+        for case in dst_iteration_cases() {
+            let schedule = Schedule::from_str(case.cron).unwrap();
+            let start = parse_expected_in_tz(case.timezone, case.expected[0]);
+
+            let mut actual = vec![start.to_rfc3339()];
+            actual.extend(
+                schedule
+                    .after(&start)
+                    .take(case.expected.len().saturating_sub(1))
+                    .map(|dt| dt.to_rfc3339()),
+            );
+
+            let expected = case
+                .expected
+                .iter()
+                .map(|x| x.to_string())
+                .collect::<Vec<_>>();
+            assert_eq!(actual, expected, "forward case {}", case.name);
+        }
+    }
+
+    #[test]
+    fn test_dst_iteration_cases_backward() {
+        for case in dst_iteration_cases() {
+            let schedule = Schedule::from_str(case.cron).unwrap();
+            let last = parse_expected_in_tz(case.timezone, case.expected[case.expected.len() - 1]);
+
+            let mut actual = vec![last.to_rfc3339()];
+            actual.extend(
+                schedule
+                    .after(&last)
+                    .rev()
+                    .take(case.expected.len().saturating_sub(1))
+                    .map(|dt| dt.to_rfc3339()),
+            );
+
+            let expected_reversed = case
+                .expected
+                .iter()
+                .rev()
+                .map(|x| x.to_string())
+                .collect::<Vec<_>>();
+            assert_eq!(actual, expected_reversed, "backward case {}", case.name);
+        }
+    }
 }
