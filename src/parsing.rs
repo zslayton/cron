@@ -232,6 +232,7 @@ fn root_specifier(i: &mut &str) -> winnow::Result<RootSpecifier> {
     .parse_next(i)
 }
 
+#[cfg(test)]
 fn root_specifier_with_any(i: &mut &str) -> winnow::Result<RootSpecifier> {
     alt((
         period_with_any,
@@ -272,6 +273,7 @@ fn root_specifier_list(i: &mut &str) -> winnow::Result<Vec<RootSpecifier>> {
     delimited(multispace0, alt((list, single_item)), multispace0).parse_next(i)
 }
 
+#[cfg(test)]
 fn root_specifier_list_with_any(i: &mut &str) -> winnow::Result<Vec<RootSpecifier>> {
     let list = separated(1.., root_specifier_with_any, ",");
     let single_item = root_specifier_with_any.map(|spec| vec![spec]);
@@ -295,6 +297,7 @@ fn field(i: &mut &str) -> winnow::Result<Field> {
     Ok(Field { specifiers })
 }
 
+#[cfg(test)]
 fn field_with_any(i: &mut &str) -> winnow::Result<Field> {
     let specifiers = root_specifier_list_with_any.parse_next(i)?;
     Ok(Field { specifiers })
@@ -869,8 +872,22 @@ fn days_of_week_from_field(field: Field, config: ScheduleConfig) -> Result<DaysO
     ))
 }
 
-fn years_from_field(field: Field, config: ScheduleConfig) -> Result<Years, Error> {
-    Years::from_root_specifiers(field.specifiers, config.wraparound_ranges)
+fn years_from_field(
+    field: Field,
+    config: ScheduleConfig,
+    bounds: RandomFieldBounds,
+) -> Result<Years, Error> {
+    let specifiers = field
+        .specifiers
+        .into_iter()
+        .map(|specifier| resolve_random_root_specifier(specifier, config, bounds))
+        .collect::<Result<Vec<_>, _>>()?;
+    Years::from_root_specifiers(specifiers, config.wraparound_ranges)
+}
+
+fn parse_years_as(token: &str, config: ScheduleConfig) -> Result<Years, String> {
+    years_from_field(parse_field_token(token)?, config, random_bounds::<Years>(6))
+        .map_err(|parse_error| format!("{parse_error}"))
 }
 
 fn build_schedule_fields_from_six_part_tokens(
@@ -879,7 +896,7 @@ fn build_schedule_fields_from_six_part_tokens(
 ) -> Result<ScheduleFields, String> {
     let parse_years = |year_token: Option<&str>| -> Result<Years, String> {
         match year_token {
-            Some(token) => parse_field_as(token, config, random_bounds::<Years>(6)),
+            Some(token) => parse_years_as(token, config),
             None => Ok(Years::all()),
         }
     };
@@ -932,42 +949,21 @@ fn build_schedule_fields_from_seven_part_tokens(
         return Err("a valid cron expression".to_owned());
     };
 
+    let days_of_month =
+        days_of_month_from_field(parse_dom_field_with_any_token(days_of_month)?, config)
+            .map_err(|e| e.to_string())?;
+    let days_of_week =
+        days_of_week_from_field(parse_dow_field_with_any_token(days_of_week)?, config)
+            .map_err(|parse_error| format!("{parse_error}"))?;
+
     Ok(ScheduleFields::new(
-        from_field_with_options(
-            parse_field_token_with_config(seconds, config, random_bounds::<Seconds>(5))?,
-            config.wraparound_ranges,
-        )
-        .map_err(|e| e.to_string())?,
-        from_field_with_options(
-            parse_field_token_with_config(minutes, config, random_bounds::<Minutes>(0))?,
-            config.wraparound_ranges,
-        )
-        .map_err(|e| e.to_string())?,
-        from_field_with_options(
-            parse_field_token_with_config(hours, config, random_bounds::<Hours>(1))?,
-            config.wraparound_ranges,
-        )
-        .map_err(|e| e.to_string())?,
-        days_of_month_from_field(
-            parse_dom_field_with_any_token(days_of_month, config)?,
-            config,
-        )
-        .map_err(|e| e.to_string())?,
-        from_field_with_options(
-            parse_field_token_with_config(months, config, random_bounds::<Months>(3))?,
-            config.wraparound_ranges,
-        )
-        .map_err(|e| e.to_string())?,
-        days_of_week_from_field(
-            parse_dow_field_with_any_token(days_of_week, config)?,
-            config,
-        )
-        .map_err(|parse_error| format!("{parse_error}"))?,
-        years_from_field(
-            parse_field_token_with_config(years, config, random_bounds::<Years>(6))?,
-            config,
-        )
-        .map_err(|parse_error| format!("{parse_error}"))?,
+        parse_field_as(seconds, config, random_bounds::<Seconds>(5))?,
+        parse_field_as(minutes, config, random_bounds::<Minutes>(0))?,
+        parse_field_as(hours, config, random_bounds::<Hours>(1))?,
+        days_of_month,
+        parse_field_as(months, config, random_bounds::<Months>(3))?,
+        days_of_week,
+        parse_years_as(years, config)?,
     ))
 }
 
@@ -977,7 +973,7 @@ fn build_schedule_fields_from_five_part_tokens(
 ) -> Result<ScheduleFields, String> {
     let parse_years = |year_token: Option<&str>| -> Result<Years, String> {
         match year_token {
-            Some(token) => parse_field_as(token, config, random_bounds::<Years>(6)),
+            Some(token) => parse_years_as(token, config),
             None => Ok(Years::all()),
         }
     };

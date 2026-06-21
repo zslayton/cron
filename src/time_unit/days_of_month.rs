@@ -7,6 +7,7 @@ use crate::time_unit::{
 use chrono::{Datelike, NaiveDate, Weekday};
 use once_cell::sync::Lazy;
 use std::borrow::Cow;
+use std::ops::RangeInclusive;
 
 static ALL: Lazy<OrdinalSet> = Lazy::new(DaysOfMonth::supported_ordinals);
 
@@ -72,7 +73,47 @@ impl DaysOfMonth {
             && self.ordinals().len() == (Self::inclusive_max() - Self::inclusive_min() + 1) as usize
     }
 
+    pub(crate) fn ordinals_for_month(
+        &self,
+        year: Ordinal,
+        month: Ordinal,
+        last_day: Ordinal,
+        range: RangeInclusive<Ordinal>,
+    ) -> Vec<Ordinal> {
+        let start = *range.start();
+        let end = (*range.end()).min(last_day);
+        if start > end {
+            return Vec::new();
+        }
+
+        let mut days = Vec::with_capacity(
+            self.ordinals().len().min((end - start + 1) as usize)
+                + usize::from(self.last_day_of_month)
+                + self.nearest_weekdays.len(),
+        );
+        days.extend(self.ordinals().range(start..=end).copied());
+
+        if self.last_day_of_month && (start..=end).contains(&last_day) {
+            days.push(last_day);
+        }
+
+        for nearest_weekday in &self.nearest_weekdays {
+            let day = nearest_weekday_for_month(year, month, *nearest_weekday, last_day);
+            if (start..=end).contains(&day) {
+                days.push(day);
+            }
+        }
+
+        days.sort_unstable();
+        days.dedup();
+        days
+    }
+
     pub(crate) fn matches(&self, year: Ordinal, month: Ordinal, day: Ordinal) -> bool {
+        if !self.has_special_specifiers() {
+            return self.ordinals().contains(&day);
+        }
+
         let last_day = days_in_month(month, year);
         if day > last_day {
             return false;
@@ -81,12 +122,12 @@ impl DaysOfMonth {
         // `L` and `W` are month-relative rather than stable ordinals:
         // `L` becomes the current month's final day, and each `nW` may move
         // to the nearest weekday without crossing the month boundary. Query
-        // iteration scans at most 31 days when these are present and calls
-        // this predicate directly instead of building a per-month set.
+        // iteration precomputes those candidates unless DOM/DOW OR semantics
+        // require scanning every calendar day.
         self.ordinals().contains(&day)
             || (self.last_day_of_month && day == last_day)
             || self.nearest_weekdays.iter().any(|nearest_weekday| {
-                day == nearest_weekday_for_month(year, month, *nearest_weekday)
+                day == nearest_weekday_for_month(year, month, *nearest_weekday, last_day)
             })
     }
 
@@ -233,9 +274,12 @@ impl DaysOfMonth {
     }
 }
 
-fn nearest_weekday_for_month(year: Ordinal, month: Ordinal, day: Ordinal) -> Ordinal {
-    let last_day = days_in_month(month, year);
-
+fn nearest_weekday_for_month(
+    year: Ordinal,
+    month: Ordinal,
+    day: Ordinal,
+    last_day: Ordinal,
+) -> Ordinal {
     // Croniter clamps an out-of-range `nW` request to the last day of the
     // month first, so `31W` in February is resolved from Feb 28/29 rather
     // than rejected or rolled into March.

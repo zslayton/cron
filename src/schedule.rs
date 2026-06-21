@@ -3,6 +3,7 @@ use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, TimeDelta,
 use chrono_tz::GapInfo;
 use std::any::Any;
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::ops::RangeInclusive;
 
 #[cfg(feature = "serde")]
 use core::fmt;
@@ -602,6 +603,17 @@ impl ScheduleFields {
         self.days_of_month.has_special_specifiers()
     }
 
+    pub(crate) fn days_of_month_ordinals_for_month(
+        &self,
+        year: Ordinal,
+        month: Ordinal,
+        last_day: Ordinal,
+        range: RangeInclusive<Ordinal>,
+    ) -> Vec<Ordinal> {
+        self.days_of_month
+            .ordinals_for_month(year, month, last_day, range)
+    }
+
     pub(crate) fn hours_ordinals(&self) -> &OrdinalSet {
         self.hours.ordinals()
     }
@@ -656,16 +668,12 @@ impl ScheduleFields {
         day_of_week: Ordinal,
         operand: DowDomOperand,
     ) -> bool {
-        let dom_matches = self.includes_day_of_month(year, month, day_of_month);
-        let dow_matches = self.includes_day_of_week(year, month, day_of_month, day_of_week);
         let both_restricted = !self.days_of_month_is_all() && !self.days_of_week_is_all();
-        if both_restricted {
-            match operand {
-                DowDomOperand::And => dom_matches && dow_matches,
-                DowDomOperand::Or => dom_matches || dow_matches,
-            }
+        let dom_matches = self.includes_day_of_month(year, month, day_of_month);
+        if both_restricted && operand == DowDomOperand::Or {
+            dom_matches || self.includes_day_of_week(year, month, day_of_month, day_of_week)
         } else {
-            dom_matches && dow_matches
+            dom_matches && self.includes_day_of_week(year, month, day_of_month, day_of_week)
         }
     }
 }

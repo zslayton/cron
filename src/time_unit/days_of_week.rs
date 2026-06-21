@@ -104,8 +104,14 @@ impl DaysOfWeek {
         day: Ordinal,
         day_of_week: Ordinal,
     ) -> bool {
-        self.ordinals().contains(&day_of_week)
-            || self.matches_last_weekday(year, month, day, day_of_week)
+        if self.ordinals().contains(&day_of_week) {
+            return true;
+        }
+        if !self.has_special_specifiers() {
+            return false;
+        }
+
+        self.matches_last_weekday(year, month, day, day_of_week)
             || self.matches_nth_weekday(day, day_of_week)
     }
 
