@@ -154,11 +154,12 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_leap_day_year_combinations_are_rejected() {
+    fn test_leap_day_is_valid_regardless_of_year_selection() {
         assert!(Schedule::from_str("0 0 0 29 2 * 2024").is_ok());
         assert!(Schedule::from_str("0 0 0 29 2 * 2024,2025").is_ok());
-        assert!(Schedule::from_str("0 0 0 29 2 * 2025").is_err());
-        assert!(Schedule::from_str("0 0 0 29 2 * 2025-2026").is_err());
+        assert!(Schedule::from_str("0 0 0 29 2 * 2025").is_ok());
+        assert!(Schedule::from_str("0 0 0 29 2 * 2025-2026").is_ok());
+        assert!(Schedule::from_str("0 0 0 30 2 * 2024").is_err());
     }
 
     #[test]
