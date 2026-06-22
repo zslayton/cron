@@ -8,8 +8,6 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 use std::str::{self, FromStr};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::config::{CronScheduleParts, DayOfWeekNumbering, DowDomOperand};
 use crate::error::{Error, ErrorKind};
@@ -18,8 +16,6 @@ use crate::schedule::{Schedule, ScheduleFields};
 use crate::specifier::*;
 use crate::time_unit::*;
 use crate::ScheduleConfig;
-
-static RANDOM_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 impl TryFrom<Cow<'_, str>> for Schedule {
     type Error = Error;
@@ -416,28 +412,25 @@ fn parse_dow_field_with_any_token(token: &str) -> Result<Field, String> {
 struct RandomFieldBounds {
     inclusive_min: Ordinal,
     inclusive_max: Ordinal,
-    croniter_index: u32,
 }
 
 fn day_of_week_random_bounds(config: ScheduleConfig) -> RandomFieldBounds {
     match config.day_of_week_numbering {
-        DayOfWeekNumbering::OneIndexed => random_bounds::<DaysOfWeek>(4),
+        DayOfWeekNumbering::OneIndexed => random_bounds::<DaysOfWeek>(),
         DayOfWeekNumbering::ZeroIndexed => RandomFieldBounds {
             inclusive_min: 0,
             inclusive_max: 6,
-            croniter_index: 4,
         },
     }
 }
 
-fn random_bounds<T>(croniter_index: u32) -> RandomFieldBounds
+fn random_bounds<T>() -> RandomFieldBounds
 where
     T: TimeUnitField,
 {
     RandomFieldBounds {
         inclusive_min: T::inclusive_min(),
         inclusive_max: T::inclusive_max(),
-        croniter_index,
     }
 }
 
@@ -477,7 +470,7 @@ fn resolve_random_specifier(
             if random_end > range.1 {
                 return Err(ErrorKind::Expression(format!("Bad expression: {random}")).into());
             }
-            let start = random_ordinal(range.0, random_end, bounds.croniter_index);
+            let start = fastrand::u32(range.0..=random_end);
             Ok(RootSpecifier::Period(
                 Specifier::Range(
                     RangeEndpoint::Ordinal(start),
@@ -486,10 +479,8 @@ fn resolve_random_specifier(
                 step,
             ))
         }
-        None => Ok(RootSpecifier::from(Specifier::Point(random_ordinal(
-            range.0,
-            range.1,
-            bounds.croniter_index,
+        None => Ok(RootSpecifier::from(Specifier::Point(fastrand::u32(
+            range.0..=range.1,
         )))),
     }
 }
@@ -503,26 +494,6 @@ fn resolve_random_root_specifier(
         RootSpecifier::Random(random) => resolve_random_specifier(random, config, bounds),
         specifier => Ok(specifier),
     }
-}
-
-fn random_ordinal(inclusive_min: Ordinal, inclusive_max: Ordinal, croniter_index: u32) -> Ordinal {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or_default();
-    let mut seed = (nanos as u64)
-        ^ ((nanos >> 64) as u64)
-        ^ RANDOM_COUNTER.fetch_add(1, Ordering::Relaxed)
-        ^ (u64::from(croniter_index) << 32)
-        ^ u64::from(inclusive_min)
-        ^ (u64::from(inclusive_max) << 16);
-    seed = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
-    seed = (seed ^ (seed >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    seed = (seed ^ (seed >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    seed ^= seed >> 31;
-
-    let span = u64::from(inclusive_max - inclusive_min + 1);
-    inclusive_min + (seed % span) as Ordinal
 }
 
 fn from_field_with_options<T>(
@@ -584,7 +555,7 @@ fn days_of_month_from_field(field: Field, config: ScheduleConfig) -> Result<Days
 
     for specifier in field.specifiers {
         let specifier =
-            resolve_random_root_specifier(specifier, config, random_bounds::<DaysOfMonth>(2))?;
+            resolve_random_root_specifier(specifier, config, random_bounds::<DaysOfMonth>())?;
         match specifier {
             RootSpecifier::LastDayOfMonth => {
                 ensure_enabled(config.last_specifiers, "last day-of-month")?;
@@ -886,7 +857,7 @@ fn years_from_field(
 }
 
 fn parse_years_as(token: &str, config: ScheduleConfig) -> Result<Years, String> {
-    years_from_field(parse_field_token(token)?, config, random_bounds::<Years>(6))
+    years_from_field(parse_field_token(token)?, config, random_bounds::<Years>())
         .map_err(|parse_error| format!("{parse_error}"))
 }
 
@@ -908,22 +879,22 @@ fn build_schedule_fields_from_six_part_tokens(
 
     let (seconds, minutes, hours, days_of_month, months, days_of_week, years) = match tokens {
         [seconds, minutes, hours, days_of_month, months, days_of_week] => (
-            parse_field_as(seconds, config, random_bounds::<Seconds>(5))?,
-            parse_field_as(minutes, config, random_bounds::<Minutes>(0))?,
-            parse_field_as(hours, config, random_bounds::<Hours>(1))?,
+            parse_field_as(seconds, config, random_bounds::<Seconds>())?,
+            parse_field_as(minutes, config, random_bounds::<Minutes>())?,
+            parse_field_as(hours, config, random_bounds::<Hours>())?,
             days_of_month_from_field(parse_dom_field_with_any_token(days_of_month)?, config)
                 .map_err(|e| e.to_string())?,
-            parse_field_as(months, config, random_bounds::<Months>(3))?,
+            parse_field_as(months, config, random_bounds::<Months>())?,
             parse_days_of_week(days_of_week)?,
             Years::all(),
         ),
         [seconds, minutes, hours, days_of_month, months, days_of_week, year] => (
-            parse_field_as(seconds, config, random_bounds::<Seconds>(5))?,
-            parse_field_as(minutes, config, random_bounds::<Minutes>(0))?,
-            parse_field_as(hours, config, random_bounds::<Hours>(1))?,
+            parse_field_as(seconds, config, random_bounds::<Seconds>())?,
+            parse_field_as(minutes, config, random_bounds::<Minutes>())?,
+            parse_field_as(hours, config, random_bounds::<Hours>())?,
             days_of_month_from_field(parse_dom_field_with_any_token(days_of_month)?, config)
                 .map_err(|e| e.to_string())?,
-            parse_field_as(months, config, random_bounds::<Months>(3))?,
+            parse_field_as(months, config, random_bounds::<Months>())?,
             parse_days_of_week(days_of_week)?,
             parse_years(Some(year))?,
         ),
@@ -957,11 +928,11 @@ fn build_schedule_fields_from_seven_part_tokens(
             .map_err(|parse_error| format!("{parse_error}"))?;
 
     Ok(ScheduleFields::new(
-        parse_field_as(seconds, config, random_bounds::<Seconds>(5))?,
-        parse_field_as(minutes, config, random_bounds::<Minutes>(0))?,
-        parse_field_as(hours, config, random_bounds::<Hours>(1))?,
+        parse_field_as(seconds, config, random_bounds::<Seconds>())?,
+        parse_field_as(minutes, config, random_bounds::<Minutes>())?,
+        parse_field_as(hours, config, random_bounds::<Hours>())?,
         days_of_month,
-        parse_field_as(months, config, random_bounds::<Months>(3))?,
+        parse_field_as(months, config, random_bounds::<Months>())?,
         days_of_week,
         parse_years_as(years, config)?,
     ))
@@ -985,20 +956,20 @@ fn build_schedule_fields_from_five_part_tokens(
 
     let (minutes, hours, days_of_month, months, days_of_week, years) = match tokens {
         [minutes, hours, days_of_month, months, days_of_week] => (
-            parse_field_as(minutes, config, random_bounds::<Minutes>(0))?,
-            parse_field_as(hours, config, random_bounds::<Hours>(1))?,
+            parse_field_as(minutes, config, random_bounds::<Minutes>())?,
+            parse_field_as(hours, config, random_bounds::<Hours>())?,
             days_of_month_from_field(parse_dom_field_with_any_token(days_of_month)?, config)
                 .map_err(|e| e.to_string())?,
-            parse_field_as(months, config, random_bounds::<Months>(3))?,
+            parse_field_as(months, config, random_bounds::<Months>())?,
             parse_days_of_week(days_of_week)?,
             Years::all(),
         ),
         [minutes, hours, days_of_month, months, days_of_week, year] => (
-            parse_field_as(minutes, config, random_bounds::<Minutes>(0))?,
-            parse_field_as(hours, config, random_bounds::<Hours>(1))?,
+            parse_field_as(minutes, config, random_bounds::<Minutes>())?,
+            parse_field_as(hours, config, random_bounds::<Hours>())?,
             days_of_month_from_field(parse_dom_field_with_any_token(days_of_month)?, config)
                 .map_err(|e| e.to_string())?,
-            parse_field_as(months, config, random_bounds::<Months>(3))?,
+            parse_field_as(months, config, random_bounds::<Months>())?,
             parse_days_of_week(days_of_week)?,
             parse_years(Some(year))?,
         ),
