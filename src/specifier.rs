@@ -1,11 +1,26 @@
 use crate::ordinal::*;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum RangeEndpoint {
+    Ordinal(Ordinal),
+    Name(String),
+}
+
+impl Display for RangeEndpoint {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self {
+            Self::Ordinal(ordinal) => write!(f, "{ordinal}"),
+            Self::Name(name) => write!(f, "{name}"),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Specifier {
     All,
     Point(Ordinal),
-    Range(Ordinal, Ordinal),
-    NamedRange(String, String),
+    Range(RangeEndpoint, RangeEndpoint),
 }
 
 // Separating out a root specifier allows for a higher tiered specifier, allowing us to achieve
@@ -15,7 +30,7 @@ pub enum Specifier {
 // - named range: 'Mon-Thurs/2'
 //
 // Without this separation we would end up with invalid combinations such as 'Mon/2'
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RootSpecifier {
     Specifier(Specifier),
     Period(Specifier, u32),
