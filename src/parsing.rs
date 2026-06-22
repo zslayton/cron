@@ -228,17 +228,6 @@ fn root_specifier(i: &mut &str) -> winnow::Result<RootSpecifier> {
     .parse_next(i)
 }
 
-#[cfg(test)]
-fn root_specifier_with_any(i: &mut &str) -> winnow::Result<RootSpecifier> {
-    alt((
-        period_with_any,
-        random_specifier,
-        specifier_with_any.map(RootSpecifier::from),
-        named_point,
-    ))
-    .parse_next(i)
-}
-
 fn dom_root_specifier_with_any(i: &mut &str) -> winnow::Result<RootSpecifier> {
     alt((
         nearest_weekday,
@@ -269,13 +258,6 @@ fn root_specifier_list(i: &mut &str) -> winnow::Result<Vec<RootSpecifier>> {
     delimited(multispace0, alt((list, single_item)), multispace0).parse_next(i)
 }
 
-#[cfg(test)]
-fn root_specifier_list_with_any(i: &mut &str) -> winnow::Result<Vec<RootSpecifier>> {
-    let list = separated(1.., root_specifier_with_any, ",");
-    let single_item = root_specifier_with_any.map(|spec| vec![spec]);
-    delimited(multispace0, alt((list, single_item)), multispace0).parse_next(i)
-}
-
 fn dom_root_specifier_list_with_any(i: &mut &str) -> winnow::Result<Vec<RootSpecifier>> {
     let list = separated(1.., dom_root_specifier_with_any, ",");
     let single_item = dom_root_specifier_with_any.map(|spec| vec![spec]);
@@ -290,12 +272,6 @@ fn dow_root_specifier_list_with_any(i: &mut &str) -> winnow::Result<Vec<RootSpec
 
 fn field(i: &mut &str) -> winnow::Result<Field> {
     let specifiers = root_specifier_list.parse_next(i)?;
-    Ok(Field { specifiers })
-}
-
-#[cfg(test)]
-fn field_with_any(i: &mut &str) -> winnow::Result<Field> {
-    let specifiers = root_specifier_list_with_any.parse_next(i)?;
     Ok(Field { specifiers })
 }
 
@@ -1090,20 +1066,23 @@ mod test {
     fn test_nom_valid_number_list() {
         let expression = "1,2";
         field.parse(expression).unwrap();
-        field_with_any.parse(expression).unwrap();
+        dom_field_with_any.parse(expression).unwrap();
+        dow_field_with_any.parse(expression).unwrap();
     }
 
     #[test]
     fn test_nom_invalid_number_list() {
         let expression = ",1,2";
         assert!(field.parse(expression).is_err());
-        assert!(field_with_any.parse(expression).is_err());
+        assert!(dom_field_with_any.parse(expression).is_err());
+        assert!(dow_field_with_any.parse(expression).is_err());
     }
 
     #[test]
-    fn test_nom_field_with_any_valid_any() {
+    fn test_nom_dom_and_dow_fields_valid_any() {
         let expression = "?";
-        field_with_any.parse(expression).unwrap();
+        dom_field_with_any.parse(expression).unwrap();
+        dow_field_with_any.parse(expression).unwrap();
     }
 
     #[test]
