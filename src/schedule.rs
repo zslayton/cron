@@ -579,6 +579,10 @@ impl ScheduleFields {
         self.years.is_unrestricted()
     }
 
+    pub(crate) fn years_include_leap_year(&self) -> bool {
+        self.years.contains_leap_year()
+    }
+
     pub(crate) fn includes_year(&self, year: Ordinal) -> bool {
         self.years.contains_ordinal(year)
     }

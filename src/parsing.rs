@@ -1025,12 +1025,9 @@ fn validate_day_of_month(fields: &ScheduleFields, config: ScheduleConfig) -> Res
     }
 
     let has_valid_date = fields.months_ordinals().iter().any(|month| {
-        fields.years_ordinals().iter().any(|year| {
-            let last_day = days_in_month(*month, *year);
-            fields
-                .days_of_month_ordinals()
-                .iter()
-                .any(|day| *day <= last_day)
+        fields.days_of_month_ordinals().iter().any(|day| {
+            *day <= days_in_month(*month, 2023)
+                || (*month == 2 && *day == 29 && fields.years_include_leap_year())
         })
     });
 
