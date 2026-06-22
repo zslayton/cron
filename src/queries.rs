@@ -279,14 +279,14 @@ where
 
     fn months<'a>(&mut self, fields: &'a ScheduleFields, year: Ordinal) -> OrdinalQueryIter<'a> {
         let bound = self.cursor_month_bound(year, self.month_default_bound());
-        if !fields.months_ordinals().contains(&bound) {
+        let ordinals = fields.months_ordinals();
+        if ordinals.is_all() {
+            return all_range_iter(self.month_range(bound), self.is_reversed());
+        }
+        if !ordinals.contains(&bound) {
             self.reset_month();
         }
-        OrdinalQueryIter::Set(
-            fields
-                .months_ordinals()
-                .ordered_range(self.month_range(bound), self.is_reversed()),
-        )
+        OrdinalQueryIter::Set(ordinals.ordered_range(self.month_range(bound), self.is_reversed()))
     }
 
     fn days_of_month<'a>(
@@ -349,14 +349,14 @@ where
 
     fn hours<'a>(&mut self, fields: &'a ScheduleFields) -> OrdinalQueryIter<'a> {
         let bound = self.cursor_hour_bound(self.hour_default_bound());
-        if !fields.hours_ordinals().contains(&bound) {
+        let ordinals = fields.hours_ordinals();
+        if ordinals.is_all() {
+            return all_range_iter(self.hour_range(bound), self.is_reversed());
+        }
+        if !ordinals.contains(&bound) {
             self.reset_hour();
         }
-        OrdinalQueryIter::Set(
-            fields
-                .hours_ordinals()
-                .ordered_range(self.hour_range(bound), self.is_reversed()),
-        )
+        OrdinalQueryIter::Set(ordinals.ordered_range(self.hour_range(bound), self.is_reversed()))
     }
 
     fn minutes<'a>(
@@ -370,14 +370,14 @@ where
         } else {
             query_bound
         };
-        if !fields.minutes_ordinals().contains(&bound) {
+        let ordinals = fields.minutes_ordinals();
+        if ordinals.is_all() {
+            return all_range_iter(self.minute_range(bound), self.is_reversed());
+        }
+        if !ordinals.contains(&bound) {
             self.reset_minute();
         }
-        OrdinalQueryIter::Set(
-            fields
-                .minutes_ordinals()
-                .ordered_range(self.minute_range(bound), self.is_reversed()),
-        )
+        OrdinalQueryIter::Set(ordinals.ordered_range(self.minute_range(bound), self.is_reversed()))
     }
 
     fn seconds<'a>(
@@ -391,15 +391,25 @@ where
         } else {
             query_bound
         };
-        if !fields.seconds_ordinals().contains(&bound) {
+        let ordinals = fields.seconds_ordinals();
+        if ordinals.is_all() {
+            return all_range_iter(self.second_range(bound), self.is_reversed());
+        }
+        if !ordinals.contains(&bound) {
             self.reset_second();
         }
-        OrdinalQueryIter::Set(
-            fields
-                .seconds_ordinals()
-                .ordered_range(self.second_range(bound), self.is_reversed()),
-        )
+        OrdinalQueryIter::Set(ordinals.ordered_range(self.second_range(bound), self.is_reversed()))
     }
+}
+
+fn all_range_iter(
+    range: (Bound<Ordinal>, Bound<Ordinal>),
+    reverse: bool,
+) -> OrdinalQueryIter<'static> {
+    let Some((start, end)) = ordinal_bounds(range) else {
+        return OrdinalQueryIter::empty();
+    };
+    OrdinalQueryIter::range(start, end, reverse)
 }
 
 fn ordinal_bounds(range: (Bound<Ordinal>, Bound<Ordinal>)) -> Option<(Ordinal, Ordinal)> {
