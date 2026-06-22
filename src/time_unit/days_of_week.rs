@@ -1,7 +1,6 @@
 use crate::error::*;
 use crate::ordinal::{Ordinal, OrdinalSet};
 use crate::time_unit::TimeUnitField;
-use once_cell::sync::Lazy;
 use phf::phf_map;
 use std::borrow::Cow;
 
@@ -24,15 +23,13 @@ static DAY_OF_WEEK_MAP: phf::Map<&'static str, Ordinal> = phf_map! {
     "saturday" => 7,
 };
 
-static ALL: Lazy<OrdinalSet> = Lazy::new(DaysOfWeek::supported_ordinals);
-
 #[derive(Clone, Debug, Eq)]
 pub struct DaysOfWeek {
-    ordinals: Option<OrdinalSet>,
+    ordinals: OrdinalSet,
 }
 
 impl TimeUnitField for DaysOfWeek {
-    fn from_optional_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self {
+    fn from_ordinal_set(ordinal_set: OrdinalSet) -> Self {
         DaysOfWeek {
             ordinals: ordinal_set,
         }
@@ -55,10 +52,7 @@ impl TimeUnitField for DaysOfWeek {
             })
     }
     fn ordinals(&self) -> &OrdinalSet {
-        match &self.ordinals {
-            Some(ordinal_set) => ordinal_set,
-            None => &ALL,
-        }
+        &self.ordinals
     }
 }
 

@@ -38,6 +38,9 @@ impl Schedule {
         Z: TimeZone,
     {
         let mut query = NextAfterQuery::from(after);
+        let fields = &self.fields;
+        let timezone = after.timezone();
+        let days_of_week_is_all = fields.days_of_week.is_all();
         // Ambiguous naive datetimes translate to two local datetimes. This
         // iteration uses naive datetimes and could skip the second local
         // datetime, where the second may match the pattern. This deferred
@@ -51,37 +54,29 @@ impl Schedule {
         // does not get stuck repeating matches from the first fold or skip
         // matches in the second fold.
         let after_naive = after.naive_local();
-        let after_in_first_fold = match after.timezone().from_local_datetime(&after_naive) {
+        let after_in_first_fold = match timezone.from_local_datetime(&after_naive) {
             LocalResult::Ambiguous(first, second) => {
                 let earlier = min(first, second);
                 *after == earlier
             }
             _ => false,
         };
-        for year in self
-            .fields
+        for year in fields
             .years
-            .ordinals()
             .range((Included(query.year_lower_bound()), Unbounded))
-            .cloned()
         {
             // It's a future year, the current year's range is irrelevant.
             if year > after.year() as u32 {
                 query.reset_month();
             }
             let month_start = query.month_lower_bound();
-            if !self.fields.months.ordinals().contains(&month_start) {
+            if !fields.months.includes(month_start) {
                 query.reset_month();
             }
             let month_range = (Included(month_start), Included(Months::inclusive_max()));
-            for month in self.fields.months.ordinals().range(month_range).cloned() {
+            for month in fields.months.range(month_range) {
                 let day_of_month_start = query.day_of_month_lower_bound();
-                if !self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .contains(&day_of_month_start)
-                {
+                if !fields.days_of_month.includes(day_of_month_start) {
                     query.reset_day_of_month();
                 }
                 let day_of_month_end = days_in_month(month, year);
@@ -90,20 +85,16 @@ impl Schedule {
                     Included(day_of_month_end),
                 );
 
-                let mut day_iter = self
-                    .fields
+                let mut day_iter = fields
                     .days_of_month
-                    .ordinals()
                     .range(day_of_month_range)
-                    .cloned()
                     .filter(|&day| {
-                        self.fields.days_of_week.is_all()
+                        days_of_week_is_all
                             || NaiveDate::from_ymd_opt(year as i32, month, day)
                                 .map(|d| {
-                                    self.fields
+                                    fields
                                         .days_of_week
-                                        .ordinals()
-                                        .contains(&d.weekday().number_from_sunday())
+                                        .includes(d.weekday().number_from_sunday())
                                 })
                                 .unwrap_or(false)
                     })
@@ -113,12 +104,12 @@ impl Schedule {
                 }
                 for day_of_month in day_iter {
                     let hour_start = query.hour_lower_bound();
-                    if !self.fields.hours.ordinals().contains(&hour_start) {
+                    if !fields.hours.includes(hour_start) {
                         query.reset_hour();
                     }
                     let hour_range = (Included(hour_start), Included(Hours::inclusive_max()));
 
-                    for hour in self.fields.hours.ordinals().range(hour_range).cloned() {
+                    for hour in fields.hours.range(hour_range) {
                         // The first fold is the first repeat of the DST offset,
                         // typically one hour. Because this iteration is done in
                         // naive time, it can skip matches after finding one in
@@ -135,29 +126,26 @@ impl Schedule {
                         } else {
                             query_minute_start
                         };
-                        if !self.fields.minutes.ordinals().contains(&minute_start) {
+                        if !fields.minutes.includes(minute_start) {
                             query.reset_minute();
                         }
                         let minute_range =
                             (Included(minute_start), Included(Minutes::inclusive_max()));
 
-                        for minute in self.fields.minutes.ordinals().range(minute_range).cloned() {
+                        for minute in fields.minutes.range(minute_range) {
                             let query_second_start = query.second_lower_bound();
                             let second_start = if fold_hour_scan {
                                 Seconds::inclusive_min()
                             } else {
                                 query_second_start
                             };
-                            if !self.fields.seconds.ordinals().contains(&second_start) {
+                            if !fields.seconds.includes(second_start) {
                                 query.reset_second();
                             }
                             let second_range =
                                 (Included(second_start), Included(Seconds::inclusive_max()));
 
-                            for second in
-                                self.fields.seconds.ordinals().range(second_range).cloned()
-                            {
-                                let timezone = after.timezone();
+                            for second in fields.seconds.range(second_range) {
                                 let local_result = timezone.with_ymd_and_hms(
                                     year as i32,
                                     month,
@@ -215,6 +203,9 @@ impl Schedule {
         Z: TimeZone,
     {
         let mut query = PrevFromQuery::from(before);
+        let fields = &self.fields;
+        let timezone = before.timezone();
+        let days_of_week_is_all = fields.days_of_week.is_all();
         // See `next_after` for folded-time details. This is the reverse scan's
         // deferred candidate for an earlier local datetime that may still be
         // the previous chronological match.
@@ -222,43 +213,28 @@ impl Schedule {
         // See `next_after` for folded-time details. This flag handles starting
         // from the second fold while scanning backward.
         let before_naive = before.naive_local();
-        let before_in_second_fold = match before.timezone().from_local_datetime(&before_naive) {
+        let before_in_second_fold = match timezone.from_local_datetime(&before_naive) {
             LocalResult::Ambiguous(first, second) => {
                 let later = max(first, second);
                 *before == later
             }
             _ => false,
         };
-        for year in self
-            .fields
+        for year in fields
             .years
-            .ordinals()
             .range((Unbounded, Included(query.year_upper_bound())))
             .rev()
-            .cloned()
         {
             let month_start = query.month_upper_bound();
 
-            if !self.fields.months.ordinals().contains(&month_start) {
+            if !fields.months.includes(month_start) {
                 query.reset_month();
             }
             let month_range = (Included(Months::inclusive_min()), Included(month_start));
 
-            for month in self
-                .fields
-                .months
-                .ordinals()
-                .range(month_range)
-                .rev()
-                .cloned()
-            {
+            for month in fields.months.range(month_range).rev() {
                 let day_of_month_end = query.day_of_month_upper_bound();
-                if !self
-                    .fields
-                    .days_of_month
-                    .ordinals()
-                    .contains(&day_of_month_end)
-                {
+                if !fields.days_of_month.includes(day_of_month_end) {
                     query.reset_day_of_month();
                 }
 
@@ -269,21 +245,17 @@ impl Schedule {
                     Included(day_of_month_end),
                 );
 
-                let mut day_iter = self
-                    .fields
+                let mut day_iter = fields
                     .days_of_month
-                    .ordinals()
                     .range(day_of_month_range)
                     .rev()
-                    .cloned()
                     .filter(|&day| {
-                        self.fields.days_of_week.is_all()
+                        days_of_week_is_all
                             || NaiveDate::from_ymd_opt(year as i32, month, day)
                                 .map(|d| {
-                                    self.fields
+                                    fields
                                         .days_of_week
-                                        .ordinals()
-                                        .contains(&d.weekday().number_from_sunday())
+                                        .includes(d.weekday().number_from_sunday())
                                 })
                                 .unwrap_or(false)
                     })
@@ -293,19 +265,12 @@ impl Schedule {
                 }
                 for day_of_month in day_iter {
                     let hour_start = query.hour_upper_bound();
-                    if !self.fields.hours.ordinals().contains(&hour_start) {
+                    if !fields.hours.includes(hour_start) {
                         query.reset_hour();
                     }
                     let hour_range = (Included(Hours::inclusive_min()), Included(hour_start));
 
-                    for hour in self
-                        .fields
-                        .hours
-                        .ordinals()
-                        .range(hour_range)
-                        .rev()
-                        .cloned()
-                    {
+                    for hour in fields.hours.range(hour_range).rev() {
                         // See the forward `fold_hour_scan` for folded-time
                         // details. This is the reverse scan of the repeated
                         // hour from the second fold into the first.
@@ -320,41 +285,26 @@ impl Schedule {
                         } else {
                             query_minute_start
                         };
-                        if !self.fields.minutes.ordinals().contains(&minute_start) {
+                        if !fields.minutes.includes(minute_start) {
                             query.reset_minute();
                         }
                         let minute_range =
                             (Included(Minutes::inclusive_min()), Included(minute_start));
 
-                        for minute in self
-                            .fields
-                            .minutes
-                            .ordinals()
-                            .range(minute_range)
-                            .rev()
-                            .cloned()
-                        {
+                        for minute in fields.minutes.range(minute_range).rev() {
                             let query_second_start = query.second_upper_bound();
                             let second_start = if fold_hour_scan {
                                 Seconds::inclusive_max()
                             } else {
                                 query_second_start
                             };
-                            if !self.fields.seconds.ordinals().contains(&second_start) {
+                            if !fields.seconds.includes(second_start) {
                                 query.reset_second();
                             }
                             let second_range =
                                 (Included(Seconds::inclusive_min()), Included(second_start));
 
-                            for second in self
-                                .fields
-                                .seconds
-                                .ordinals()
-                                .range(second_range)
-                                .rev()
-                                .cloned()
-                            {
-                                let timezone = before.timezone();
+                            for second in fields.seconds.range(second_range).rev() {
                                 let local_result = timezone.with_ymd_and_hms(
                                     year as i32,
                                     month,

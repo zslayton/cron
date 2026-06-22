@@ -70,12 +70,10 @@ where
         {
             return Ok(T::all());
         }
-        let mut ordinals = OrdinalSet::new();
+        let mut ordinals = T::empty_ordinals();
         for specifier in field.specifiers {
             let specifier_ordinals: OrdinalSet = T::ordinals_from_root_specifier(&specifier)?;
-            for ordinal in specifier_ordinals {
-                ordinals.insert(T::validate_ordinal(ordinal)?);
-            }
+            ordinals.union_assign(&specifier_ordinals);
         }
         Ok(T::from_ordinal_set(ordinals))
     }

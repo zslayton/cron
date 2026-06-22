@@ -15,44 +15,42 @@ pub use self::seconds::Seconds;
 pub use self::years::Years;
 
 use crate::error::*;
-use crate::ordinal::{Ordinal, OrdinalSet};
+use crate::ordinal::{Ordinal, OrdinalSet, OrdinalSetIter};
 use crate::specifier::{RootSpecifier, Specifier};
 use std::borrow::Cow;
-use std::collections::btree_set;
-use std::iter;
 use std::ops::RangeBounds;
 
 pub struct OrdinalIter<'a> {
-    set_iter: btree_set::Iter<'a, Ordinal>,
+    iter: OrdinalSetIter<'a>,
 }
 
 impl Iterator for OrdinalIter<'_> {
     type Item = Ordinal;
     fn next(&mut self) -> Option<Ordinal> {
-        self.set_iter.next().copied()
+        self.iter.next()
     }
 }
 
 impl DoubleEndedIterator for OrdinalIter<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.set_iter.next_back().copied()
+        self.iter.next_back()
     }
 }
 
 pub struct OrdinalRangeIter<'a> {
-    range_iter: btree_set::Range<'a, Ordinal>,
+    iter: OrdinalSetIter<'a>,
 }
 
 impl Iterator for OrdinalRangeIter<'_> {
     type Item = Ordinal;
     fn next(&mut self) -> Option<Ordinal> {
-        self.range_iter.next().copied()
+        self.iter.next()
     }
 }
 
 impl DoubleEndedIterator for OrdinalRangeIter<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.range_iter.next_back().copied()
+        self.iter.next_back()
     }
 }
 
@@ -177,11 +175,11 @@ where
     T: TimeUnitField,
 {
     fn includes(&self, ordinal: Ordinal) -> bool {
-        self.ordinals().contains(&ordinal)
+        self.ordinals().contains(ordinal)
     }
     fn iter(&self) -> OrdinalIter<'_> {
         OrdinalIter {
-            set_iter: TimeUnitField::ordinals(self).iter(),
+            iter: TimeUnitField::ordinals(self).iter(),
         }
     }
     fn range<R>(&'_ self, range: R) -> OrdinalRangeIter<'_>
@@ -189,16 +187,15 @@ where
         R: RangeBounds<Ordinal>,
     {
         OrdinalRangeIter {
-            range_iter: TimeUnitField::ordinals(self).range(range),
+            iter: TimeUnitField::ordinals(self).range(range),
         }
     }
     fn count(&self) -> u32 {
-        self.ordinals().len() as u32
+        self.ordinals().count()
     }
 
     fn is_all(&self) -> bool {
-        let max_supported_ordinals = Self::inclusive_max() - Self::inclusive_min() + 1;
-        self.ordinals().len() == max_supported_ordinals as usize
+        self.ordinals().is_all()
     }
 }
 
@@ -206,26 +203,30 @@ pub trait TimeUnitField
 where
     Self: Sized,
 {
-    fn from_optional_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self;
+    fn from_ordinal_set(ordinal_set: OrdinalSet) -> Self;
     fn name() -> Cow<'static, str>;
     fn inclusive_min() -> Ordinal;
     fn inclusive_max() -> Ordinal;
     fn ordinals(&self) -> &OrdinalSet;
 
     fn from_ordinal(ordinal: Ordinal) -> Self {
-        Self::from_ordinal_set(iter::once(ordinal).collect())
+        Self::from_ordinal_set(OrdinalSet::from_iter(
+            Self::inclusive_min(),
+            Self::inclusive_max(),
+            [ordinal],
+        ))
+    }
+
+    fn empty_ordinals() -> OrdinalSet {
+        OrdinalSet::empty(Self::inclusive_min(), Self::inclusive_max())
     }
 
     fn supported_ordinals() -> OrdinalSet {
-        (Self::inclusive_min()..Self::inclusive_max() + 1).collect()
+        OrdinalSet::all(Self::inclusive_min(), Self::inclusive_max())
     }
 
     fn all() -> Self {
-        Self::from_optional_ordinal_set(None)
-    }
-
-    fn from_ordinal_set(ordinal_set: OrdinalSet) -> Self {
-        Self::from_optional_ordinal_set(Some(ordinal_set))
+        Self::from_ordinal_set(Self::supported_ordinals())
     }
 
     fn ordinal_from_name(name: &str) -> Result<Ordinal, Error> {
@@ -264,10 +265,18 @@ where
         //println!("ordinals_from_specifier for {} => {:?}", Self::name(), specifier);
         match *specifier {
             All => Ok(Self::supported_ordinals()),
-            Point(ordinal) => Ok(([ordinal]).iter().cloned().collect()),
+            Point(ordinal) => Ok(OrdinalSet::from_iter(
+                Self::inclusive_min(),
+                Self::inclusive_max(),
+                [Self::validate_ordinal(ordinal)?],
+            )),
             Range(start, end) => {
                 match (Self::validate_ordinal(start), Self::validate_ordinal(end)) {
-                    (Ok(start), Ok(end)) if start <= end => Ok((start..end + 1).collect()),
+                    (Ok(start), Ok(end)) if start <= end => Ok(OrdinalSet::from_iter(
+                        Self::inclusive_min(),
+                        Self::inclusive_max(),
+                        start..=end,
+                    )),
                     _ => Err(ErrorKind::Expression(format!(
                         "Invalid range for {}: {}-{}",
                         Self::name(),
@@ -281,7 +290,11 @@ where
                 let start = Self::ordinal_from_name(start_name)?;
                 let end = Self::ordinal_from_name(end_name)?;
                 match (Self::validate_ordinal(start), Self::validate_ordinal(end)) {
-                    (Ok(start), Ok(end)) if start <= end => Ok((start..end + 1).collect()),
+                    (Ok(start), Ok(end)) if start <= end => Ok(OrdinalSet::from_iter(
+                        Self::inclusive_min(),
+                        Self::inclusive_max(),
+                        start..=end,
+                    )),
                     _ => Err(ErrorKind::Expression(format!(
                         "Invalid named range for {}: {}-{}",
                         Self::name(),
@@ -316,16 +329,25 @@ where
                     // point and terminating inclusively with the inclusive max
                     Specifier::Point(start) => {
                         let start = Self::validate_ordinal(*start)?;
-                        (start..=Self::inclusive_max()).collect()
+                        OrdinalSet::from_iter(
+                            Self::inclusive_min(),
+                            Self::inclusive_max(),
+                            start..=Self::inclusive_max(),
+                        )
                     }
                     specifier => Self::ordinals_from_specifier(specifier)?,
                 };
-                base_set.into_iter().step_by(*step as usize).collect()
+                OrdinalSet::from_iter(
+                    Self::inclusive_min(),
+                    Self::inclusive_max(),
+                    base_set.iter().step_by(*step as usize),
+                )
             }
-            RootSpecifier::NamedPoint(ref name) => ([Self::ordinal_from_name(name)?])
-                .iter()
-                .cloned()
-                .collect::<OrdinalSet>(),
+            RootSpecifier::NamedPoint(ref name) => OrdinalSet::from_iter(
+                Self::inclusive_min(),
+                Self::inclusive_max(),
+                [Self::validate_ordinal(Self::ordinal_from_name(name)?)?],
+            ),
         };
         Ok(ordinals)
     }

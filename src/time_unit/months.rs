@@ -1,7 +1,6 @@
 use crate::error::*;
 use crate::ordinal::{Ordinal, OrdinalSet};
 use crate::time_unit::TimeUnitField;
-use once_cell::sync::Lazy;
 use phf::phf_map;
 use std::borrow::Cow;
 
@@ -31,15 +30,13 @@ static MONTH_MAP: phf::Map<&'static str, Ordinal> = phf_map! {
     "december" => 12,
 };
 
-static ALL: Lazy<OrdinalSet> = Lazy::new(Months::supported_ordinals);
-
 #[derive(Clone, Debug, Eq)]
 pub struct Months {
-    ordinals: Option<OrdinalSet>,
+    ordinals: OrdinalSet,
 }
 
 impl TimeUnitField for Months {
-    fn from_optional_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self {
+    fn from_ordinal_set(ordinal_set: OrdinalSet) -> Self {
         Months {
             ordinals: ordinal_set,
         }
@@ -62,10 +59,7 @@ impl TimeUnitField for Months {
             })
     }
     fn ordinals(&self) -> &OrdinalSet {
-        match &self.ordinals {
-            Some(ordinal_set) => ordinal_set,
-            None => &ALL,
-        }
+        &self.ordinals
     }
 }
 
