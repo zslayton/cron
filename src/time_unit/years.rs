@@ -4,12 +4,13 @@ use crate::specifier::{RangeEndpoint, RootSpecifier, Specifier};
 use crate::time_unit::TimeUnitField;
 use once_cell::sync::Lazy;
 use std::borrow::Cow;
+use std::ops::Bound;
 
 const FIRST_YEAR: Ordinal = 0;
 const LAST_YEAR: Ordinal = i32::MAX as Ordinal;
 const MAX_MATERIALIZED_YEARS: Ordinal = 10_000;
 
-static EMPTY: Lazy<OrdinalSet> = Lazy::new(OrdinalSet::new);
+static EMPTY: Lazy<OrdinalSet> = Lazy::new(|| OrdinalSet::empty(FIRST_YEAR, FIRST_YEAR));
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum YearsSpec {
@@ -71,6 +72,55 @@ impl TimeUnitField for Years {
     fn has_all_ordinals(&self) -> bool {
         matches!(self.spec, YearsSpec::All)
     }
+
+    fn iter_ordinals(&self) -> crate::time_unit::OrdinalIter<'_> {
+        match &self.spec {
+            YearsSpec::All => crate::time_unit::OrdinalIter {
+                iter: Box::new(FIRST_YEAR..=LAST_YEAR),
+            },
+            YearsSpec::Ordinals(ordinals) => crate::time_unit::OrdinalIter {
+                iter: Box::new(ordinals.iter()),
+            },
+            YearsSpec::Predicates { .. } => crate::time_unit::OrdinalIter {
+                iter: Box::new(
+                    (FIRST_YEAR..=LAST_YEAR).filter(move |year| self.contains_ordinal(*year)),
+                ),
+            },
+        }
+    }
+
+    fn range_ordinals(
+        &self,
+        range: (Bound<Ordinal>, Bound<Ordinal>),
+    ) -> crate::time_unit::OrdinalRangeIter<'_> {
+        let Some((start, end)) = inclusive_bounds(range) else {
+            return crate::time_unit::OrdinalRangeIter {
+                iter: Box::new(std::iter::empty()),
+            };
+        };
+
+        crate::time_unit::OrdinalRangeIter {
+            iter: self.ordinals_between(start, end),
+        }
+    }
+
+    fn count_ordinals(&self) -> u32 {
+        match &self.spec {
+            YearsSpec::All => LAST_YEAR - FIRST_YEAR + 1,
+            YearsSpec::Ordinals(ordinals) => ordinals.len() as u32,
+            YearsSpec::Predicates {
+                specifiers,
+                wraparound_ranges,
+            } if specifiers.len() == 1 => root_specifier_count(&specifiers[0], *wraparound_ranges),
+            YearsSpec::Predicates { .. } => self.iter_ordinals().count() as u32,
+        }
+    }
+
+    fn from_ordinal(ordinal: Ordinal) -> Self {
+        let ordinal =
+            Self::validate_ordinal(ordinal).expect("ordinal outside supported Years range");
+        Self::from_ordinal_set(OrdinalSet::from_values(ordinal, ordinal, [ordinal]))
+    }
 }
 
 impl Years {
@@ -115,12 +165,26 @@ impl Years {
 
         match &self.spec {
             YearsSpec::All => Box::new(start..=end),
-            YearsSpec::Ordinals(ordinals) => Box::new(ordinals.range(start..=end).copied()),
+            YearsSpec::Ordinals(ordinals) => Box::new(ordinals.range(start..=end)),
             YearsSpec::Predicates { .. } => {
                 Box::new((start..=end).filter(move |year| self.contains_ordinal(*year)))
             }
         }
     }
+}
+
+fn inclusive_bounds(range: (Bound<Ordinal>, Bound<Ordinal>)) -> Option<(Ordinal, Ordinal)> {
+    let start = match range.0 {
+        Bound::Included(ordinal) => ordinal,
+        Bound::Excluded(ordinal) => ordinal.checked_add(1)?,
+        Bound::Unbounded => FIRST_YEAR,
+    };
+    let end = match range.1 {
+        Bound::Included(ordinal) => ordinal,
+        Bound::Excluded(ordinal) => ordinal.checked_sub(1)?,
+        Bound::Unbounded => LAST_YEAR,
+    };
+    Some((start, end))
 }
 
 fn validate_root_specifiers(
@@ -186,11 +250,13 @@ fn materialize_ordinals(
     specifiers: &[RootSpecifier],
     wraparound_ranges: bool,
 ) -> Option<OrdinalSet> {
-    let mut ordinals = OrdinalSet::new();
+    let mut values = Vec::new();
     for specifier in specifiers {
-        ordinals.extend(materialize_root_specifier(specifier, wraparound_ranges)?);
+        values.extend(materialize_root_specifier(specifier, wraparound_ranges)?);
     }
-    Some(ordinals)
+    let min = values.iter().copied().min()?;
+    let max = values.iter().copied().max()?;
+    OrdinalSet::try_from_values(min, max, values)
 }
 
 fn materialize_root_specifier(
@@ -237,6 +303,65 @@ fn materialize_specifier(specifier: &Specifier, wraparound_ranges: bool) -> Opti
 
 fn years_in_range(start: Ordinal, end: Ordinal) -> Ordinal {
     end.saturating_sub(start).saturating_add(1)
+}
+
+fn root_specifier_count(root_specifier: &RootSpecifier, wraparound_ranges: bool) -> u32 {
+    match root_specifier {
+        RootSpecifier::Specifier(Specifier::All) => LAST_YEAR - FIRST_YEAR + 1,
+        RootSpecifier::Specifier(Specifier::Point(_)) => 1,
+        RootSpecifier::Specifier(Specifier::Range(start, end)) => {
+            let (Ok(start), Ok(end)) = (ordinal_from_endpoint(start), ordinal_from_endpoint(end))
+            else {
+                return 0;
+            };
+            if wraparound_ranges && start == end {
+                return LAST_YEAR - FIRST_YEAR + 1;
+            }
+            if start <= end {
+                years_in_range(start, end)
+            } else {
+                years_in_range(start, LAST_YEAR) + years_in_range(FIRST_YEAR, end)
+            }
+        }
+        RootSpecifier::Period(specifier, step) if *step > 0 => {
+            period_count(specifier, *step, wraparound_ranges)
+        }
+        RootSpecifier::Period(_, _)
+        | RootSpecifier::NamedPoint(_)
+        | RootSpecifier::LastDayOfMonth
+        | RootSpecifier::NearestWeekday(_)
+        | RootSpecifier::LastWeekdayOfMonth(_)
+        | RootSpecifier::NthWeekdayOfMonth(_, _)
+        | RootSpecifier::NthWeekdayRangeOfMonth(_, _, _)
+        | RootSpecifier::Random(_) => 0,
+    }
+}
+
+fn period_count(specifier: &Specifier, step: Ordinal, wraparound_ranges: bool) -> u32 {
+    match specifier {
+        Specifier::All => ((LAST_YEAR - FIRST_YEAR) / step) + 1,
+        Specifier::Point(start) => ((LAST_YEAR - start) / step) + 1,
+        Specifier::Range(start, end) => {
+            let (Ok(start), Ok(end)) = (ordinal_from_endpoint(start), ordinal_from_endpoint(end))
+            else {
+                return 0;
+            };
+            if wraparound_ranges && start == end {
+                return ((LAST_YEAR - FIRST_YEAR) / step) + 1;
+            }
+            if start <= end {
+                ((end - start) / step) + 1
+            } else {
+                let second_start = wrapped_second_segment_start(start, step);
+                let second_segment = if second_start <= end {
+                    ((end - second_start) / step) + 1
+                } else {
+                    0
+                };
+                ((LAST_YEAR - start) / step) + 1 + second_segment
+            }
+        }
+    }
 }
 
 fn root_contains(
@@ -320,6 +445,15 @@ fn range_contains(
 }
 
 fn wrapped_segment_contains(ordinal: Ordinal, start: Ordinal, end: Ordinal, step: Ordinal) -> bool {
+    let ordinal = u64::from(ordinal);
+    let second_start = u64::from(wrapped_second_segment_start(start, step));
+
+    ordinal >= second_start
+        && ordinal <= u64::from(end)
+        && (ordinal - second_start).is_multiple_of(u64::from(step))
+}
+
+fn wrapped_second_segment_start(start: Ordinal, step: Ordinal) -> Ordinal {
     let max = u64::from(LAST_YEAR);
     let start = u64::from(start);
     let step = u64::from(step);
@@ -331,10 +465,5 @@ fn wrapped_segment_contains(ordinal: Ordinal, start: Ordinal, end: Ordinal, step
     } else {
         0
     };
-    let ordinal = u64::from(ordinal);
-    let second_start = u64::from(FIRST_YEAR) + to_skip;
-
-    ordinal >= second_start
-        && ordinal <= u64::from(end)
-        && (ordinal - second_start).is_multiple_of(step)
+    (u64::from(FIRST_YEAR) + to_skip) as Ordinal
 }

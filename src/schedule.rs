@@ -90,7 +90,8 @@ impl Schedule {
     {
         let mut deferred_candidate: Option<DateTime<Z>> = None;
         let reference_naive = datetime.naive_local();
-        let fold_scan_active = match datetime.timezone().from_local_datetime(&reference_naive) {
+        let timezone = datetime.timezone();
+        let fold_scan_active = match timezone.from_local_datetime(&reference_naive) {
             LocalResult::Ambiguous(first, second) => {
                 *datetime == query.preferred_candidate(first, second)
             }
@@ -99,23 +100,23 @@ impl Schedule {
         for year in query.years(&self.fields, self.config.search_interval) {
             for month in query.months(&self.fields, year) {
                 for day_of_month in
-                    query.days_of_month(&self.fields, year, *month, self.config.dow_dom_operand)
+                    query.days_of_month(&self.fields, year, month, self.config.dow_dom_operand)
                 {
                     for hour in query.hours(&self.fields) {
                         let fold_hour_scan = fold_scan_active
                             && year as i32 == reference_naive.year()
-                            && *month == reference_naive.month()
+                            && month == reference_naive.month()
                             && day_of_month == reference_naive.day()
-                            && *hour == reference_naive.hour();
+                            && hour == reference_naive.hour();
                         for minute in query.minutes(&self.fields, fold_hour_scan) {
                             for second in query.seconds(&self.fields, fold_hour_scan) {
-                                let local_result = datetime.timezone().with_ymd_and_hms(
+                                let local_result = timezone.with_ymd_and_hms(
                                     year as i32,
-                                    *month,
+                                    month,
                                     day_of_month,
-                                    *hour,
-                                    *minute,
-                                    *second,
+                                    hour,
+                                    minute,
+                                    second,
                                 );
                                 match local_result {
                                     LocalResult::None => {
@@ -127,14 +128,14 @@ impl Schedule {
                                         }
 
                                         let Some(candidate) = next_existent_datetime(
-                                            &datetime.timezone(),
+                                            &timezone,
                                             NaiveDateTime::new(
                                                 NaiveDate::from_ymd_opt(
                                                     year as i32,
-                                                    *month,
+                                                    month,
                                                     day_of_month,
                                                 )?,
-                                                NaiveTime::from_hms_opt(*hour, *minute, *second)?,
+                                                NaiveTime::from_hms_opt(hour, minute, second)?,
                                             ),
                                         ) else {
                                             continue;
@@ -583,12 +584,10 @@ impl ScheduleFields {
         self.years.contains_ordinal(year)
     }
 
-    pub(crate) fn years_between(
-        &self,
-        start: Ordinal,
-        end: Ordinal,
-    ) -> impl DoubleEndedIterator<Item = Ordinal> + '_ {
-        self.years.ordinals_between(start, end)
+    pub(crate) fn years_between(&self, start: Ordinal, end: Ordinal) -> OrdinalRangeIter<'_> {
+        OrdinalRangeIter {
+            iter: self.years.ordinals_between(start, end),
+        }
     }
 
     pub(crate) fn months_ordinals(&self) -> &OrdinalSet {

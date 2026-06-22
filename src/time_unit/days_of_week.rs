@@ -1,10 +1,9 @@
 use crate::error::*;
 use crate::ordinal::{Ordinal, OrdinalSet};
 use crate::time_unit::{days_in_month, TimeUnitField};
-use once_cell::sync::Lazy;
 use phf::phf_map;
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 static DAY_OF_WEEK_MAP: phf::Map<&'static str, Ordinal> = phf_map! {
     "sun" => 1,
@@ -25,20 +24,18 @@ static DAY_OF_WEEK_MAP: phf::Map<&'static str, Ordinal> = phf_map! {
     "saturday" => 7,
 };
 
-static ALL: Lazy<OrdinalSet> = Lazy::new(DaysOfWeek::supported_ordinals);
-
 #[derive(Clone, Debug, Eq)]
 pub struct DaysOfWeek {
-    ordinals: Option<OrdinalSet>,
+    ordinals: OrdinalSet,
     last_weekdays_of_month: OrdinalSet,
-    nth_weekdays_of_month: BTreeMap<Ordinal, BTreeSet<Ordinal>>,
+    nth_weekdays_of_month: BTreeMap<Ordinal, OrdinalSet>,
 }
 
 impl TimeUnitField for DaysOfWeek {
     fn from_optional_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self {
         DaysOfWeek {
-            ordinals: ordinal_set,
-            last_weekdays_of_month: OrdinalSet::new(),
+            ordinals: ordinal_set.unwrap_or_else(Self::supported_ordinals),
+            last_weekdays_of_month: OrdinalSet::empty(Self::inclusive_min(), Self::inclusive_max()),
             nth_weekdays_of_month: BTreeMap::new(),
         }
     }
@@ -60,10 +57,7 @@ impl TimeUnitField for DaysOfWeek {
             })
     }
     fn ordinals(&self) -> &OrdinalSet {
-        match &self.ordinals {
-            Some(ordinal_set) => ordinal_set,
-            None => &ALL,
-        }
+        &self.ordinals
     }
 }
 
@@ -77,9 +71,9 @@ impl PartialEq for DaysOfWeek {
 
 impl DaysOfWeek {
     pub(crate) fn from_parts(
-        ordinals: Option<OrdinalSet>,
+        ordinals: OrdinalSet,
         last_weekdays_of_month: OrdinalSet,
-        nth_weekdays_of_month: BTreeMap<Ordinal, BTreeSet<Ordinal>>,
+        nth_weekdays_of_month: BTreeMap<Ordinal, OrdinalSet>,
     ) -> Self {
         Self {
             ordinals,
@@ -93,8 +87,7 @@ impl DaysOfWeek {
     }
 
     pub(crate) fn is_all(&self) -> bool {
-        !self.has_special_specifiers()
-            && self.ordinals().len() == (Self::inclusive_max() - Self::inclusive_min() + 1) as usize
+        !self.has_special_specifiers() && self.ordinals().is_all()
     }
 
     pub(crate) fn matches(

@@ -5,7 +5,7 @@ use winnow::combinator::{
 use winnow::prelude::*;
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::str::{self, FromStr};
 
@@ -457,7 +457,7 @@ where
         return Ok(T::all());
     }
 
-    let mut ordinals = OrdinalSet::new();
+    let mut ordinals = OrdinalSet::empty(T::inclusive_min(), T::inclusive_max());
     for specifier in field.specifiers {
         let specifier = resolve_random_root_specifier(specifier, config, bounds)?;
         let specifier_ordinals =
@@ -575,9 +575,11 @@ fn days_of_month_from_field(field: Field, config: ScheduleConfig) -> Result<Days
         return Ok(DaysOfMonth::all());
     }
 
-    let mut ordinals = OrdinalSet::new();
+    let mut ordinals =
+        OrdinalSet::empty(DaysOfMonth::inclusive_min(), DaysOfMonth::inclusive_max());
     let mut last_day_of_month = false;
-    let mut nearest_weekdays = OrdinalSet::new();
+    let mut nearest_weekdays =
+        OrdinalSet::empty(DaysOfMonth::inclusive_min(), DaysOfMonth::inclusive_max());
 
     for specifier in field.specifiers {
         let specifier =
@@ -607,7 +609,7 @@ fn days_of_month_from_field(field: Field, config: ScheduleConfig) -> Result<Days
     }
 
     Ok(DaysOfMonth::from_parts(
-        Some(ordinals),
+        ordinals,
         last_day_of_month,
         nearest_weekdays,
     ))
@@ -705,17 +707,19 @@ fn zero_indexed_day_of_week_internal_ordinals_from_root_specifier(
                         *step,
                     )
                     .map(|ordinals| {
-                        ordinals
-                            .into_iter()
-                            .map(zero_indexed_day_of_week_to_internal_ordinal)
-                            .collect()
+                        OrdinalSet::from_values(
+                            DaysOfWeek::inclusive_min(),
+                            DaysOfWeek::inclusive_max(),
+                            ordinals
+                                .into_iter()
+                                .map(zero_indexed_day_of_week_to_internal_ordinal),
+                        )
                     })
                     .ok_or_else(|| {
-                        ErrorKind::Expression(format!(
+                        Error::from(ErrorKind::Expression(format!(
                             "Invalid range for Days of Week: {}-{}",
                             start, end
-                        ))
-                        .into()
+                        )))
                     });
                 }
                 specifier => {
@@ -734,10 +738,13 @@ fn zero_indexed_day_of_week_internal_ordinals_from_root_specifier(
         }
     };
 
-    Ok(ordinals
-        .into_iter()
-        .map(zero_indexed_day_of_week_to_internal_ordinal)
-        .collect())
+    Ok(OrdinalSet::from_values(
+        DaysOfWeek::inclusive_min(),
+        DaysOfWeek::inclusive_max(),
+        ordinals
+            .into_iter()
+            .map(zero_indexed_day_of_week_to_internal_ordinal),
+    ))
 }
 
 fn day_of_week_from_endpoint(
@@ -796,7 +803,7 @@ fn day_of_week_values_from_range(
 }
 
 fn insert_nth_weekday(
-    nth_weekdays: &mut BTreeMap<Ordinal, BTreeSet<Ordinal>>,
+    nth_weekdays: &mut BTreeMap<Ordinal, OrdinalSet>,
     day_of_week: Ordinal,
     occurrence: Ordinal,
 ) -> Result<(), Error> {
@@ -809,7 +816,7 @@ fn insert_nth_weekday(
     }
     nth_weekdays
         .entry(day_of_week)
-        .or_default()
+        .or_insert_with(|| OrdinalSet::empty(1, 5))
         .insert(occurrence);
     Ok(())
 }
@@ -821,8 +828,9 @@ fn days_of_week_from_field(field: Field, config: ScheduleConfig) -> Result<DaysO
         return Ok(DaysOfWeek::all());
     }
 
-    let mut ordinals = OrdinalSet::new();
-    let mut last_weekdays = OrdinalSet::new();
+    let mut ordinals = OrdinalSet::empty(DaysOfWeek::inclusive_min(), DaysOfWeek::inclusive_max());
+    let mut last_weekdays =
+        OrdinalSet::empty(DaysOfWeek::inclusive_min(), DaysOfWeek::inclusive_max());
     let mut nth_weekdays = BTreeMap::new();
 
     for specifier in field.specifiers {
@@ -865,7 +873,7 @@ fn days_of_week_from_field(field: Field, config: ScheduleConfig) -> Result<DaysO
     }
 
     Ok(DaysOfWeek::from_parts(
-        Some(ordinals),
+        ordinals,
         last_weekdays,
         nth_weekdays,
     ))
@@ -923,7 +931,7 @@ fn validate_day_of_month(fields: &ScheduleFields, config: ScheduleConfig) -> Res
         fields
             .days_of_month_ordinals()
             .iter()
-            .any(|day| *day <= days_in_month(*month, 2024))
+            .any(|day| day <= days_in_month(month, 2024))
     });
 
     if has_valid_date {

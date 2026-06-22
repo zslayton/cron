@@ -23,6 +23,7 @@ phf = { version = "0.12", features = ["macros"] }
 serde = {version = "1.0.164", optional = true }
 
 [dev-dependencies]
+criterion = "0.5"
 serde_test = "1.0.164"
 
 # Dev-dependency for feature "serde".
@@ -32,3 +33,7 @@ postcard = { version = "1.0.10", default-features = false, features = ["use-std"
 
 [features]
 serde = ["dep:serde"]
+
+[[bench]]
+name = "schedule"
+harness = false

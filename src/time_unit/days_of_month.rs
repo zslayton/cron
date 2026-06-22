@@ -2,15 +2,12 @@ use crate::error::*;
 use crate::ordinal::{Ordinal, OrdinalSet};
 use crate::time_unit::{days_in_month, TimeUnitField};
 use chrono::{Datelike, NaiveDate, Weekday};
-use once_cell::sync::Lazy;
 use std::borrow::Cow;
 use std::ops::RangeInclusive;
 
-static ALL: Lazy<OrdinalSet> = Lazy::new(DaysOfMonth::supported_ordinals);
-
 #[derive(Clone, Debug, Eq)]
 pub struct DaysOfMonth {
-    ordinals: Option<OrdinalSet>,
+    ordinals: OrdinalSet,
     last_day_of_month: bool,
     nearest_weekdays: OrdinalSet,
 }
@@ -18,9 +15,9 @@ pub struct DaysOfMonth {
 impl TimeUnitField for DaysOfMonth {
     fn from_optional_ordinal_set(ordinal_set: Option<OrdinalSet>) -> Self {
         DaysOfMonth {
-            ordinals: ordinal_set,
+            ordinals: ordinal_set.unwrap_or_else(Self::supported_ordinals),
             last_day_of_month: false,
-            nearest_weekdays: OrdinalSet::new(),
+            nearest_weekdays: OrdinalSet::empty(Self::inclusive_min(), Self::inclusive_max()),
         }
     }
     fn name() -> Cow<'static, str> {
@@ -44,10 +41,7 @@ impl TimeUnitField for DaysOfMonth {
         .into())
     }
     fn ordinals(&self) -> &OrdinalSet {
-        match &self.ordinals {
-            Some(ordinal_set) => ordinal_set,
-            None => &ALL,
-        }
+        &self.ordinals
     }
 }
 
@@ -61,7 +55,7 @@ impl PartialEq for DaysOfMonth {
 
 impl DaysOfMonth {
     pub(crate) fn from_parts(
-        ordinals: Option<OrdinalSet>,
+        ordinals: OrdinalSet,
         last_day_of_month: bool,
         nearest_weekdays: OrdinalSet,
     ) -> Self {
@@ -77,8 +71,7 @@ impl DaysOfMonth {
     }
 
     pub(crate) fn is_all(&self) -> bool {
-        !self.has_special_specifiers()
-            && self.ordinals().len() == (Self::inclusive_max() - Self::inclusive_min() + 1) as usize
+        !self.has_special_specifiers() && self.ordinals().is_all()
     }
 
     pub(crate) fn ordinals_for_month(
@@ -99,14 +92,14 @@ impl DaysOfMonth {
                 + usize::from(self.last_day_of_month)
                 + self.nearest_weekdays.len(),
         );
-        days.extend(self.ordinals().range(start..=end).copied());
+        days.extend(self.ordinals().range(start..=end));
 
         if self.last_day_of_month && (start..=end).contains(&last_day) {
             days.push(last_day);
         }
 
         for nearest_weekday in &self.nearest_weekdays {
-            let day = nearest_weekday_for_month(year, month, *nearest_weekday, last_day);
+            let day = nearest_weekday_for_month(year, month, nearest_weekday, last_day);
             if (start..=end).contains(&day) {
                 days.push(day);
             }
@@ -132,7 +125,7 @@ impl DaysOfMonth {
         self.ordinals().contains(&day)
             || (self.last_day_of_month && day == last_day)
             || self.nearest_weekdays.iter().any(|nearest_weekday| {
-                day == nearest_weekday_for_month(year, month, *nearest_weekday, last_day)
+                day == nearest_weekday_for_month(year, month, nearest_weekday, last_day)
             })
     }
 }

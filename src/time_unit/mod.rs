@@ -18,41 +18,39 @@ use crate::error::*;
 use crate::ordinal::{Ordinal, OrdinalSet};
 use crate::specifier::{RangeEndpoint, RootSpecifier, Specifier};
 use std::borrow::Cow;
-use std::collections::btree_set;
-use std::iter;
-use std::ops::RangeBounds;
+use std::ops::{Bound, RangeBounds};
 
 pub struct OrdinalIter<'a> {
-    set_iter: btree_set::Iter<'a, Ordinal>,
+    pub(crate) iter: Box<dyn DoubleEndedIterator<Item = Ordinal> + 'a>,
 }
 
 impl Iterator for OrdinalIter<'_> {
     type Item = Ordinal;
     fn next(&mut self) -> Option<Ordinal> {
-        self.set_iter.next().copied()
+        self.iter.next()
     }
 }
 
 impl DoubleEndedIterator for OrdinalIter<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.set_iter.next_back().copied()
+        self.iter.next_back()
     }
 }
 
 pub struct OrdinalRangeIter<'a> {
-    range_iter: btree_set::Range<'a, Ordinal>,
+    pub(crate) iter: Box<dyn DoubleEndedIterator<Item = Ordinal> + 'a>,
 }
 
 impl Iterator for OrdinalRangeIter<'_> {
     type Item = Ordinal;
     fn next(&mut self) -> Option<Ordinal> {
-        self.range_iter.next().copied()
+        self.iter.next()
     }
 }
 
 impl DoubleEndedIterator for OrdinalRangeIter<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.range_iter.next_back().copied()
+        self.iter.next_back()
     }
 }
 
@@ -180,25 +178,39 @@ where
         self.contains_ordinal(ordinal)
     }
     fn iter(&self) -> OrdinalIter<'_> {
-        OrdinalIter {
-            set_iter: TimeUnitField::ordinals(self).iter(),
-        }
+        self.iter_ordinals()
     }
     fn range<R>(&'_ self, range: R) -> OrdinalRangeIter<'_>
     where
         R: RangeBounds<Ordinal>,
     {
-        OrdinalRangeIter {
-            range_iter: TimeUnitField::ordinals(self).range(range),
-        }
+        self.range_ordinals(owned_range_bounds(range))
     }
     fn count(&self) -> u32 {
-        self.ordinals().len() as u32
+        self.count_ordinals()
     }
 
     fn is_all(&self) -> bool {
         self.has_all_ordinals()
     }
+}
+
+fn owned_range_bounds<R>(range: R) -> (Bound<Ordinal>, Bound<Ordinal>)
+where
+    R: RangeBounds<Ordinal>,
+{
+    (
+        match range.start_bound() {
+            Bound::Included(ordinal) => Bound::Included(*ordinal),
+            Bound::Excluded(ordinal) => Bound::Excluded(*ordinal),
+            Bound::Unbounded => Bound::Unbounded,
+        },
+        match range.end_bound() {
+            Bound::Included(ordinal) => Bound::Included(*ordinal),
+            Bound::Excluded(ordinal) => Bound::Excluded(*ordinal),
+            Bound::Unbounded => Bound::Unbounded,
+        },
+    )
 }
 
 pub(crate) fn ordinal_range_values(
@@ -272,7 +284,7 @@ pub(crate) fn days_in_month(month: Ordinal, year: Ordinal) -> Ordinal {
     }
 }
 
-pub trait TimeUnitField
+pub(crate) trait TimeUnitField
 where
     Self: Sized,
 {
@@ -287,16 +299,35 @@ where
     }
 
     fn has_all_ordinals(&self) -> bool {
-        let max_supported_ordinals = Self::inclusive_max() - Self::inclusive_min() + 1;
-        self.ordinals().len() == max_supported_ordinals as usize
+        self.ordinals().is_all()
+    }
+
+    fn iter_ordinals(&self) -> OrdinalIter<'_> {
+        OrdinalIter {
+            iter: Box::new(self.ordinals().iter()),
+        }
+    }
+
+    fn range_ordinals(&self, range: (Bound<Ordinal>, Bound<Ordinal>)) -> OrdinalRangeIter<'_> {
+        OrdinalRangeIter {
+            iter: Box::new(self.ordinals().range(range)),
+        }
+    }
+
+    fn count_ordinals(&self) -> u32 {
+        self.ordinals().len() as u32
     }
 
     fn from_ordinal(ordinal: Ordinal) -> Self {
-        Self::from_ordinal_set(iter::once(ordinal).collect())
+        Self::from_ordinal_set(OrdinalSet::from_values(
+            Self::inclusive_min(),
+            Self::inclusive_max(),
+            [ordinal],
+        ))
     }
 
     fn supported_ordinals() -> OrdinalSet {
-        (Self::inclusive_min()..Self::inclusive_max() + 1).collect()
+        OrdinalSet::all(Self::inclusive_min(), Self::inclusive_max())
     }
 
     fn all() -> Self {
@@ -346,10 +377,6 @@ where
         }
     }
 
-    fn ordinals_from_specifier(specifier: &Specifier) -> Result<OrdinalSet, Error> {
-        Self::ordinals_from_specifier_with_options(specifier, false)
-    }
-
     fn ordinal_values_from_specifier_with_options(
         specifier: &Specifier,
         wraparound_ranges: bool,
@@ -387,15 +414,11 @@ where
         specifier: &Specifier,
         wraparound_ranges: bool,
     ) -> Result<OrdinalSet, Error> {
-        Ok(
-            Self::ordinal_values_from_specifier_with_options(specifier, wraparound_ranges)?
-                .into_iter()
-                .collect(),
-        )
-    }
-
-    fn ordinals_from_root_specifier(root_specifier: &RootSpecifier) -> Result<OrdinalSet, Error> {
-        Self::ordinals_from_root_specifier_with_options(root_specifier, false)
+        Ok(OrdinalSet::from_values(
+            Self::inclusive_min(),
+            Self::inclusive_max(),
+            Self::ordinal_values_from_specifier_with_options(specifier, wraparound_ranges)?,
+        ))
     }
 
     fn ordinals_from_root_specifier_with_options(
@@ -440,7 +463,13 @@ where
                             wraparound_ranges,
                             *step,
                         )
-                        .map(|ordinals| ordinals.into_iter().collect())
+                        .map(|ordinals| {
+                            OrdinalSet::from_values(
+                                Self::inclusive_min(),
+                                Self::inclusive_max(),
+                                ordinals,
+                            )
+                        })
                         .ok_or_else(|| {
                             ErrorKind::Expression(format!(
                                 "Invalid range for {}: {}-{}",
@@ -456,12 +485,17 @@ where
                         wraparound_ranges,
                     )?,
                 };
-                base_values.into_iter().step_by(*step as usize).collect()
+                OrdinalSet::from_values(
+                    Self::inclusive_min(),
+                    Self::inclusive_max(),
+                    base_values.into_iter().step_by(*step as usize),
+                )
             }
-            RootSpecifier::NamedPoint(ref name) => ([Self::ordinal_from_name(name)?])
-                .iter()
-                .cloned()
-                .collect::<OrdinalSet>(),
+            RootSpecifier::NamedPoint(ref name) => OrdinalSet::from_values(
+                Self::inclusive_min(),
+                Self::inclusive_max(),
+                [Self::ordinal_from_name(name)?],
+            ),
             _ => {
                 return Err(ErrorKind::Expression(format!(
                     "Root specifier not supported for {}: {:?}",

@@ -3,12 +3,157 @@ use chrono::{DateTime, Datelike, Duration, NaiveDate, Timelike};
 use std::ops::Bound::{Included, Unbounded};
 use std::ops::{Bound, RangeInclusive};
 
-use crate::ordinal::Ordinal;
+use crate::ordinal::{OrderedOrdinalSetIter, Ordinal};
 use crate::schedule::ScheduleFields;
 use crate::time_unit::{
-    days_in_month, DaysOfMonth, Hours, Minutes, Months, Seconds, TimeUnitField,
+    days_in_month, DaysOfMonth, Hours, Minutes, Months, OrdinalRangeIter, Seconds, TimeUnitField,
 };
 use crate::DowDomOperand;
+
+pub(crate) enum OrdinalQueryIter<'a> {
+    Empty,
+    Range {
+        front: Ordinal,
+        back: Ordinal,
+        reverse: bool,
+        exhausted: bool,
+    },
+    Set(OrderedOrdinalSetIter<'a>),
+    RangeIter {
+        iter: OrdinalRangeIter<'a>,
+        reverse: bool,
+    },
+    Vec(std::vec::IntoIter<Ordinal>),
+}
+
+impl<'a> OrdinalQueryIter<'a> {
+    fn empty() -> Self {
+        Self::Empty
+    }
+
+    fn range(start: Ordinal, end: Ordinal, reverse: bool) -> Self {
+        if start > end {
+            Self::Empty
+        } else {
+            Self::Range {
+                front: start,
+                back: end,
+                reverse,
+                exhausted: false,
+            }
+        }
+    }
+
+    fn vec(mut ordinals: Vec<Ordinal>, reverse: bool) -> Self {
+        if reverse {
+            ordinals.reverse();
+        }
+        Self::Vec(ordinals.into_iter())
+    }
+
+    fn range_iter(iter: OrdinalRangeIter<'a>, reverse: bool) -> Self {
+        Self::RangeIter { iter, reverse }
+    }
+}
+
+impl Iterator for OrdinalQueryIter<'_> {
+    type Item = Ordinal;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Empty => None,
+            Self::Range {
+                front,
+                back,
+                reverse,
+                exhausted,
+            } => {
+                if *exhausted {
+                    return None;
+                }
+
+                let candidate = if *reverse {
+                    let candidate = *back;
+                    if front == back {
+                        *exhausted = true;
+                    } else {
+                        *back -= 1;
+                    }
+                    candidate
+                } else {
+                    let candidate = *front;
+                    if front == back {
+                        *exhausted = true;
+                    } else {
+                        *front += 1;
+                    }
+                    candidate
+                };
+                Some(candidate)
+            }
+            Self::Set(iter) => iter.next(),
+            Self::RangeIter { iter, reverse } => {
+                if *reverse {
+                    iter.next_back()
+                } else {
+                    iter.next()
+                }
+            }
+            Self::Vec(iter) => iter.next(),
+        }
+    }
+}
+
+pub(crate) struct DayOfMonthQueryIter<'a> {
+    pending: Option<Ordinal>,
+    inner: DayOfMonthIter<'a>,
+}
+
+impl Iterator for DayOfMonthQueryIter<'_> {
+    type Item = Ordinal;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.pending.take().or_else(|| self.inner.next())
+    }
+}
+
+enum DayOfMonthIter<'a> {
+    Plain(OrdinalQueryIter<'a>),
+    Filtered {
+        base: OrdinalQueryIter<'a>,
+        fields: &'a ScheduleFields,
+        year: Ordinal,
+        month: Ordinal,
+        operand: DowDomOperand,
+        first_weekday: Ordinal,
+    },
+}
+
+impl Iterator for DayOfMonthIter<'_> {
+    type Item = Ordinal;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Plain(iter) => iter.next(),
+            Self::Filtered {
+                base,
+                fields,
+                year,
+                month,
+                operand,
+                first_weekday,
+            } => base.find(|day| {
+                fields.day_matches(
+                    *year,
+                    *month,
+                    *day,
+                    weekday_for_day(*first_weekday, *day),
+                    *operand,
+                )
+            }),
+        }
+    }
+}
 
 pub(crate) trait Cursor<Z>
 where
@@ -116,34 +261,31 @@ where
         &self,
         fields: &'a ScheduleFields,
         search_interval: Duration,
-    ) -> Box<dyn Iterator<Item = Ordinal> + 'a> {
+    ) -> OrdinalQueryIter<'a> {
         let Some((start, end)) = ordinal_bounds(self.year_range(search_interval)) else {
-            return Box::new(std::iter::empty());
+            return OrdinalQueryIter::empty();
         };
 
         if start > end {
-            return Box::new(std::iter::empty());
+            return OrdinalQueryIter::empty();
         }
 
         if fields.years_are_unrestricted() {
-            return order_iter(self.is_reversed(), start..=end);
+            return OrdinalQueryIter::range(start, end, self.is_reversed());
         }
 
-        order_iter(self.is_reversed(), fields.years_between(start, end))
+        OrdinalQueryIter::range_iter(fields.years_between(start, end), self.is_reversed())
     }
 
-    fn months<'a>(
-        &mut self,
-        fields: &'a ScheduleFields,
-        year: Ordinal,
-    ) -> Box<dyn Iterator<Item = &'a Ordinal> + 'a> {
+    fn months<'a>(&mut self, fields: &'a ScheduleFields, year: Ordinal) -> OrdinalQueryIter<'a> {
         let bound = self.cursor_month_bound(year, self.month_default_bound());
         if !fields.months_ordinals().contains(&bound) {
             self.reset_month();
         }
-        order_iter(
-            self.is_reversed(),
-            fields.months_ordinals().range(self.month_range(bound)),
+        OrdinalQueryIter::Set(
+            fields
+                .months_ordinals()
+                .ordered_range(self.month_range(bound), self.is_reversed()),
         )
     }
 
@@ -153,53 +295,67 @@ where
         year: Ordinal,
         month: Ordinal,
         operand: DowDomOperand,
-    ) -> Box<dyn Iterator<Item = Ordinal> + 'a> {
+    ) -> DayOfMonthQueryIter<'a> {
         let day_of_month_end = days_in_month(month, year);
         let bound = self.cursor_day_of_month_bound(self.day_of_month_default_bound());
 
         let range = self.day_of_month_range(bound, day_of_month_end);
+        let start = *range.start();
+        let end = *range.end();
         let both_restricted = !fields.days_of_month_is_all() && !fields.days_of_week_is_all();
         let should_scan_all_days = operand == DowDomOperand::Or && both_restricted;
 
-        let base_iter: Box<dyn DoubleEndedIterator<Item = Ordinal> + 'a> = if should_scan_all_days {
-            Box::new(range)
+        let base_iter = if should_scan_all_days || fields.days_of_month_is_all() {
+            OrdinalQueryIter::range(start, end, self.is_reversed())
         } else if fields.days_of_month_has_special_specifiers() {
-            Box::new(
+            OrdinalQueryIter::vec(
                 fields
                     .days_of_month_ordinals_for_month(year, month, day_of_month_end, range)
-                    .into_iter(),
+                    .into_iter()
+                    .collect(),
+                self.is_reversed(),
             )
         } else {
-            Box::new(fields.days_of_month_ordinals().range(range).copied())
+            OrdinalQueryIter::Set(
+                fields
+                    .days_of_month_ordinals()
+                    .ordered_range(range, self.is_reversed()),
+            )
         };
 
-        let iter = base_iter.filter(move |day| {
-            NaiveDate::from_ymd_opt(year as i32, month, *day)
-                .map(|d| {
-                    fields.day_matches(year, month, *day, d.weekday().number_from_sunday(), operand)
-                })
-                .unwrap_or(false)
-        });
+        let mut inner =
+            if fields.days_of_week_is_all() && !(should_scan_all_days && both_restricted) {
+                DayOfMonthIter::Plain(base_iter)
+            } else if let Some(first_weekday) = first_weekday_for_month(year, month) {
+                DayOfMonthIter::Filtered {
+                    base: base_iter,
+                    fields,
+                    year,
+                    month,
+                    operand,
+                    first_weekday,
+                }
+            } else {
+                DayOfMonthIter::Plain(OrdinalQueryIter::empty())
+            };
 
-        let mut ordered = order_iter(self.is_reversed(), iter).peekable();
         let expected_start = bound.min(day_of_month_end);
-        if ordered.peek().copied() != Some(expected_start) {
+        let pending = inner.next();
+        if pending != Some(expected_start) {
             self.reset_day_of_month();
         }
-        Box::new(ordered)
+        DayOfMonthQueryIter { pending, inner }
     }
 
-    fn hours<'a>(
-        &mut self,
-        fields: &'a ScheduleFields,
-    ) -> Box<dyn Iterator<Item = &'a Ordinal> + 'a> {
+    fn hours<'a>(&mut self, fields: &'a ScheduleFields) -> OrdinalQueryIter<'a> {
         let bound = self.cursor_hour_bound(self.hour_default_bound());
         if !fields.hours_ordinals().contains(&bound) {
             self.reset_hour();
         }
-        order_iter(
-            self.is_reversed(),
-            fields.hours_ordinals().range(self.hour_range(bound)),
+        OrdinalQueryIter::Set(
+            fields
+                .hours_ordinals()
+                .ordered_range(self.hour_range(bound), self.is_reversed()),
         )
     }
 
@@ -207,7 +363,7 @@ where
         &mut self,
         fields: &'a ScheduleFields,
         fold_hour_scan: bool,
-    ) -> Box<dyn Iterator<Item = &'a Ordinal> + 'a> {
+    ) -> OrdinalQueryIter<'a> {
         let query_bound = self.cursor_minute_bound(self.minute_default_bound());
         let bound = if fold_hour_scan {
             self.minute_default_bound()
@@ -217,9 +373,10 @@ where
         if !fields.minutes_ordinals().contains(&bound) {
             self.reset_minute();
         }
-        order_iter(
-            self.is_reversed(),
-            fields.minutes_ordinals().range(self.minute_range(bound)),
+        OrdinalQueryIter::Set(
+            fields
+                .minutes_ordinals()
+                .ordered_range(self.minute_range(bound), self.is_reversed()),
         )
     }
 
@@ -227,7 +384,7 @@ where
         &mut self,
         fields: &'a ScheduleFields,
         fold_hour_scan: bool,
-    ) -> Box<dyn Iterator<Item = &'a Ordinal> + 'a> {
+    ) -> OrdinalQueryIter<'a> {
         let query_bound = self.cursor_second_bound(self.second_default_bound());
         let bound = if fold_hour_scan {
             self.second_default_bound()
@@ -237,27 +394,24 @@ where
         if !fields.seconds_ordinals().contains(&bound) {
             self.reset_second();
         }
-        order_iter(
-            self.is_reversed(),
-            fields.seconds_ordinals().range(self.second_range(bound)),
+        OrdinalQueryIter::Set(
+            fields
+                .seconds_ordinals()
+                .ordered_range(self.second_range(bound), self.is_reversed()),
         )
-    }
-}
-
-fn order_iter<'a, I, T>(reverse: bool, iter: I) -> Box<dyn Iterator<Item = T> + 'a>
-where
-    I: DoubleEndedIterator<Item = T> + 'a,
-    T: 'a,
-{
-    if reverse {
-        Box::new(iter.rev())
-    } else {
-        Box::new(iter)
     }
 }
 
 fn ordinal_bounds(range: (Bound<Ordinal>, Bound<Ordinal>)) -> Option<(Ordinal, Ordinal)> {
     Some((lower_ordinal_bound(range.0)?, upper_ordinal_bound(range.1)?))
+}
+
+fn first_weekday_for_month(year: Ordinal, month: Ordinal) -> Option<Ordinal> {
+    NaiveDate::from_ymd_opt(year as i32, month, 1).map(|date| date.weekday().number_from_sunday())
+}
+
+fn weekday_for_day(first_weekday: Ordinal, day: Ordinal) -> Ordinal {
+    ((first_weekday + day - 2) % 7) + 1
 }
 
 fn lower_ordinal_bound(bound: Bound<Ordinal>) -> Option<Ordinal> {
