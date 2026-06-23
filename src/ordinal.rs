@@ -159,10 +159,6 @@ impl OrdinalSet {
     fn in_bounds(&self, ordinal: Ordinal) -> bool {
         ordinal >= self.min && ordinal <= self.max
     }
-
-    fn bit_is_set(&self, ordinal: Ordinal) -> bool {
-        bit_is_set(self.kind, self.min, ordinal)
-    }
 }
 
 impl fmt::Debug for OrdinalSet {
@@ -235,25 +231,19 @@ impl Iterator for OrdinalSetIter<'_> {
             return None;
         }
 
-        while self.front <= self.back {
-            let candidate = self.front;
-            let last_candidate = self.front == self.back;
-            if last_candidate {
-                self.exhausted = true;
-            } else {
-                self.front += 1;
-            }
+        let Some(candidate) = next_set_bit(self.set.kind, self.set.min, self.front, self.back)
+        else {
+            self.exhausted = true;
+            return None;
+        };
 
-            if self.set.bit_is_set(candidate) {
-                return Some(candidate);
-            }
-            if last_candidate {
-                break;
-            }
+        if candidate == self.back {
+            self.exhausted = true;
+        } else {
+            self.front = candidate + 1;
         }
 
-        self.exhausted = true;
-        None
+        Some(candidate)
     }
 }
 
@@ -263,25 +253,19 @@ impl DoubleEndedIterator for OrdinalSetIter<'_> {
             return None;
         }
 
-        while self.front <= self.back {
-            let candidate = self.back;
-            let last_candidate = self.front == self.back;
-            if last_candidate {
-                self.exhausted = true;
-            } else {
-                self.back -= 1;
-            }
+        let Some(candidate) = previous_set_bit(self.set.kind, self.set.min, self.front, self.back)
+        else {
+            self.exhausted = true;
+            return None;
+        };
 
-            if self.set.bit_is_set(candidate) {
-                return Some(candidate);
-            }
-            if last_candidate {
-                break;
-            }
+        if candidate == self.front {
+            self.exhausted = true;
+        } else {
+            self.back = candidate - 1;
         }
 
-        self.exhausted = true;
-        None
+        Some(candidate)
     }
 }
 
@@ -320,25 +304,18 @@ impl Iterator for OwnedOrdinalSetIter {
             return None;
         }
 
-        while self.front <= self.back {
-            let candidate = self.front;
-            let last_candidate = self.front == self.back;
-            if last_candidate {
-                self.exhausted = true;
-            } else {
-                self.front += 1;
-            }
+        let Some(candidate) = next_set_bit(self.kind, self.min, self.front, self.back) else {
+            self.exhausted = true;
+            return None;
+        };
 
-            if bit_is_set(self.kind, self.min, candidate) {
-                return Some(candidate);
-            }
-            if last_candidate {
-                break;
-            }
+        if candidate == self.back {
+            self.exhausted = true;
+        } else {
+            self.front = candidate + 1;
         }
 
-        self.exhausted = true;
-        None
+        Some(candidate)
     }
 }
 
@@ -363,15 +340,83 @@ where
     (start <= end).then_some((start, end))
 }
 
-fn bit_is_set(kind: OrdinalSetKind, min: Ordinal, ordinal: Ordinal) -> bool {
+fn next_set_bit(
+    kind: OrdinalSetKind,
+    min: Ordinal,
+    start: Ordinal,
+    end: Ordinal,
+) -> Option<Ordinal> {
     match kind {
-        OrdinalSetKind::All => true,
+        OrdinalSetKind::All => Some(start),
         OrdinalSetKind::Bits(words) => {
-            let offset = ordinal - min;
-            let word = (offset / WORD_BITS) as usize;
-            let bit = 1_u64 << (offset % WORD_BITS);
-            words[word] & bit != 0
+            let start_offset = start - min;
+            let end_offset = end - min;
+            let start_word = (start_offset / WORD_BITS) as usize;
+            let end_word = (end_offset / WORD_BITS) as usize;
+
+            for (word_index, word) in words.iter().enumerate().take(end_word + 1).skip(start_word) {
+                let mut word = *word;
+                if word_index == start_word {
+                    word &= u64::MAX << (start_offset % WORD_BITS);
+                }
+                if word_index == end_word {
+                    word &= low_bits_mask(end_offset % WORD_BITS);
+                }
+                if word != 0 {
+                    let bit = word.trailing_zeros();
+                    return Some(min + word_index as Ordinal * WORD_BITS + bit);
+                }
+            }
+
+            None
         }
+    }
+}
+
+fn previous_set_bit(
+    kind: OrdinalSetKind,
+    min: Ordinal,
+    start: Ordinal,
+    end: Ordinal,
+) -> Option<Ordinal> {
+    match kind {
+        OrdinalSetKind::All => Some(end),
+        OrdinalSetKind::Bits(words) => {
+            let start_offset = start - min;
+            let end_offset = end - min;
+            let start_word = (start_offset / WORD_BITS) as usize;
+            let end_word = (end_offset / WORD_BITS) as usize;
+
+            for (word_index, word) in words
+                .iter()
+                .enumerate()
+                .take(end_word + 1)
+                .skip(start_word)
+                .rev()
+            {
+                let mut word = *word;
+                if word_index == end_word {
+                    word &= low_bits_mask(end_offset % WORD_BITS);
+                }
+                if word_index == start_word {
+                    word &= u64::MAX << (start_offset % WORD_BITS);
+                }
+                if word != 0 {
+                    let bit = WORD_BITS - 1 - word.leading_zeros();
+                    return Some(min + word_index as Ordinal * WORD_BITS + bit);
+                }
+            }
+
+            None
+        }
+    }
+}
+
+fn low_bits_mask(high_bit: Ordinal) -> u64 {
+    if high_bit == WORD_BITS - 1 {
+        u64::MAX
+    } else {
+        (1_u64 << (high_bit + 1)) - 1
     }
 }
 
@@ -458,6 +503,25 @@ mod tests {
             vec![3, 7, 10],
             set.ordered_range(2..=10, false).collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn sparse_iteration_jumps_across_word_boundaries() {
+        let set = OrdinalSet::from_values(0, 130, [0, 64, 129]);
+
+        assert_eq!(vec![64, 129], set.range(1..=129).collect::<Vec<_>>());
+        assert_eq!(
+            vec![129, 64],
+            set.ordered_range(1..=129, true).collect::<Vec<_>>()
+        );
+
+        let mut iter = set.range(0..=129);
+        assert_eq!(Some(0), iter.next());
+        assert_eq!(Some(129), iter.next_back());
+        assert_eq!(Some(64), iter.next());
+        assert_eq!(None, iter.next_back());
+
+        assert_eq!(vec![0, 64, 129], set.into_iter().collect::<Vec<_>>());
     }
 
     #[test]
