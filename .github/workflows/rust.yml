@@ -10,21 +10,76 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
+  stable:
+    name: Stable checks
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests (default features)
-      run: cargo test --verbose
-    - name: Run tests (all features)
-      run: cargo test --verbose --all-features
-    - name: Build docs
-      run: cargo doc --no-deps --verbose
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy, rustfmt
     - name: Check formatting
-      run: cargo fmt -- --check
+      run: cargo fmt --all -- --check
     - name: Check linting
       run: cargo clippy --all-targets --all-features -- -D warnings
+    - name: Build docs
+      run: cargo doc --no-deps --all-features --verbose
+    - name: Test default features
+      run: cargo test --verbose
+    - name: Test no default features
+      run: cargo test --verbose --no-default-features
+    - name: Test all features
+      run: cargo test --verbose --all-features
+    - name: Compile benchmarks
+      run: cargo bench --no-run
+    - name: Check package contents
+      run: cargo package --allow-dirty --list
+
+  msrv:
+    name: MSRV (Rust 1.65)
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@1.65.0
+    - name: Check library as downstream dependency
+      shell: bash
+      run: |
+        # This checks cron's public dependency surface without resolving dev-dependencies.
+        checker="${RUNNER_TEMP}/cron-msrv-check"
+        mkdir -p "${checker}/src"
+        cat > "${checker}/Cargo.toml" <<EOF
+        [package]
+        name = "cron-msrv-check"
+        version = "0.0.0"
+        edition = "2021"
+        publish = false
+
+        [dependencies]
+        cron = { path = "${GITHUB_WORKSPACE}", features = ["serde"] }
+        # Keep Cargo 1.65 from selecting newer proc-macro helper releases.
+        proc-macro2 = "=1.0.86"
+        quote = "=1.0.36"
+        syn = "=2.0.87"
+        unicode-ident = "=1.0.12"
+        EOF
+        printf 'fn main() {}\n' > "${checker}/src/main.rs"
+        cargo +1.65.0 check --manifest-path "${checker}/Cargo.toml" --verbose
+
+  os-tests:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    - name: Run tests
+      run: cargo test --verbose
