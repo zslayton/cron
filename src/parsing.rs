@@ -462,7 +462,7 @@ where
         let specifier = resolve_random_root_specifier(specifier, config, bounds)?;
         let specifier_ordinals =
             T::ordinals_from_root_specifier_with_options(&specifier, config.wraparound_ranges)?;
-        for ordinal in specifier_ordinals {
+        for ordinal in &specifier_ordinals {
             ordinals.insert(T::validate_ordinal(ordinal)?);
         }
     }
@@ -601,7 +601,7 @@ fn days_of_month_from_field(field: Field, config: ScheduleConfig) -> Result<Days
                     &specifier,
                     config.wraparound_ranges,
                 )?;
-                for ordinal in specifier_ordinals {
+                for ordinal in &specifier_ordinals {
                     ordinals.insert(DaysOfMonth::validate_ordinal(ordinal)?);
                 }
             }
@@ -865,7 +865,7 @@ fn days_of_week_from_field(field: Field, config: ScheduleConfig) -> Result<DaysO
                             config.wraparound_ranges,
                         )?
                     };
-                for ordinal in specifier_ordinals {
+                for ordinal in &specifier_ordinals {
                     ordinals.insert(DaysOfWeek::validate_ordinal(ordinal)?);
                 }
             }

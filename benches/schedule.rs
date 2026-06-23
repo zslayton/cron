@@ -1,4 +1,4 @@
-use chrono::{TimeDelta, TimeZone, Utc};
+use chrono::{DateTime, TimeDelta, TimeZone, Utc};
 use chrono_tz::America::Los_Angeles;
 use chrono_tz::Australia::Lord_Howe;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
@@ -8,6 +8,13 @@ use std::str::FromStr;
 const DENSE_EVENT_COUNT: usize = 2_000;
 const SPARSE_EVENT_COUNT: usize = 16;
 const DST_EVENT_COUNT: usize = 8;
+
+fn nth_match<Z>(schedule: &Schedule, start: &DateTime<Z>, count: usize) -> Option<DateTime<Z>>
+where
+    Z: TimeZone + 'static,
+{
+    schedule.after(start).take(count).last()
+}
 
 fn bench_parse(c: &mut Criterion) {
     let mut group = c.benchmark_group("parse");
@@ -84,22 +91,20 @@ fn bench_dense_iteration(c: &mut Criterion) {
     group.throughput(Throughput::Elements(DENSE_EVENT_COUNT as u64));
     group.bench_function("every_second_forward", |b| {
         b.iter(|| {
-            black_box(
-                every_second
-                    .after(black_box(&start))
-                    .take(DENSE_EVENT_COUNT)
-                    .last(),
-            )
+            black_box(nth_match(
+                &every_second,
+                black_box(&start),
+                DENSE_EVENT_COUNT,
+            ))
         })
     });
     group.bench_function("every_15_seconds_forward", |b| {
         b.iter(|| {
-            black_box(
-                every_15_seconds
-                    .after(black_box(&start))
-                    .take(DENSE_EVENT_COUNT)
-                    .last(),
-            )
+            black_box(nth_match(
+                &every_15_seconds,
+                black_box(&start),
+                DENSE_EVENT_COUNT,
+            ))
         })
     });
     group.finish();
@@ -126,22 +131,20 @@ fn bench_sparse_and_year_bound_iteration(c: &mut Criterion) {
     group.throughput(Throughput::Elements(SPARSE_EVENT_COUNT as u64));
     group.bench_function("leap_days_forward", |b| {
         b.iter(|| {
-            black_box(
-                leap_days
-                    .after(black_box(&leap_start))
-                    .take(SPARSE_EVENT_COUNT)
-                    .last(),
-            )
+            black_box(nth_match(
+                &leap_days,
+                black_box(&leap_start),
+                SPARSE_EVENT_COUNT,
+            ))
         })
     });
     group.bench_function("monthly_forward", |b| {
         b.iter(|| {
-            black_box(
-                monthly
-                    .after(black_box(&monthly_start))
-                    .take(SPARSE_EVENT_COUNT)
-                    .last(),
-            )
+            black_box(nth_match(
+                &monthly,
+                black_box(&monthly_start),
+                SPARSE_EVENT_COUNT,
+            ))
         })
     });
 
@@ -192,52 +195,47 @@ fn bench_dst_and_nonexistent_time(c: &mut Criterion) {
     group.throughput(Throughput::Elements(DST_EVENT_COUNT as u64));
     group.bench_function("hourly_fall_back_fold", |b| {
         b.iter(|| {
-            black_box(
-                hourly
-                    .after(black_box(&fall_back_start))
-                    .take(DST_EVENT_COUNT)
-                    .last(),
-            )
+            black_box(nth_match(
+                &hourly,
+                black_box(&fall_back_start),
+                DST_EVENT_COUNT,
+            ))
         })
     });
     group.bench_function("hourly_spring_forward_gap_skip", |b| {
         b.iter(|| {
-            black_box(
-                hourly
-                    .after(black_box(&spring_forward_start))
-                    .take(DST_EVENT_COUNT)
-                    .last(),
-            )
+            black_box(nth_match(
+                &hourly,
+                black_box(&spring_forward_start),
+                DST_EVENT_COUNT,
+            ))
         })
     });
     group.bench_function("subhourly_fall_back_fold", |b| {
         b.iter(|| {
-            black_box(
-                subhourly
-                    .after(black_box(&fall_back_start))
-                    .take(DST_EVENT_COUNT)
-                    .last(),
-            )
+            black_box(nth_match(
+                &subhourly,
+                black_box(&fall_back_start),
+                DST_EVENT_COUNT,
+            ))
         })
     });
     group.bench_function("daily_nonexistent_next_existent", |b| {
         b.iter(|| {
-            black_box(
-                nonexistent_next
-                    .after(black_box(&nonexistent_start))
-                    .take(DST_EVENT_COUNT)
-                    .last(),
-            )
+            black_box(nth_match(
+                &nonexistent_next,
+                black_box(&nonexistent_start),
+                DST_EVENT_COUNT,
+            ))
         })
     });
     group.bench_function("daily_lord_howe_spring_forward_gap", |b| {
         b.iter(|| {
-            black_box(
-                lord_howe_nonexistent_next
-                    .after(black_box(&lord_howe_spring_forward_start))
-                    .take(DST_EVENT_COUNT)
-                    .last(),
-            )
+            black_box(nth_match(
+                &lord_howe_nonexistent_next,
+                black_box(&lord_howe_spring_forward_start),
+                DST_EVENT_COUNT,
+            ))
         })
     });
     group.finish();

@@ -11,12 +11,9 @@ use crate::time_unit::{
 use crate::DowDomOperand;
 
 pub(crate) enum OrdinalQueryIter<'a> {
-    Empty,
     Range {
-        front: Ordinal,
-        back: Ordinal,
+        range: RangeInclusive<Ordinal>,
         reverse: bool,
-        exhausted: bool,
     },
     Set(OrderedOrdinalSetIter<'a>),
     YearRange {
@@ -28,18 +25,19 @@ pub(crate) enum OrdinalQueryIter<'a> {
 
 impl<'a> OrdinalQueryIter<'a> {
     fn empty() -> Self {
-        Self::Empty
+        Self::Range {
+            range: RangeInclusive::new(1, 0),
+            reverse: false,
+        }
     }
 
     fn range(start: Ordinal, end: Ordinal, reverse: bool) -> Self {
         if start > end {
-            Self::Empty
+            Self::empty()
         } else {
             Self::Range {
-                front: start,
-                back: end,
+                range: start..=end,
                 reverse,
-                exhausted: false,
             }
         }
     }
@@ -61,35 +59,12 @@ impl Iterator for OrdinalQueryIter<'_> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            Self::Empty => None,
-            Self::Range {
-                front,
-                back,
-                reverse,
-                exhausted,
-            } => {
-                if *exhausted {
-                    return None;
-                }
-
-                let candidate = if *reverse {
-                    let candidate = *back;
-                    if front == back {
-                        *exhausted = true;
-                    } else {
-                        *back -= 1;
-                    }
-                    candidate
+            Self::Range { range, reverse } => {
+                if *reverse {
+                    range.next_back()
                 } else {
-                    let candidate = *front;
-                    if front == back {
-                        *exhausted = true;
-                    } else {
-                        *front += 1;
-                    }
-                    candidate
-                };
-                Some(candidate)
+                    range.next()
+                }
             }
             Self::Set(iter) => iter.next(),
             Self::YearRange { iter, reverse } => {

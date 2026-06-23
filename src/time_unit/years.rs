@@ -4,7 +4,7 @@ use crate::specifier::{RangeEndpoint, RootSpecifier, Specifier};
 use crate::time_unit::TimeUnitField;
 use once_cell::sync::Lazy;
 use std::borrow::Cow;
-use std::ops::Bound;
+use std::ops::{Bound, RangeInclusive};
 
 const FIRST_YEAR: Ordinal = 0;
 const LAST_YEAR: Ordinal = i32::MAX as Ordinal;
@@ -164,41 +164,28 @@ impl Years {
             YearsSpec::Ordinals(ordinals) => YearRangeIter::Set(ordinals.range(start..=end)),
             YearsSpec::Predicates { .. } => YearRangeIter::Predicates {
                 years: self,
-                front: start,
-                back: end,
-                exhausted: false,
+                range: start..=end,
             },
         }
     }
 }
 
 pub(crate) enum YearRangeIter<'a> {
-    Empty,
-    Range {
-        front: Ordinal,
-        back: Ordinal,
-        exhausted: bool,
-    },
+    Range(RangeInclusive<Ordinal>),
     Set(OrdinalSetIter<'a>),
     Predicates {
         years: &'a Years,
-        front: Ordinal,
-        back: Ordinal,
-        exhausted: bool,
+        range: RangeInclusive<Ordinal>,
     },
 }
 
 impl YearRangeIter<'_> {
     fn empty() -> Self {
-        Self::Empty
+        Self::Range(RangeInclusive::new(1, 0))
     }
 
     fn range(start: Ordinal, end: Ordinal) -> Self {
-        Self::Range {
-            front: start,
-            back: end,
-            exhausted: false,
-        }
+        Self::Range(start..=end)
     }
 }
 
@@ -207,50 +194,9 @@ impl Iterator for YearRangeIter<'_> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            Self::Empty => None,
-            Self::Range {
-                front,
-                back,
-                exhausted,
-            } => {
-                if *exhausted {
-                    return None;
-                }
-
-                let candidate = *front;
-                if front == back {
-                    *exhausted = true;
-                } else {
-                    *front += 1;
-                }
-                Some(candidate)
-            }
+            Self::Range(range) => range.next(),
             Self::Set(iter) => iter.next(),
-            Self::Predicates {
-                years,
-                front,
-                back,
-                exhausted,
-            } => {
-                if *exhausted {
-                    return None;
-                }
-
-                while *front <= *back {
-                    let candidate = *front;
-                    if front == back {
-                        *exhausted = true;
-                    } else {
-                        *front += 1;
-                    }
-                    if years.contains_ordinal(candidate) {
-                        return Some(candidate);
-                    }
-                }
-
-                *exhausted = true;
-                None
-            }
+            Self::Predicates { years, range } => range.find(|year| years.contains_ordinal(*year)),
         }
     }
 }
@@ -258,50 +204,9 @@ impl Iterator for YearRangeIter<'_> {
 impl DoubleEndedIterator for YearRangeIter<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         match self {
-            Self::Empty => None,
-            Self::Range {
-                front,
-                back,
-                exhausted,
-            } => {
-                if *exhausted {
-                    return None;
-                }
-
-                let candidate = *back;
-                if front == back {
-                    *exhausted = true;
-                } else {
-                    *back -= 1;
-                }
-                Some(candidate)
-            }
+            Self::Range(range) => range.next_back(),
             Self::Set(iter) => iter.next_back(),
-            Self::Predicates {
-                years,
-                front,
-                back,
-                exhausted,
-            } => {
-                if *exhausted {
-                    return None;
-                }
-
-                while *front <= *back {
-                    let candidate = *back;
-                    if front == back {
-                        *exhausted = true;
-                    } else {
-                        *back -= 1;
-                    }
-                    if years.contains_ordinal(candidate) {
-                        return Some(candidate);
-                    }
-                }
-
-                *exhausted = true;
-                None
-            }
+            Self::Predicates { years, range } => range.rfind(|year| years.contains_ordinal(*year)),
         }
     }
 }

@@ -189,21 +189,6 @@ impl<'a> IntoIterator for &'a OrdinalSet {
     }
 }
 
-impl IntoIterator for OrdinalSet {
-    type Item = Ordinal;
-    type IntoIter = OwnedOrdinalSetIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-        OwnedOrdinalSetIter {
-            min: self.min,
-            kind: self.kind,
-            front: self.min,
-            back: self.max,
-            exhausted: self.is_empty(),
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
 pub(crate) struct OrdinalSetIter<'a> {
     set: &'a OrdinalSet,
@@ -284,38 +269,6 @@ impl Iterator for OrderedOrdinalSetIter<'_> {
         } else {
             self.iter.next()
         }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct OwnedOrdinalSetIter {
-    min: Ordinal,
-    kind: OrdinalSetKind,
-    front: Ordinal,
-    back: Ordinal,
-    exhausted: bool,
-}
-
-impl Iterator for OwnedOrdinalSetIter {
-    type Item = Ordinal;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.exhausted {
-            return None;
-        }
-
-        let Some(candidate) = next_set_bit(self.kind, self.min, self.front, self.back) else {
-            self.exhausted = true;
-            return None;
-        };
-
-        if candidate == self.back {
-            self.exhausted = true;
-        } else {
-            self.front = candidate + 1;
-        }
-
-        Some(candidate)
     }
 }
 
@@ -521,7 +474,7 @@ mod tests {
         assert_eq!(Some(64), iter.next());
         assert_eq!(None, iter.next_back());
 
-        assert_eq!(vec![0, 64, 129], set.into_iter().collect::<Vec<_>>());
+        assert_eq!(vec![0, 64, 129], set.iter().collect::<Vec<_>>());
     }
 
     #[test]
