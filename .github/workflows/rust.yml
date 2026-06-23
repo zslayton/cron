@@ -22,6 +22,8 @@ jobs:
       run: cargo test --verbose
     - name: Run tests (all features)
       run: cargo test --verbose --all-features
+    - name: Compile benchmarks
+      run: cargo bench --no-run
     - name: Build docs
       run: cargo doc --no-deps --verbose
     - name: Check formatting
