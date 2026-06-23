@@ -449,8 +449,8 @@ fn period_contains(
     }
 
     match specifier {
-        Specifier::All => (ordinal - FIRST_YEAR).is_multiple_of(step),
-        Specifier::Point(start) => ordinal >= *start && (ordinal - start).is_multiple_of(step),
+        Specifier::All => (ordinal - FIRST_YEAR) % step == 0,
+        Specifier::Point(start) => ordinal >= *start && (ordinal - start) % step == 0,
         Specifier::Range(start, end) => {
             let (Ok(start), Ok(end)) = (ordinal_from_endpoint(start), ordinal_from_endpoint(end))
             else {
@@ -469,16 +469,16 @@ fn range_contains(
     wraparound_ranges: bool,
 ) -> bool {
     if wraparound_ranges && start == end {
-        return (ordinal - FIRST_YEAR).is_multiple_of(step);
+        return (ordinal - FIRST_YEAR) % step == 0;
     }
     if start <= end {
-        return ordinal >= start && ordinal <= end && (ordinal - start).is_multiple_of(step);
+        return ordinal >= start && ordinal <= end && (ordinal - start) % step == 0;
     }
     if !wraparound_ranges {
         return false;
     }
 
-    ordinal >= start && (ordinal - start).is_multiple_of(step)
+    ordinal >= start && (ordinal - start) % step == 0
         || wrapped_segment_contains(ordinal, start, end, step)
 }
 
@@ -488,7 +488,7 @@ fn wrapped_segment_contains(ordinal: Ordinal, start: Ordinal, end: Ordinal, step
 
     ordinal >= second_start
         && ordinal <= u64::from(end)
-        && (ordinal - second_start).is_multiple_of(u64::from(step))
+        && (ordinal - second_start) % u64::from(step) == 0
 }
 
 fn wrapped_second_segment_start(start: Ordinal, step: Ordinal) -> Ordinal {

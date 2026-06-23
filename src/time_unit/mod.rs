@@ -275,8 +275,7 @@ pub(crate) fn ordinal_range_values_with_step(
 }
 
 pub(crate) fn days_in_month(month: Ordinal, year: Ordinal) -> Ordinal {
-    let is_leap_year =
-        year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));
+    let is_leap_year = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
     match month {
         9 | 4 | 6 | 11 => 30,
         2 if is_leap_year => 29,

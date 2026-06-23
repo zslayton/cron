@@ -1,5 +1,5 @@
 # cron [![Rust](https://github.com/zslayton/cron/workflows/Rust/badge.svg)](https://github.com/zslayton/cron/actions) [![](https://img.shields.io/crates/v/cron.svg)](https://crates.io/crates/cron) [![](https://docs.rs/cron/badge.svg)](https://docs.rs/cron)
-A cron expression parser. Works with stable Rust v1.28.0.
+A cron expression parser.
 
 ```rust
 use cron::Schedule;
@@ -83,6 +83,24 @@ Default config values:
 - `search_interval`: `400 * 366` days
 
 The optional year field is the seventh field. Open-ended year searches are bounded by the configured `search_interval`.
+
+## Development
+
+The minimum supported Rust version (MSRV) is 1.65.
+
+Run these checks locally before opening a PR:
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo doc --no-deps --all-features
+cargo test
+cargo test --no-default-features
+cargo test --all-features
+cargo package --allow-dirty --list
+```
+
+Use `cargo test --all-features` to cover feature-gated code, including `serde`.
 
 ## License
 

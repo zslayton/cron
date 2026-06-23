@@ -109,6 +109,6 @@ impl DaysOfWeek {
             || self
                 .nth_weekdays_of_month
                 .get(&day_of_week)
-                .is_some_and(|occurrences| occurrences.contains(&occurrence))
+                .map_or(false, |occurrences| occurrences.contains(&occurrence))
     }
 }

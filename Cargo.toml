@@ -9,6 +9,7 @@ description = "A cron expression parser and schedule explorer."
 keywords = [ "cron", "schedule", "repeat", "periodic", "time" ]
 license = "MIT OR Apache-2.0"
 edition = "2021"
+rust-version = "1.65"
 
 [lib]
 name = "cron"
