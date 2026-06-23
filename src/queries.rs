@@ -6,7 +6,7 @@ use std::ops::{Bound, RangeInclusive};
 use crate::ordinal::{OrderedOrdinalSetIter, Ordinal};
 use crate::schedule::ScheduleFields;
 use crate::time_unit::{
-    days_in_month, DaysOfMonth, Hours, Minutes, Months, OrdinalRangeIter, Seconds, TimeUnitField,
+    days_in_month, DaysOfMonth, Hours, Minutes, Months, Seconds, TimeUnitField, YearRangeIter,
 };
 use crate::DowDomOperand;
 
@@ -19,8 +19,8 @@ pub(crate) enum OrdinalQueryIter<'a> {
         exhausted: bool,
     },
     Set(OrderedOrdinalSetIter<'a>),
-    RangeIter {
-        iter: OrdinalRangeIter<'a>,
+    YearRange {
+        iter: YearRangeIter<'a>,
         reverse: bool,
     },
     Vec(std::vec::IntoIter<Ordinal>),
@@ -51,8 +51,8 @@ impl<'a> OrdinalQueryIter<'a> {
         Self::Vec(ordinals.into_iter())
     }
 
-    fn range_iter(iter: OrdinalRangeIter<'a>, reverse: bool) -> Self {
-        Self::RangeIter { iter, reverse }
+    fn year_range(iter: YearRangeIter<'a>, reverse: bool) -> Self {
+        Self::YearRange { iter, reverse }
     }
 }
 
@@ -92,7 +92,7 @@ impl Iterator for OrdinalQueryIter<'_> {
                 Some(candidate)
             }
             Self::Set(iter) => iter.next(),
-            Self::RangeIter { iter, reverse } => {
+            Self::YearRange { iter, reverse } => {
                 if *reverse {
                     iter.next_back()
                 } else {
@@ -261,7 +261,17 @@ where
         &self,
         fields: &'a ScheduleFields,
         search_interval: Duration,
+        enforce_search_interval: bool,
     ) -> OrdinalQueryIter<'a> {
+        if fields.years_are_unrestricted() && !enforce_search_interval {
+            let year = self.initial_datetime().year() as Ordinal;
+            return if self.is_reversed() {
+                OrdinalQueryIter::range(0, year, true)
+            } else {
+                OrdinalQueryIter::range(year, i32::MAX as Ordinal, false)
+            };
+        }
+
         let Some((start, end)) = ordinal_bounds(self.year_range(search_interval)) else {
             return OrdinalQueryIter::empty();
         };
@@ -274,7 +284,7 @@ where
             return OrdinalQueryIter::range(start, end, self.is_reversed());
         }
 
-        OrdinalQueryIter::range_iter(fields.years_between(start, end), self.is_reversed())
+        OrdinalQueryIter::year_range(fields.years_between(start, end), self.is_reversed())
     }
 
     fn months<'a>(&mut self, fields: &'a ScheduleFields, year: Ordinal) -> OrdinalQueryIter<'a> {

@@ -12,6 +12,7 @@ pub use self::hours::Hours;
 pub use self::minutes::Minutes;
 pub use self::months::Months;
 pub use self::seconds::Seconds;
+pub(crate) use self::years::YearRangeIter;
 pub use self::years::Years;
 
 use crate::error::*;

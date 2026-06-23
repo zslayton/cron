@@ -1,5 +1,6 @@
 use chrono::{TimeDelta, TimeZone, Utc};
 use chrono_tz::America::Los_Angeles;
+use chrono_tz::Australia::Lord_Howe;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use cron::{CronScheduleParts, DowDomOperand, NonexistentTimeBehavior, Schedule};
 use std::str::FromStr;
@@ -108,6 +109,9 @@ fn bench_sparse_and_year_bound_iteration(c: &mut Criterion) {
     let leap_days = Schedule::from_str("0 0 0 29 2 * 2024-2096/4").unwrap();
     let leap_start = Utc.with_ymd_and_hms(2023, 1, 1, 0, 0, 0).unwrap();
 
+    let monthly = Schedule::from_str("0 0 0 1 * * *").unwrap();
+    let monthly_start = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+
     let far_future = Schedule::from_str("0 0 0 1 1 * 2099").unwrap();
     let far_future_start = Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap();
 
@@ -125,6 +129,16 @@ fn bench_sparse_and_year_bound_iteration(c: &mut Criterion) {
             black_box(
                 leap_days
                     .after(black_box(&leap_start))
+                    .take(SPARSE_EVENT_COUNT)
+                    .last(),
+            )
+        })
+    });
+    group.bench_function("monthly_forward", |b| {
+        b.iter(|| {
+            black_box(
+                monthly
+                    .after(black_box(&monthly_start))
                     .take(SPARSE_EVENT_COUNT)
                     .last(),
             )
@@ -157,6 +171,10 @@ fn bench_dst_and_nonexistent_time(c: &mut Criterion) {
         .nonexistent_time_behavior(NonexistentTimeBehavior::NextExistent)
         .parse("0 30 2 * * * *")
         .unwrap();
+    let lord_howe_nonexistent_next = Schedule::builder()
+        .nonexistent_time_behavior(NonexistentTimeBehavior::NextExistent)
+        .parse("0 15 2 * * * *")
+        .unwrap();
 
     let fall_back_start = Los_Angeles
         .with_ymd_and_hms(2022, 11, 6, 0, 59, 59)
@@ -167,6 +185,8 @@ fn bench_dst_and_nonexistent_time(c: &mut Criterion) {
     let nonexistent_start = Los_Angeles
         .with_ymd_and_hms(2022, 3, 13, 1, 59, 59)
         .unwrap();
+    let lord_howe_spring_forward_start =
+        Lord_Howe.with_ymd_and_hms(2022, 10, 2, 1, 59, 59).unwrap();
 
     let mut group = c.benchmark_group("iteration_dst_nonexistent");
     group.throughput(Throughput::Elements(DST_EVENT_COUNT as u64));
@@ -205,6 +225,16 @@ fn bench_dst_and_nonexistent_time(c: &mut Criterion) {
             black_box(
                 nonexistent_next
                     .after(black_box(&nonexistent_start))
+                    .take(DST_EVENT_COUNT)
+                    .last(),
+            )
+        })
+    });
+    group.bench_function("daily_lord_howe_spring_forward_gap", |b| {
+        b.iter(|| {
+            black_box(
+                lord_howe_nonexistent_next
+                    .after(black_box(&lord_howe_spring_forward_start))
                     .take(DST_EVENT_COUNT)
                     .last(),
             )

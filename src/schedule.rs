@@ -91,13 +91,18 @@ impl Schedule {
         let mut deferred_candidate: Option<DateTime<Z>> = None;
         let reference_naive = datetime.naive_local();
         let timezone = datetime.timezone();
+        let enforce_search_interval = self.enforces_search_interval();
         let fold_scan_active = match timezone.from_local_datetime(&reference_naive) {
             LocalResult::Ambiguous(first, second) => {
                 *datetime == query.preferred_candidate(first, second)
             }
             _ => false,
         };
-        for year in query.years(&self.fields, self.config.search_interval) {
+        for year in query.years(
+            &self.fields,
+            self.config.search_interval,
+            enforce_search_interval,
+        ) {
             for month in query.months(&self.fields, year) {
                 for day_of_month in
                     query.days_of_month(&self.fields, year, month, self.config.dow_dom_operand)
@@ -144,11 +149,13 @@ impl Schedule {
                                         if !query.preceeds_reference_datetime(&candidate) {
                                             continue;
                                         }
-                                        if !self.within_search_interval(
-                                            datetime,
-                                            &candidate,
-                                            query.is_reversed(),
-                                        ) {
+                                        if enforce_search_interval
+                                            && !self.within_search_interval(
+                                                datetime,
+                                                &candidate,
+                                                query.is_reversed(),
+                                            )
+                                        {
                                             return deferred_candidate;
                                         }
                                         if let Some(deferred) = deferred_candidate.take() {
@@ -162,11 +169,13 @@ impl Schedule {
                                         if !query.preceeds_reference_datetime(&candidate) {
                                             continue;
                                         }
-                                        if !self.within_search_interval(
-                                            datetime,
-                                            &candidate,
-                                            query.is_reversed(),
-                                        ) {
+                                        if enforce_search_interval
+                                            && !self.within_search_interval(
+                                                datetime,
+                                                &candidate,
+                                                query.is_reversed(),
+                                            )
+                                        {
                                             return deferred_candidate;
                                         }
                                         if let Some(deferred) = deferred_candidate.take() {
@@ -180,11 +189,12 @@ impl Schedule {
                                         let primary = query
                                             .preferred_candidate(earlier.clone(), later.clone());
                                         if query.preceeds_reference_datetime(&primary)
-                                            && self.within_search_interval(
-                                                datetime,
-                                                &primary,
-                                                query.is_reversed(),
-                                            )
+                                            && (!enforce_search_interval
+                                                || self.within_search_interval(
+                                                    datetime,
+                                                    &primary,
+                                                    query.is_reversed(),
+                                                ))
                                         {
                                             if let Some(deferred) = deferred_candidate.take() {
                                                 return Some(
@@ -197,11 +207,12 @@ impl Schedule {
                                         let secondary =
                                             if primary == earlier { later } else { earlier };
                                         if query.preceeds_reference_datetime(&secondary)
-                                            && self.within_search_interval(
-                                                datetime,
-                                                &secondary,
-                                                query.is_reversed(),
-                                            )
+                                            && (!enforce_search_interval
+                                                || self.within_search_interval(
+                                                    datetime,
+                                                    &secondary,
+                                                    query.is_reversed(),
+                                                ))
                                         {
                                             deferred_candidate =
                                                 Some(match deferred_candidate.take() {
@@ -344,6 +355,11 @@ impl Schedule {
                 .signed_duration_since(reference_datetime.clone())
         };
         elapsed <= self.config.search_interval
+    }
+
+    fn enforces_search_interval(&self) -> bool {
+        !self.fields.years_are_unrestricted()
+            || self.config.search_interval != ScheduleConfig::default().search_interval
     }
 }
 
@@ -584,10 +600,8 @@ impl ScheduleFields {
         self.years.contains_ordinal(year)
     }
 
-    pub(crate) fn years_between(&self, start: Ordinal, end: Ordinal) -> OrdinalRangeIter<'_> {
-        OrdinalRangeIter {
-            iter: self.years.ordinals_between(start, end),
-        }
+    pub(crate) fn years_between(&self, start: Ordinal, end: Ordinal) -> YearRangeIter<'_> {
+        self.years.ordinals_between(start, end)
     }
 
     pub(crate) fn months_ordinals(&self) -> &OrdinalSet {
