@@ -29,19 +29,6 @@ pub struct RandomSpecifier {
     pub step: Option<Ordinal>,
 }
 
-impl Display for RandomSpecifier {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "R")?;
-        if let Some((start, end)) = self.range {
-            write!(f, "({start}-{end})")?;
-        }
-        if let Some(step) = self.step {
-            write!(f, "/{step}")?;
-        }
-        Ok(())
-    }
-}
-
 // Separating out a root specifier allows for a higher tiered specifier, allowing us to achieve
 // periods with base values that are more advanced than an ordinal:
 // - all: '*/2'

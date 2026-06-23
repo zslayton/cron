@@ -161,18 +161,17 @@ where
         let both_restricted = !fields.days_of_month_is_all() && !fields.days_of_week_is_all();
         let should_scan_all_days = operand == DowDomOperand::Or && both_restricted;
 
-        let base_iter: Box<dyn DoubleEndedIterator<Item = Ordinal> + 'a>;
-        if should_scan_all_days {
-            base_iter = Box::new(range);
+        let base_iter: Box<dyn DoubleEndedIterator<Item = Ordinal> + 'a> = if should_scan_all_days {
+            Box::new(range)
         } else if fields.days_of_month_has_special_specifiers() {
-            base_iter = Box::new(
+            Box::new(
                 fields
                     .days_of_month_ordinals_for_month(year, month, day_of_month_end, range)
                     .into_iter(),
-            );
+            )
         } else {
-            base_iter = Box::new(fields.days_of_month_ordinals().range(range).copied());
-        }
+            Box::new(fields.days_of_month_ordinals().range(range).copied())
+        };
 
         let iter = base_iter.filter(move |day| {
             NaiveDate::from_ymd_opt(year as i32, month, *day)

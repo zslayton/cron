@@ -111,25 +111,11 @@ impl DaysOfWeek {
             return false;
         }
 
-        self.matches_last_weekday(year, month, day, day_of_week)
-            || self.matches_nth_weekday(day, day_of_week)
-    }
-
-    fn matches_last_weekday(
-        &self,
-        year: Ordinal,
-        month: Ordinal,
-        day: Ordinal,
-        day_of_week: Ordinal,
-    ) -> bool {
-        self.last_weekdays_of_month.contains(&day_of_week) && day > days_in_month(month, year) - 7
-    }
-
-    fn matches_nth_weekday(&self, day: Ordinal, day_of_week: Ordinal) -> bool {
-        let Some(occurrences) = self.nth_weekdays_of_month.get(&day_of_week) else {
-            return false;
-        };
         let occurrence = ((day - 1) / 7) + 1;
-        occurrences.contains(&occurrence)
+        self.last_weekdays_of_month.contains(&day_of_week) && day > days_in_month(month, year) - 7
+            || self
+                .nth_weekdays_of_month
+                .get(&day_of_week)
+                .is_some_and(|occurrences| occurrences.contains(&occurrence))
     }
 }
