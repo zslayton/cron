@@ -1,3 +1,5 @@
+#![cfg(feature = "chrono")]
+
 #[cfg(test)]
 mod tests {
     use chrono::*;

@@ -1,5 +1,7 @@
-use chrono::offset::{LocalResult, TimeZone};
-use chrono::{DateTime, Datelike, NaiveDate, Timelike, Utc};
+#[cfg(feature = "chrono")]
+use chrono::offset::TimeZone;
+#[cfg(feature = "chrono")]
+use chrono::{DateTime, Utc};
 use std::cmp::{max, min};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::ops::Bound::{Included, Unbounded};
@@ -12,6 +14,7 @@ use serde::{
     Deserialize, Serialize, Serializer,
 };
 
+use crate::datetime::{CronDateTime, LocalFields, LocalMapping};
 use crate::ordinal::*;
 use crate::queries::*;
 use crate::time_unit::*;
@@ -33,10 +36,7 @@ impl Schedule {
         Schedule { source, fields }
     }
 
-    fn next_after<Z>(&self, after: &DateTime<Z>) -> Option<DateTime<Z>>
-    where
-        Z: TimeZone,
-    {
+    fn next_after<T: CronDateTime>(&self, after: &T) -> Option<T> {
         let mut query = NextAfterQuery::from(after);
         // Ambiguous naive datetimes translate to two local datetimes. This
         // iteration uses naive datetimes and could skip the second local
@@ -44,20 +44,14 @@ impl Schedule {
         // candidate retains that datetime for consideration on subsequent
         // iterations. For example, during fall back, `0 0/30 * * * * *` must
         // emit both 01:30 local datetimes.
-        let mut deferred_candidate: Option<DateTime<Z>> = None;
+        let mut deferred_candidate: Option<T> = None;
         // Folded time happens during the fall back DST transition where an
         // offset, typically one hour, is repeated in both timezones. This flag
         // tells iteration it is starting in the first repeated offset so it
         // does not get stuck repeating matches from the first fold or skip
         // matches in the second fold.
-        let after_naive = after.naive_local();
-        let after_in_first_fold = match after.timezone().from_local_datetime(&after_naive) {
-            LocalResult::Ambiguous(first, second) => {
-                let earlier = min(first, second);
-                *after == earlier
-            }
-            _ => false,
-        };
+        let after_local = after.local_fields();
+        let after_in_first_fold = after.fold().is_some_and(|(earlier, _)| *after == earlier);
         for year in self
             .fields
             .years
@@ -66,7 +60,7 @@ impl Schedule {
             .cloned()
         {
             // It's a future year, the current year's range is irrelevant.
-            if year > after.year() as u32 {
+            if year > after_local.year as u32 {
                 query.reset_month();
             }
             let month_start = query.month_lower_bound();
@@ -98,12 +92,9 @@ impl Schedule {
                     .cloned()
                     .filter(|&day| {
                         self.fields.days_of_week.is_all()
-                            || NaiveDate::from_ymd_opt(year as i32, month, day)
-                                .map(|d| {
-                                    self.fields
-                                        .days_of_week
-                                        .ordinals()
-                                        .contains(&d.weekday().number_from_sunday())
+                            || T::date_weekday_from_sunday(year as i32, month, day)
+                                .map(|weekday| {
+                                    self.fields.days_of_week.ordinals().contains(&weekday)
                                 })
                                 .unwrap_or(false)
                     })
@@ -125,10 +116,10 @@ impl Schedule {
                         // the first fold. For example, `0 0/30 * * * * *` must
                         // continue from 01:00 to 01:30 in both folds.
                         let fold_hour_scan = after_in_first_fold
-                            && year as i32 == after_naive.year()
-                            && month == after_naive.month()
-                            && day_of_month == after_naive.day()
-                            && hour == after_naive.hour();
+                            && year as i32 == after_local.year
+                            && month == after_local.month
+                            && day_of_month == after_local.day
+                            && hour == after_local.hour;
                         let query_minute_start = query.minute_lower_bound();
                         let minute_start = if fold_hour_scan {
                             Minutes::inclusive_min()
@@ -157,18 +148,17 @@ impl Schedule {
                             for second in
                                 self.fields.seconds.ordinals().range(second_range).cloned()
                             {
-                                let timezone = after.timezone();
-                                let local_result = timezone.with_ymd_and_hms(
-                                    year as i32,
+                                let local_result = after.with_local_fields(LocalFields {
+                                    year: year as i32,
                                     month,
-                                    day_of_month,
+                                    day: day_of_month,
                                     hour,
                                     minute,
                                     second,
-                                );
+                                });
                                 match local_result {
-                                    LocalResult::None => continue,
-                                    LocalResult::Single(candidate) => {
+                                    LocalMapping::None => continue,
+                                    LocalMapping::Single(candidate) => {
                                         if candidate <= *after {
                                             continue;
                                         }
@@ -177,7 +167,7 @@ impl Schedule {
                                         }
                                         return Some(candidate);
                                     }
-                                    LocalResult::Ambiguous(earlier, later) => {
+                                    LocalMapping::Ambiguous(earlier, later) => {
                                         if earlier > *after {
                                             if let Some(deferred) = deferred_candidate.take() {
                                                 return Some(min(deferred, earlier));
@@ -210,25 +200,16 @@ impl Schedule {
         None
     }
 
-    fn prev_from<Z>(&self, before: &DateTime<Z>) -> Option<DateTime<Z>>
-    where
-        Z: TimeZone,
-    {
+    fn prev_from<T: CronDateTime>(&self, before: &T) -> Option<T> {
         let mut query = PrevFromQuery::from(before);
         // See `next_after` for folded-time details. This is the reverse scan's
         // deferred candidate for an earlier local datetime that may still be
         // the previous chronological match.
-        let mut deferred_candidate: Option<DateTime<Z>> = None;
+        let mut deferred_candidate: Option<T> = None;
         // See `next_after` for folded-time details. This flag handles starting
         // from the second fold while scanning backward.
-        let before_naive = before.naive_local();
-        let before_in_second_fold = match before.timezone().from_local_datetime(&before_naive) {
-            LocalResult::Ambiguous(first, second) => {
-                let later = max(first, second);
-                *before == later
-            }
-            _ => false,
-        };
+        let before_local = before.local_fields();
+        let before_in_second_fold = before.fold().is_some_and(|(_, later)| *before == later);
         for year in self
             .fields
             .years
@@ -278,12 +259,9 @@ impl Schedule {
                     .cloned()
                     .filter(|&day| {
                         self.fields.days_of_week.is_all()
-                            || NaiveDate::from_ymd_opt(year as i32, month, day)
-                                .map(|d| {
-                                    self.fields
-                                        .days_of_week
-                                        .ordinals()
-                                        .contains(&d.weekday().number_from_sunday())
+                            || T::date_weekday_from_sunday(year as i32, month, day)
+                                .map(|weekday| {
+                                    self.fields.days_of_week.ordinals().contains(&weekday)
                                 })
                                 .unwrap_or(false)
                     })
@@ -310,10 +288,10 @@ impl Schedule {
                         // details. This is the reverse scan of the repeated
                         // hour from the second fold into the first.
                         let fold_hour_scan = before_in_second_fold
-                            && year as i32 == before_naive.year()
-                            && month == before_naive.month()
-                            && day_of_month == before_naive.day()
-                            && hour == before_naive.hour();
+                            && year as i32 == before_local.year
+                            && month == before_local.month
+                            && day_of_month == before_local.day
+                            && hour == before_local.hour;
                         let query_minute_start = query.minute_upper_bound();
                         let minute_start = if fold_hour_scan {
                             Minutes::inclusive_max()
@@ -354,18 +332,17 @@ impl Schedule {
                                 .rev()
                                 .cloned()
                             {
-                                let timezone = before.timezone();
-                                let local_result = timezone.with_ymd_and_hms(
-                                    year as i32,
+                                let local_result = before.with_local_fields(LocalFields {
+                                    year: year as i32,
                                     month,
-                                    day_of_month,
+                                    day: day_of_month,
                                     hour,
                                     minute,
                                     second,
-                                );
+                                });
                                 match local_result {
-                                    LocalResult::None => continue,
-                                    LocalResult::Single(candidate) => {
+                                    LocalMapping::None => continue,
+                                    LocalMapping::Single(candidate) => {
                                         if candidate >= *before {
                                             continue;
                                         }
@@ -374,7 +351,7 @@ impl Schedule {
                                         }
                                         return Some(candidate);
                                     }
-                                    LocalResult::Ambiguous(earlier, later) => {
+                                    LocalMapping::Ambiguous(earlier, later) => {
                                         if later < *before {
                                             if let Some(deferred) = deferred_candidate.take() {
                                                 return Some(max(deferred, later));
@@ -409,6 +386,7 @@ impl Schedule {
 
     /// Provides an iterator which will return each DateTime that matches the schedule starting with
     /// the current time if applicable.
+    #[cfg(feature = "chrono")]
     pub fn upcoming<Z>(&self, timezone: Z) -> ScheduleIterator<'_, Z>
     where
         Z: TimeZone,
@@ -417,11 +395,13 @@ impl Schedule {
     }
 
     /// The same, but with an iterator with a static ownership
+    #[cfg(feature = "chrono")]
     pub fn upcoming_owned<Z: TimeZone>(&self, timezone: Z) -> OwnedScheduleIterator<Z> {
         self.after_owned(timezone.from_utc_datetime(&Utc::now().naive_utc()))
     }
 
     /// Like the `upcoming` method, but allows you to specify a start time other than the present.
+    #[cfg(feature = "chrono")]
     pub fn after<Z>(&self, after: &DateTime<Z>) -> ScheduleIterator<'_, Z>
     where
         Z: TimeZone,
@@ -430,27 +410,31 @@ impl Schedule {
     }
 
     /// The same, but with a static ownership.
+    #[cfg(feature = "chrono")]
     pub fn after_owned<Z: TimeZone>(&self, after: DateTime<Z>) -> OwnedScheduleIterator<Z> {
         OwnedScheduleIterator::new(self.clone(), after)
     }
 
+    #[cfg(feature = "chrono")]
     pub fn includes<Z>(&self, date_time: DateTime<Z>) -> bool
     where
         Z: TimeZone,
     {
-        self.fields.years.includes(date_time.year() as Ordinal)
-            && self.fields.months.includes(date_time.month() as Ordinal)
+        self.includes_datetime(&date_time)
+    }
+
+    fn includes_datetime<T: CronDateTime>(&self, date_time: &T) -> bool {
+        let local = date_time.local_fields();
+        self.fields.years.includes(local.year as Ordinal)
+            && self.fields.months.includes(local.month)
             && self
                 .fields
                 .days_of_week
-                .includes(date_time.weekday().number_from_sunday())
-            && self
-                .fields
-                .days_of_month
-                .includes(date_time.day() as Ordinal)
-            && self.fields.hours.includes(date_time.hour() as Ordinal)
-            && self.fields.minutes.includes(date_time.minute() as Ordinal)
-            && self.fields.seconds.includes(date_time.second() as Ordinal)
+                .includes(date_time.weekday_from_sunday())
+            && self.fields.days_of_month.includes(local.day)
+            && self.fields.hours.includes(local.hour)
+            && self.fields.minutes.includes(local.minute)
+            && self.fields.seconds.includes(local.second)
     }
 
     /// Returns a [TimeUnitSpec] describing the years included in this [Schedule].
@@ -495,6 +479,40 @@ impl Schedule {
     /// Returns a reference to the source cron expression.
     pub fn source(&self) -> &str {
         &self.source
+    }
+}
+
+/// Schedules for [`jiff::ZonedDateTime`]. Requires the `jiff` feature.
+#[cfg(feature = "jiff")]
+impl Schedule {
+    /// Provides an iterator which will return each [`jiff::ZonedDateTime`] in `time_zone` that
+    /// matches the schedule starting with the current time if applicable.
+    pub fn upcoming_zoned(&self, time_zone: jiff::tz::TimeZone) -> ZonedScheduleIterator<'_> {
+        self.after_zoned(&jiff::Timestamp::now().to_zoned_datetime(time_zone))
+    }
+
+    /// The same, but with an iterator with a static ownership.
+    pub fn upcoming_zoned_owned(
+        &self,
+        time_zone: jiff::tz::TimeZone,
+    ) -> OwnedZonedScheduleIterator {
+        self.after_zoned_owned(jiff::Timestamp::now().to_zoned_datetime(time_zone))
+    }
+
+    /// Like the `upcoming_zoned` method, but allows you to specify a start time other than the
+    /// present. The iterator uses the time zone of `after`.
+    pub fn after_zoned(&self, after: &jiff::ZonedDateTime) -> ZonedScheduleIterator<'_> {
+        ZonedScheduleIterator::new(self, after)
+    }
+
+    /// The same, but with a static ownership.
+    pub fn after_zoned_owned(&self, after: jiff::ZonedDateTime) -> OwnedZonedScheduleIterator {
+        OwnedZonedScheduleIterator::new(self.clone(), after)
+    }
+
+    /// Whether the schedule includes `date_time`, using its local date and time.
+    pub fn includes_zoned(&self, date_time: &jiff::ZonedDateTime) -> bool {
+        self.includes_datetime(date_time)
     }
 }
 
@@ -543,6 +561,7 @@ impl ScheduleFields {
     }
 }
 
+#[cfg(feature = "chrono")]
 pub struct ScheduleIterator<'a, Z>
 where
     Z: TimeZone,
@@ -552,6 +571,7 @@ where
 }
 //TODO: Cutoff datetime?
 
+#[cfg(feature = "chrono")]
 impl<'a, Z> ScheduleIterator<'a, Z>
 where
     Z: TimeZone,
@@ -564,6 +584,7 @@ where
     }
 }
 
+#[cfg(feature = "chrono")]
 impl<Z> Iterator for ScheduleIterator<'_, Z>
 where
     Z: TimeZone,
@@ -579,6 +600,7 @@ where
     }
 }
 
+#[cfg(feature = "chrono")]
 impl<Z> DoubleEndedIterator for ScheduleIterator<'_, Z>
 where
     Z: TimeZone,
@@ -593,6 +615,7 @@ where
 }
 
 /// A `ScheduleIterator` with a static lifetime.
+#[cfg(feature = "chrono")]
 pub struct OwnedScheduleIterator<Z>
 where
     Z: TimeZone,
@@ -601,6 +624,7 @@ where
     previous_datetime: Option<DateTime<Z>>,
 }
 
+#[cfg(feature = "chrono")]
 impl<Z> OwnedScheduleIterator<Z>
 where
     Z: TimeZone,
@@ -613,6 +637,7 @@ where
     }
 }
 
+#[cfg(feature = "chrono")]
 impl<Z> Iterator for OwnedScheduleIterator<Z>
 where
     Z: TimeZone,
@@ -628,7 +653,91 @@ where
     }
 }
 
+#[cfg(feature = "chrono")]
 impl<Z: TimeZone> DoubleEndedIterator for OwnedScheduleIterator<Z> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let previous = self.previous_datetime.take()?;
+
+        let prev = self.schedule.prev_from(&previous)?;
+        self.previous_datetime = Some(prev.clone());
+        Some(prev)
+    }
+}
+
+/// An iterator over the [`jiff::ZonedDateTime`]s that match a [`Schedule`]. Requires the `jiff`
+/// feature.
+#[cfg(feature = "jiff")]
+pub struct ZonedScheduleIterator<'a> {
+    schedule: &'a Schedule,
+    previous_datetime: Option<jiff::ZonedDateTime>,
+}
+
+#[cfg(feature = "jiff")]
+impl<'a> ZonedScheduleIterator<'a> {
+    fn new(schedule: &'a Schedule, starting_datetime: &jiff::ZonedDateTime) -> Self {
+        ZonedScheduleIterator {
+            schedule,
+            previous_datetime: Some(starting_datetime.clone()),
+        }
+    }
+}
+
+#[cfg(feature = "jiff")]
+impl Iterator for ZonedScheduleIterator<'_> {
+    type Item = jiff::ZonedDateTime;
+
+    fn next(&mut self) -> Option<jiff::ZonedDateTime> {
+        let previous = self.previous_datetime.take()?;
+
+        let next = self.schedule.next_after(&previous)?;
+        self.previous_datetime = Some(next.clone());
+        Some(next)
+    }
+}
+
+#[cfg(feature = "jiff")]
+impl DoubleEndedIterator for ZonedScheduleIterator<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let previous = self.previous_datetime.take()?;
+
+        let prev = self.schedule.prev_from(&previous)?;
+        self.previous_datetime = Some(prev.clone());
+        Some(prev)
+    }
+}
+
+/// A `ZonedScheduleIterator` with a static lifetime. Requires the `jiff` feature.
+#[cfg(feature = "jiff")]
+pub struct OwnedZonedScheduleIterator {
+    schedule: Schedule,
+    previous_datetime: Option<jiff::ZonedDateTime>,
+}
+
+#[cfg(feature = "jiff")]
+impl OwnedZonedScheduleIterator {
+    pub fn new(schedule: Schedule, starting_datetime: jiff::ZonedDateTime) -> Self {
+        Self {
+            schedule,
+            previous_datetime: Some(starting_datetime),
+        }
+    }
+}
+
+#[cfg(feature = "jiff")]
+impl Iterator for OwnedZonedScheduleIterator {
+    type Item = jiff::ZonedDateTime;
+
+    fn next(&mut self) -> Option<jiff::ZonedDateTime> {
+        let previous = self.previous_datetime.take()?;
+
+        let next = self.schedule.next_after(&previous)?;
+        self.previous_datetime = Some(next.clone());
+        Some(next)
+    }
+}
+
+#[cfg(feature = "jiff")]
+impl DoubleEndedIterator for OwnedZonedScheduleIterator {
     fn next_back(&mut self) -> Option<Self::Item> {
         let previous = self.previous_datetime.take()?;
 
@@ -720,7 +829,7 @@ impl<'de> Deserialize<'de> for Schedule {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "chrono"))]
 mod test {
     use chrono::Duration;
     #[cfg(feature = "serde")]
