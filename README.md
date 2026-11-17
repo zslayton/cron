@@ -31,6 +31,27 @@ Upcoming fire times:
 */
 ```
 
+## Date and time libraries
+
+The `chrono` feature, enabled by default, provides the API above for `chrono::DateTime`.
+The `jiff` feature provides the same schedules for `jiff::ZonedDateTime`. To use only jiff:
+
+```toml
+[dependencies]
+cron = { version = "0.17", default-features = false, features = ["jiff"] }
+```
+
+```rust
+use cron::Schedule;
+use jiff::tz::TimeZone;
+use std::str::FromStr;
+
+let schedule = Schedule::from_str("0 30 9 * * Mon-Fri *").unwrap();
+for datetime in schedule.upcoming_zoned(TimeZone::UTC).take(3) {
+  println!("-> {}", datetime);
+}
+```
+
 ## License
 
 Licensed under either of
